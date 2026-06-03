@@ -28,7 +28,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.LinearInterpolator;
@@ -48,8 +47,6 @@ import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -205,13 +202,41 @@ public class MainActivity extends AppCompatActivity {
 
         ViewPager viewPager = findViewById(R.id.viewpager);
         CommonPageAdapter adapter = new CommonPageAdapter();
-        adapter.insertViewId(R.id.page_one);
-        adapter.insertViewId(R.id.page_two);
+        adapter.insertViewId(R.id.page_one, getString(R.string.tab_tweaks));
+        adapter.insertViewId(R.id.page_two, getString(R.string.tab_logs));
         viewPager.setAdapter(adapter);
 
+        android.support.design.widget.TabLayout tabLayout = findViewById(R.id.tab_layout);
+        tabLayout.setupWithViewPager(viewPager);
 
         Toolbar myToolbar = findViewById(R.id.toolbar);
         setSupportActionBar(myToolbar);
+
+        TextView versionLabel = findViewById(R.id.version_label);
+        versionLabel.setText("v" + BuildConfig.VERSION_NAME);
+
+        final View infoCard = findViewById(R.id.info_card);
+        if (load("info_card_dismissed")) {
+            infoCard.setVisibility(View.GONE);
+        }
+        findViewById(R.id.info_card_dismiss).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                infoCard.setVisibility(View.GONE);
+                save(true, "info_card_dismissed");
+            }
+        });
+
+        findViewById(R.id.copy_logs_button).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                TextView tv = findViewById(R.id.logs);
+                ClipData clip = ClipData.newPlainText("logs", tv.getText());
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(getApplicationContext(), getString(R.string.log_copied), Toast.LENGTH_LONG).show();
+            }
+        });
         Button toapp = findViewById(R.id.toapp_button);
         toapp.setOnClickListener(
                 new View.OnClickListener() {
@@ -251,48 +276,6 @@ public class MainActivity extends AppCompatActivity {
 
 
         animationRun = false;
-        final TextView upperTextView = findViewById(R.id.legend);
-        upperTextView.setText(R.string.main_string);
-        final AlphaAnimation legendAnim;
-        legendAnim = new AlphaAnimation(1.0f, 0.0f);
-        legendAnim.setDuration(100);
-        legendAnim.setRepeatCount(1);
-        legendAnim.setRepeatMode(Animation.REVERSE);
-        legendAnim.setAnimationListener(new Animation.AnimationListener() {
-
-            @Override
-            public void onAnimationStart(Animation animation) {
-            }
-
-            @Override
-            public void onAnimationEnd(Animation animation) {
-            }
-
-            @Override
-            public void onAnimationRepeat(Animation animation) {
-                if (upperTextView.getText().toString().equals(getString(R.string.legend))) {
-                    upperTextView.setText(R.string.main_string);
-                } else {
-                    upperTextView.setText(R.string.legend);
-                }
-            }
-        });
-
-
-
-        Timer timer = new Timer();
-
-        timer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        upperTextView.startAnimation(legendAnim);
-                    }
-                });
-            }
-        }, 12000, 12000);
 
 /*        nospeed = findViewById(R.id.nospeed);
         noSpeedRestrictionsStatus = findViewById(R.id.speedhackstatus);
@@ -1547,8 +1530,6 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
-        MenuItem item = menu.findItem(R.id.version);
-        item.setTitle("V." + BuildConfig.VERSION_NAME);
         return super.onPrepareOptionsMenu(menu);
     }
 
@@ -1563,22 +1544,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
-            case R.id.copy:
-
-                new Handler(Looper.getMainLooper()).post(new Runnable() {
-                    @Override
-                    public void run() {
-                        final ClipboardManager clipboard = (ClipboardManager)
-                                getSystemService(Context.CLIPBOARD_SERVICE);
-                        TextView textView = findViewById(R.id.logs);
-                        ClipData clip = ClipData.newPlainText("logs", textView.getText());
-                        clipboard.setPrimaryClip(clip);
-                        Toast.makeText(getApplicationContext(), getString(R.string.log_copied), Toast.LENGTH_LONG).show();
-                    }
-                });
-
-                break;
-
             case R.id.about:
                 DialogFragment aboutDialog = new AboutDialog();
                 aboutDialog.show(getSupportFragmentManager(), "AboutDialog");

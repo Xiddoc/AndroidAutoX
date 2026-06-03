@@ -1,10 +1,24 @@
 name: Release
 
+# Every merge to master auto-bumps the minor version, builds a signed
+# release APK, and publishes it as a GitHub Release. Can also be run
+# manually from the Actions tab.
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - master
   workflow_dispatch:
+
+# Needed so the GITHUB_TOKEN can create the tag and publish the release
+# (the previous run failed with "Resource not accessible by integration"
+# because the default token is read-only without this).
+permissions:
+  contents: write
+
+# Never let two releases run at once (avoids racing version numbers).
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -14,6 +28,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history + tags so we can derive the next version number.
+          fetch-depth: 0
+
+      - name: Compute next version (minor bump)
+        id: ver
+        run: |
+          # Highest existing vX.Y.Z tag, or fall back to baseVersionName in
+          # app/build.gradle when there are no release tags yet.
+          latest_tag=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          if [ -z "$latest_tag" ]; then
+            base=$(grep -oE "baseVersionName = '[0-9.]+'" app/build.gradle | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+          else
+            base=${latest_tag#v}
+          fi
+          major=$(echo "$base" | cut -d. -f1)
+          minor=$(echo "$base" | cut -d. -f2)
+          next="${major}.$((minor + 1)).0"
+          echo "Latest tag: ${latest_tag:-none} | base: $base | next: $next"
+          if git rev-parse "v$next" >/dev/null 2>&1; then
+            echo "::error::Tag v$next already exists; aborting to avoid clobbering a release."
+            exit 1
+          fi
+          echo "version_name=$next" >> "$GITHUB_OUTPUT"
+          echo "tag=v$next" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -59,12 +98,17 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          VERSION_NAME: ${{ steps.ver.outputs.version_name }}
           VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew assembleRelease
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Version ${{ steps.ver.outputs.version_name }}
+          generate_release_notes: true
           files: app/build/outputs/apk/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

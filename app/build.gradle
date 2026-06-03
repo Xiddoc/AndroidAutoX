@@ -73,6 +73,19 @@ android {
     }
     def resolvedVersionCode = versionCodeOverride != null ? versionCodeOverride.toString().toInteger() : baseVersionCode
 
+    // versionName can likewise be overridden at build time (used by the release
+    // CI, which bumps the minor on every merge to master) via either the
+    // -PversionNameOverride=<x.y.z> project property or the VERSION_NAME env
+    // var. A manual build with neither set falls back to baseVersionName below.
+    def baseVersionName = '6.0.0'
+    def versionNameOverride = null
+    if (project.hasProperty('versionNameOverride')) {
+        versionNameOverride = project.property('versionNameOverride')
+    } else if (System.getenv('VERSION_NAME') != null && !System.getenv('VERSION_NAME').isEmpty()) {
+        versionNameOverride = System.getenv('VERSION_NAME')
+    }
+    def resolvedVersionName = versionNameOverride != null ? versionNameOverride.toString() : baseVersionName
+
     compileSdkVersion 29
     defaultConfig {
 
@@ -81,9 +94,9 @@ android {
         minSdkVersion 23
         targetSdkVersion 29
         versionCode resolvedVersionCode
-        versionName '6.0.0'
+        versionName resolvedVersionName
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-        setProperty("archivesBaseName","AndroidAutoX-" + versionName)
+        setProperty("archivesBaseName","AndroidAutoX-" + resolvedVersionName)
         if (hasSigningConfig) {
             signingConfig signingConfigs.'new'
         }

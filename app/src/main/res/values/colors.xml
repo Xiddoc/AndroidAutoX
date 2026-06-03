@@ -28,4 +28,21 @@
     <color name="menu_background">@color/brand_surface</color>
     <color name="menu_text_color">@color/text_primary</color>
     <color name="common_blue_revert">@color/brand_blue_light</color>
+
+    <!-- Flat modern accent (replaces the old button gradient) -->
+    <color name="accent_blue">#2196F3</color>
+    <color name="accent_blue_pressed">#1976D2</color>
+    <color name="ripple_light">#33FFFFFF</color>
+
+    <!-- Status legend dots -->
+    <color name="status_green">#4CAF50</color>
+    <color name="status_yellow">#FFC107</color>
+    <color name="status_red">#F44336</color>
+
+    <!-- IDE code-editor panel -->
+    <color name="code_bg">#11171C</color>
+    <color name="code_text">#C8D3DC</color>
+
+    <!-- Dismissible info card -->
+    <color name="card_bg">@color/brand_surface</color>
 </resources>

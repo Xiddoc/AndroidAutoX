@@ -43,6 +43,8 @@
         <item name="android:textColor">#FFFFFF</item>
         <item name="android:background">@drawable/button_background</item>
         <item name="android:fontFamily">@font/raleway_medium</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textAllCaps">false</item>
     </style>
 
 
