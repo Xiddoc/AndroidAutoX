@@ -1458,7 +1458,11 @@ public class MainActivity extends AppCompatActivity {
                 Window window = dialog.getWindow();
                 // Make the window backdrop transparent so the rounded card corners aren't framed by a gray rectangle.
                 window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
-                window.setLayout(ViewPager.LayoutParams.MATCH_PARENT, WRAP_CONTENT);
+                // Inset the card from the screen edges so it has breathing room on the sides
+                // (default dialog gravity centers it, giving equal left/right gaps).
+                int sideMargin = (int) (16 * getResources().getDisplayMetrics().density);
+                int cardWidth = getResources().getDisplayMetrics().widthPixels - (2 * sideMargin);
+                window.setLayout(cardWidth, WRAP_CONTENT);
 
                 return true;
             }
@@ -1509,7 +1513,11 @@ public class MainActivity extends AppCompatActivity {
                 Window window = dialog.getWindow();
                 // Make the window backdrop transparent so the rounded card corners aren't framed by a gray rectangle.
                 window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
-                window.setLayout(ViewPager.LayoutParams.MATCH_PARENT, WRAP_CONTENT);
+                // Inset the card from the screen edges so it has breathing room on the sides
+                // (default dialog gravity centers it, giving equal left/right gaps).
+                int sideMargin = (int) (16 * getResources().getDisplayMetrics().density);
+                int cardWidth = getResources().getDisplayMetrics().widthPixels - (2 * sideMargin);
+                window.setLayout(cardWidth, WRAP_CONTENT);
 
                 return true;
             }
