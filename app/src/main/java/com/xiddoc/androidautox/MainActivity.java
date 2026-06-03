@@ -209,6 +209,16 @@ public class MainActivity extends AppCompatActivity {
         android.support.design.widget.TabLayout tabLayout = findViewById(R.id.tab_layout);
         tabLayout.setupWithViewPager(viewPager);
 
+        final View legendStrip = findViewById(R.id.legend_strip);
+        // Legend only applies to the Tweaks tab (page 0); hide it on the Logs tab (page 1).
+        legendStrip.setVisibility(viewPager.getCurrentItem() == 0 ? View.VISIBLE : View.GONE);
+        viewPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
+            @Override
+            public void onPageSelected(int position) {
+                legendStrip.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
+            }
+        });
+
         Toolbar myToolbar = findViewById(R.id.toolbar);
         setSupportActionBar(myToolbar);
 
@@ -237,6 +247,16 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(getApplicationContext(), getString(R.string.log_copied), Toast.LENGTH_LONG).show();
             }
         });
+
+        findViewById(R.id.clear_logs_button).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                TextView tv = findViewById(R.id.logs);
+                tv.setText(getString(R.string.log_first_line));
+                Toast.makeText(getApplicationContext(), getString(R.string.logs_cleared), Toast.LENGTH_SHORT).show();
+            }
+        });
+
         Button toapp = findViewById(R.id.toapp_button);
         toapp.setOnClickListener(
                 new View.OnClickListener() {
@@ -522,6 +542,8 @@ public class MainActivity extends AppCompatActivity {
                                 }
                             });
                             uxprototypeDialog.show();
+                            // Make the window backdrop transparent so the rounded card corners aren't framed by a gray rectangle.
+                            uxprototypeDialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
                             uxprototypeDialog.getWindow().setAttributes(lp);
 
                         }
@@ -1444,6 +1466,8 @@ public class MainActivity extends AppCompatActivity {
                 dialog.show();
 
                 Window window = dialog.getWindow();
+                // Make the window backdrop transparent so the rounded card corners aren't framed by a gray rectangle.
+                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
                 window.setLayout(ViewPager.LayoutParams.MATCH_PARENT, WRAP_CONTENT);
 
                 return true;
@@ -1493,6 +1517,8 @@ public class MainActivity extends AppCompatActivity {
                 dialog.show();
 
                 Window window = dialog.getWindow();
+                // Make the window backdrop transparent so the rounded card corners aren't framed by a gray rectangle.
+                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
                 window.setLayout(ViewPager.LayoutParams.MATCH_PARENT, WRAP_CONTENT);
 
                 return true;
