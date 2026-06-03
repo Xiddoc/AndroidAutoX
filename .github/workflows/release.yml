@@ -1,47 +1,60 @@
 name: Release APK
 
-# You stay in control of releases. Create a *draft* release on GitHub,
-# pick the tag (e.g. v6.2.0) and write your title/description. Saving the
-# draft fires this workflow, which builds the signed release APK and
-# attaches it to the draft. You then review and hit "Publish release" with
-# the APK already in place. It never edits your title or notes.
-#
-# Note: a draft's git tag is not created until you publish, so this builds
-# from the release's target branch (target_commitish) and uploads the APK
-# to the draft by its release id rather than by tag.
+# Manual release: from the Actions tab, open "Release APK" -> "Run workflow".
+# Leave the version blank to auto-bump the minor from the latest release
+# (v6.1.0 -> 6.2.0), or type a specific version. CI builds the signed APK
+# and creates a DRAFT release with it attached. You then open the draft,
+# write your title/description, and hit "Publish release".
 on:
-  release:
-    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without leading v (blank = auto-bump minor from latest release)"
+        required: false
+        type: string
 
-# Needed so the GITHUB_TOKEN can upload the APK asset to the release.
+# Needed so the GITHUB_TOKEN can create the draft release and upload the APK.
 permissions:
   contents: write
 
-# If the same draft is re-saved, supersede an in-flight build.
 concurrency:
-  group: release-${{ github.event.release.id }}
-  cancel-in-progress: true
+  group: release-draft
+  cancel-in-progress: false
 
 jobs:
   release:
-    name: Build and attach signed release APK
+    name: Build signed APK and create draft release
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout the release target
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          # A draft has no tag yet, so build from the branch/commit the
-          # release targets (defaults to the repo's default branch).
-          ref: ${{ github.event.release.target_commitish }}
+          # Full history + tags so we can compute the next version.
+          fetch-depth: 0
 
-      - name: Resolve version from tag
+      - name: Resolve version
         id: ver
         run: |
-          tag="${{ github.event.release.tag_name }}"
-          # Strip a leading "v" so v6.2.0 -> versionName 6.2.0.
-          echo "version_name=${tag#v}" >> "$GITHUB_OUTPUT"
-          echo "Building version ${tag#v} for draft release ${{ github.event.release.id }}"
+          input="${{ github.event.inputs.version }}"
+          if [ -n "$input" ]; then
+            next="${input#v}"
+            echo "Using requested version: $next"
+          else
+            # Highest existing vX.Y.Z tag, else fall back to baseVersionName.
+            latest_tag=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+            if [ -z "$latest_tag" ]; then
+              base=$(grep -oE "baseVersionName = '[0-9.]+'" app/build.gradle | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+            else
+              base=${latest_tag#v}
+            fi
+            major=$(echo "$base" | cut -d. -f1)
+            minor=$(echo "$base" | cut -d. -f2)
+            next="${major}.$((minor + 1)).0"
+            echo "Latest tag: ${latest_tag:-none} | base: $base | auto-bumped to: $next"
+          fi
+          echo "version_name=$next" >> "$GITHUB_OUTPUT"
+          echo "tag=v$next" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -91,27 +104,14 @@ jobs:
           VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew assembleRelease
 
-      - name: Attach APK to the draft release
+      - name: Create draft release with the APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          # The tag is created from this commit when you publish the draft.
+          target_commitish: ${{ github.sha }}
+          name: Version ${{ steps.ver.outputs.version_name }}
+          draft: true
+          files: app/build/outputs/apk/release/*.apk
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          apk=$(ls app/build/outputs/apk/release/*.apk | head -n1)
-          name=$(basename "$apk")
-          echo "Uploading $name to release id ${{ github.event.release.id }}"
-          # Drafts can't be addressed by tag (no tag exists yet), so upload to
-          # the release id. Remove an existing same-named asset first so a
-          # re-run doesn't 422.
-          asset_id=$(gh api "/repos/${{ github.repository }}/releases/${{ github.event.release.id }}/assets" \
-            --jq ".[] | select(.name == \"$name\") | .id" | head -n1)
-          if [ -n "$asset_id" ]; then
-            echo "Replacing existing asset $asset_id"
-            gh api --method DELETE "/repos/${{ github.repository }}/releases/assets/$asset_id"
-          fi
-          upload_url="${{ github.event.release.upload_url }}"
-          upload_url="${upload_url%\{*}?name=$name"
-          curl -sSf -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Content-Type: application/vnd.android.package-archive" \
-            --data-binary @"$apk" \
-            "$upload_url"
-          echo "Done."
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
