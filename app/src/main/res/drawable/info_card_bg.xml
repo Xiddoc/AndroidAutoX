@@ -1,51 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <!-- Card body drawn at 0 inset as the bottom layer so the gradient fills the
-         full silhouette (no 1px edge artifact). Gentle vertical gradient
-         (lighter top -> base surface). -->
-    <item>
-        <shape android:shape="rectangle">
-            <corners android:radius="16dp" />
-            <gradient
-                android:angle="90"
-                android:startColor="@color/card_bg"
-                android:endColor="@color/card_bg_top"
-                android:type="linear" />
-        </shape>
-    </item>
-
-    <!-- BOLD NEON GLOW (subtler than buttons, same unified blue hue #2196F3).
-         2-step blue ring halo drawn ON TOP, inset inward. -->
-
-    <!-- Faint outer ring (alpha 14), radius 16dp at bounds edge -->
-    <item>
-        <shape android:shape="rectangle">
-            <corners android:radius="16dp" />
-            <stroke
-                android:width="2dp"
-                android:color="@color/glow_blue_ring_card_outer" />
-        </shape>
-    </item>
-
-    <!-- Brighter inner ring (alpha 55), inset 2dp -->
-    <item android:left="2dp" android:top="2dp" android:right="2dp" android:bottom="2dp">
-        <shape android:shape="rectangle">
-            <corners android:radius="14dp" />
-            <stroke
-                android:width="1dp"
-                android:color="@color/glow_blue_ring_card_inner" />
-        </shape>
-    </item>
-
-    <!-- Bright ACCENT-colored rim hugging the body (neon, not chrome) -->
-    <item>
-        <shape android:shape="rectangle">
-            <corners android:radius="16dp" />
-            <stroke
-                android:width="1dp"
-                android:color="@color/glow_rim_soft" />
-        </shape>
-    </item>
-
-</layer-list>
+<!-- Flat tonal info card: elevated navy surface with a hairline outline. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="16dp" />
+    <solid android:color="@color/brand_surface" />
+    <stroke android:width="1dp" android:color="@color/surface_outline" />
+</shape>

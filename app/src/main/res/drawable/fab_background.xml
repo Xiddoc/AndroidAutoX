@@ -1,39 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Clean modern FAB: glossy gradient-blue body matching the buttons, with a
-     subtle top sheen. Soft shadow comes from the view's elevation. -->
+<!-- Filled accent FAB (extended): the one loud blue element. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="18dp" />
+            <solid android:color="@color/brand_blue_dark" />
+            <padding android:left="16dp" android:top="12dp" android:right="16dp" android:bottom="12dp" />
+        </shape>
+    </item>
     <item>
-        <layer-list>
-
-            <!-- Body: smooth vertical gradient (lighter on top). 10dp/5dp padding. -->
-            <item>
-                <shape android:shape="rectangle">
-                    <corners android:radius="18dp" />
-                    <gradient
-                        android:angle="90"
-                        android:startColor="@color/brand_blue"
-                        android:endColor="@color/fab_blue_top"
-                        android:type="linear" />
-                    <padding
-                        android:left="10dp"
-                        android:top="5dp"
-                        android:right="10dp"
-                        android:bottom="5dp" />
-                </shape>
-            </item>
-
-            <!-- Subtle top highlight sheen. -->
-            <item>
-                <shape android:shape="rectangle">
-                    <corners android:radius="18dp" />
-                    <gradient
-                        android:angle="90"
-                        android:startColor="@color/button_gloss_bottom"
-                        android:endColor="@color/button_gloss_top"
-                        android:type="linear" />
-                </shape>
-            </item>
-
-        </layer-list>
+        <shape android:shape="rectangle">
+            <corners android:radius="18dp" />
+            <solid android:color="@color/brand_blue" />
+            <padding android:left="16dp" android:top="12dp" android:right="16dp" android:bottom="12dp" />
+        </shape>
     </item>
 </selector>

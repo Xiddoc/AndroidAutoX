@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Brand palette (sampled from the AndroidAutoX launcher icon) -->
-    <color name="brand_navy">#23303B</color>
-    <color name="brand_navy_dark">#1A242D</color>
-    <color name="brand_surface">#2E3D4A</color>
-    <color name="brand_blue">#1385C4</color>
-    <color name="brand_blue_light">#27A6E5</color>
+    <!-- Brand palette (sampled from the AndroidAutoX launcher icon: navy ground,
+         azure/blue accent, white). Tonal navy system: surfaces lift toward a
+         lighter navy as they rise in elevation (Material-3 style depth). -->
+    <color name="brand_navy_dark">#121A21</color>   <!-- window background (darkest) -->
+    <color name="brand_navy">#1B2832</color>        <!-- toolbar / tab bar / colorPrimary -->
+    <color name="brand_surface">#25333F</color>     <!-- elevated surface: cards, buttons, dialog -->
+    <color name="surface_outline">#3A4B59</color>   <!-- hairline outline on surfaces -->
+    <color name="brand_blue">#1385C4</color>        <!-- deeper blue: FAB / progress fill -->
+    <color name="brand_blue_light">#27A6E5</color>  <!-- logo accent: slider, tab indicator -->
     <color name="brand_blue_dark">#0F6EA4</color>
     <color name="text_primary">#ECF1F5</color>
     <color name="text_muted">#9FB0BC</color>
@@ -29,10 +32,10 @@
     <color name="menu_text_color">@color/text_primary</color>
     <color name="common_blue_revert">@color/brand_blue_light</color>
 
-    <!-- Flat modern accent (replaces the old button gradient) -->
-    <color name="accent_blue">#2196F3</color>
-    <color name="accent_blue_pressed">#1976D2</color>
-    <color name="ripple_light">#33FFFFFF</color>
+    <!-- Accent retuned to the logo's azure blue -->
+    <color name="accent_blue">#27A6E5</color>
+    <color name="accent_blue_pressed">#1E88E5</color>
+    <color name="ripple_light">#26FFFFFF</color>
 
     <!-- Neon glow palette (layered halo over the dark navy theme) -->
     <!-- Top-of-gradient bright accent for the main fill -->

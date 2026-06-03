@@ -1,51 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Clean modern button: a single glossy gradient-blue body (lighter at top),
-     a subtle top sheen, and ripple touch feedback. No recessed frame or rings;
-     the soft drop shadow comes from the view's elevation (see ButtonStyle). -->
+<!-- Tonal tweak surface (Material-3 style): a calm elevated navy card with a
+     hairline outline and ripple feedback. The bright logo blue is reserved for
+     accents (slider, tab, FAB), so the list stays calm and legible. -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="@color/ripple_light">
 
-    <!-- Touch-feedback mask matches the full button body. -->
     <item android:id="@android:id/mask">
         <shape android:shape="rectangle">
-            <solid android:color="@color/accent_blue" />
-            <corners android:radius="12dp" />
+            <solid android:color="#FFFFFF" />
+            <corners android:radius="14dp" />
         </shape>
     </item>
 
     <item android:id="@android:id/background">
-        <layer-list>
-
-            <!-- Body: vertical gradient, lighter accent on top for a glossy,
-                 slightly convex surface. Label padding lives here. -->
-            <item>
-                <shape android:shape="rectangle">
-                    <corners android:radius="12dp" />
-                    <gradient
-                        android:angle="90"
-                        android:startColor="@color/accent_blue"
-                        android:endColor="@color/accent_blue_top"
-                        android:type="linear" />
-                    <padding
-                        android:left="16dp"
-                        android:right="16dp"
-                        android:top="8dp"
-                        android:bottom="8dp" />
-                </shape>
-            </item>
-
-            <!-- Subtle top highlight sheen (white fading to transparent downward). -->
-            <item>
-                <shape android:shape="rectangle">
-                    <corners android:radius="12dp" />
-                    <gradient
-                        android:angle="90"
-                        android:startColor="@color/button_gloss_bottom"
-                        android:endColor="@color/button_gloss_top"
-                        android:type="linear" />
-                </shape>
-            </item>
-
-        </layer-list>
+        <shape android:shape="rectangle">
+            <corners android:radius="14dp" />
+            <solid android:color="@color/brand_surface" />
+            <stroke android:width="1dp" android:color="@color/surface_outline" />
+            <padding
+                android:left="16dp"
+                android:right="16dp"
+                android:top="14dp"
+                android:bottom="14dp" />
+        </shape>
     </item>
 </ripple>
