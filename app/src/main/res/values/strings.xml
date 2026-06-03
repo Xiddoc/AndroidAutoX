@@ -15,6 +15,8 @@ If you are unsure of what a tweak does, long press on it and a tutorial will sho
 By using this software, you agree that YOU, and ONLY YOU, are solely responsible for any possible consequence that may result in altering safety features such as injury to yourself and/or others, property damage, loss of life.\n
 Under no circumstances is the author of this app responsible for its use</string>
     <string name="proceed">I understand</string>
+    <string name="disable_startup_warning">Don\'t show this warning again</string>
+    <string name="startup_warning_disabled">Startup warning disabled</string>
     <string name="navigation_at_start">Navigation at start</string>
     <string name="statb_opaque_string">Force Opaque Statusbar</string>
     <string name="battery_outline_string">battery saver outline</string>
