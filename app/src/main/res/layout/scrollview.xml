@@ -17,11 +17,47 @@
             android:layout_width="match_parent"
             android:layout_height="0dp">
 
+                <!-- Status legend lives in the Tweaks page so it swipes with the
+                     page (and is naturally absent from the Logs page). -->
+                <LinearLayout
+                    android:id="@+id/legend_strip"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="10dp"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent">
+
+                    <View android:layout_width="12dp" android:layout_height="12dp"
+                        android:background="@drawable/dot_green" android:layout_gravity="center_vertical"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp" android:layout_marginEnd="12dp"
+                        android:text="@string/legend_applied"
+                        android:textColor="@color/text_muted" android:textSize="12sp"/>
+
+                    <View android:layout_width="12dp" android:layout_height="12dp"
+                        android:background="@drawable/dot_yellow" android:layout_gravity="center_vertical"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp" android:layout_marginEnd="12dp"
+                        android:text="@string/legend_reboot"
+                        android:textColor="@color/text_muted" android:textSize="12sp"/>
+
+                    <View android:layout_width="12dp" android:layout_height="12dp"
+                        android:background="@drawable/dot_red" android:layout_gravity="center_vertical"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:text="@string/legend_not_applied"
+                        android:textColor="@color/text_muted" android:textSize="12sp"/>
+                </LinearLayout>
+
                 <TextView
                         android:id="@+id/section_one"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/legend_strip"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                         android:layout_marginTop="16dp"

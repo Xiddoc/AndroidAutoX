@@ -209,16 +209,6 @@ public class MainActivity extends AppCompatActivity {
         android.support.design.widget.TabLayout tabLayout = findViewById(R.id.tab_layout);
         tabLayout.setupWithViewPager(viewPager);
 
-        final View legendStrip = findViewById(R.id.legend_strip);
-        // Legend only applies to the Tweaks tab (page 0); hide it on the Logs tab (page 1).
-        legendStrip.setVisibility(viewPager.getCurrentItem() == 0 ? View.VISIBLE : View.GONE);
-        viewPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
-            @Override
-            public void onPageSelected(int position) {
-                legendStrip.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
-            }
-        });
-
         Toolbar myToolbar = findViewById(R.id.toolbar);
         setSupportActionBar(myToolbar);
 
