@@ -104,6 +104,7 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="set_usb_bitrate">USB bitrate to</string>
     <string name="choose_value_first">Choose a value first</string>
     <string name="open_issue_button">Open Issue</string>
+    <string name="no_browser_found">No browser found to open the issue page</string>
     <string name="error_generic">The command was not successful. Please wait some minutes and try again. If problem is still ongoing, please open a issue on GitHub</string>
     <string name="tutorial_alphajump">This tweak will activate a new (and hidden) redesign that changes how lists can be browsed with letters. Instead of the A-Z button at the top, the button will appear on the scrollbar when there\'s no scroll happening and you won\'t be forced to go to top to browse with letters again.</string>
     <string name="alpha_jump_tweak">new alphabet jump</string>

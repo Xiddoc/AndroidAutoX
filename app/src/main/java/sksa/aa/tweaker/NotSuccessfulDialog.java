@@ -1,15 +1,19 @@
 package sksa.aa.tweaker;
 
 import android.app.Dialog;
+import android.content.ActivityNotFoundException;
 import android.content.DialogInterface;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v4.app.DialogFragment;
 import android.support.v7.app.AlertDialog;
-
-import com.heinrichreimersoftware.androidissuereporter.IssueReporterLauncher;
+import android.widget.Toast;
 
 public class NotSuccessfulDialog extends DialogFragment {
+
+    private static final int MAX_LOG_CHARS = 5000;
 
     @NonNull
     @Override
@@ -27,20 +31,51 @@ public class NotSuccessfulDialog extends DialogFragment {
                 ,
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
-                        IssueReporterLauncher.forTarget("Xiddoc", "AA-Tweaker")
-                                // [Recommended] Theme to use for the reporter.
-                                // (See #theming for further information.)
-                                .theme(R.style.IssueTheme)
-                                // [Optional] Auth token to open issues if users don't have a GitHub account
-                                // You can register a bot account on GitHub and copy ist OAuth2 token here.
-                                // (See #how-to-create-a-bot-key for further information.)
-                                // [Optional] Include other relevant info in the bug report (like custom variables)
-                                .putExtraInfo("Log", getArguments().getString("log"))
-                                .putExtraInfo("Tweak Applied", getArguments().getString("tweak"))
-                                // [Optional] Disable back arrow in toolbar
-                                .homeAsUpEnabled(true)
-                                .launch(getActivity());
+                        Bundle args = getArguments();
+                        String tweak = args != null ? args.getString("tweak") : null;
+                        String log = args != null ? args.getString("log") : null;
 
+                        String title = (tweak != null && !tweak.isEmpty())
+                                ? "Bug report: " + tweak
+                                : "Bug report";
+
+                        if (log == null) {
+                            log = "";
+                        }
+                        if (log.length() > MAX_LOG_CHARS) {
+                            log = log.substring(0, MAX_LOG_CHARS)
+                                    + "\n...(log truncated, please paste the full log from the app's log screen)";
+                        }
+
+                        StringBuilder body = new StringBuilder();
+                        body.append("Tweak applied: ")
+                                .append(tweak != null && !tweak.isEmpty() ? tweak : "(unknown)")
+                                .append("\n\n")
+                                .append("Describe the problem here.\n\n")
+                                .append("Recent log:\n")
+                                .append("```\n")
+                                .append(log)
+                                .append("\n```\n");
+
+                        Uri uri = new Uri.Builder()
+                                .scheme("https")
+                                .authority("github.com")
+                                .appendPath("Xiddoc")
+                                .appendPath("AA-Tweaker")
+                                .appendPath("issues")
+                                .appendPath("new")
+                                .appendQueryParameter("title", title)
+                                .appendQueryParameter("body", body.toString())
+                                .build();
+
+                        try {
+                            startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                        } catch (ActivityNotFoundException e) {
+                            e.printStackTrace();
+                            Toast.makeText(getActivity(),
+                                    getString(R.string.no_browser_found),
+                                    Toast.LENGTH_LONG).show();
+                        }
                     }
                 });
         return builder.create();
