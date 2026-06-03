@@ -1,58 +1,41 @@
-name: Release
+name: Release APK
 
-# Every merge to master auto-bumps the minor version, builds a signed
-# release APK, and publishes it as a GitHub Release. Can also be run
-# manually from the Actions tab.
+# You stay in control of releases: create the GitHub Release yourself and
+# write the description/notes. When you PUBLISH it, this workflow builds the
+# signed release APK from that release's tag and attaches it to the release.
+# It never edits your title or description — it only uploads the APK.
 on:
-  push:
-    branches:
-      - master
-  workflow_dispatch:
+  release:
+    types: [published]
 
-# Needed so the GITHUB_TOKEN can create the tag and publish the release
-# (the previous run failed with "Resource not accessible by integration"
-# because the default token is read-only without this).
+# Needed so the GITHUB_TOKEN can upload the APK asset to the release.
 permissions:
   contents: write
 
-# Never let two releases run at once (avoids racing version numbers).
+# If the same release is (re)published, supersede an in-flight build.
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: true
 
 jobs:
   release:
-    name: Build and publish signed release APK
+    name: Build and attach signed release APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout the released tag
         uses: actions/checkout@v4
         with:
-          # Full history + tags so we can derive the next version number.
-          fetch-depth: 0
+          # Build exactly the code the release points at.
+          ref: ${{ github.event.release.tag_name }}
 
-      - name: Compute next version (minor bump)
+      - name: Resolve version from tag
         id: ver
         run: |
-          # Highest existing vX.Y.Z tag, or fall back to baseVersionName in
-          # app/build.gradle when there are no release tags yet.
-          latest_tag=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
-          if [ -z "$latest_tag" ]; then
-            base=$(grep -oE "baseVersionName = '[0-9.]+'" app/build.gradle | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
-          else
-            base=${latest_tag#v}
-          fi
-          major=$(echo "$base" | cut -d. -f1)
-          minor=$(echo "$base" | cut -d. -f2)
-          next="${major}.$((minor + 1)).0"
-          echo "Latest tag: ${latest_tag:-none} | base: $base | next: $next"
-          if git rev-parse "v$next" >/dev/null 2>&1; then
-            echo "::error::Tag v$next already exists; aborting to avoid clobbering a release."
-            exit 1
-          fi
-          echo "version_name=$next" >> "$GITHUB_OUTPUT"
-          echo "tag=v$next" >> "$GITHUB_OUTPUT"
+          tag="${{ github.event.release.tag_name }}"
+          # Strip a leading "v" so v6.2.0 -> versionName 6.2.0.
+          echo "version_name=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "Building version ${tag#v} from tag $tag"
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -102,13 +85,12 @@ jobs:
           VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew assembleRelease
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          target_commitish: ${{ github.sha }}
-          name: Version ${{ steps.ver.outputs.version_name }}
-          generate_release_notes: true
-          files: app/build/outputs/apk/release/*.apk
+      - name: Attach APK to the release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # gh release upload only adds assets; it does not touch the notes.
+          # --clobber lets a re-run replace an already-uploaded APK.
+          gh release upload "${{ github.event.release.tag_name }}" \
+            app/build/outputs/apk/release/*.apk \
+            --clobber --repo "${{ github.repository }}"
