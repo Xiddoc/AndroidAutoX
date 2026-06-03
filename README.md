@@ -1,4 +1,6 @@
 [![Crowdin](https://badges.crowdin.net/aa-aio-tweaker/localized.svg)](https://crowdin.com/project/aa-aio-tweaker)
+[![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
+[![Platform: Android](https://img.shields.io/badge/Platform-Android-3DDC84.svg)](https://github.com/Xiddoc/AA-Tweaker)
 
 # AA-AIO-TWEAKER 🚗⚙️
 
