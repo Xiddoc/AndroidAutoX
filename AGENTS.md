@@ -41,7 +41,7 @@ AA AIO TWEAKER is a native Android app that applies "tweaks" to Google's Android
 | `app/src/main/res/layout/activity_splash.xml` | Splash / disclaimer layout |
 | `app/src/main/res/raw/sqlite3` | Bundled sqlite3 binary used at runtime |
 | `app/src/main/res/values/strings.xml` | English source strings (localization source of truth) |
-| `app/src/main/res/values-*/strings.xml` | ~40 translated locales (Crowdin-managed) |
+| `app/src/main/res/values-*/strings.xml` | ~33 translated locales (Crowdin-managed) |
 
 ## Building
 
@@ -98,7 +98,7 @@ A CI pipeline using GitHub Actions is being added. It builds and signs the app u
 ## Localization / Crowdin workflow
 
 - English is the source of truth: `app/src/main/res/values/strings.xml`.
-- Translations live under `app/src/main/res/values-<locale>/strings.xml` (~40 locales).
+- Translations live under `app/src/main/res/values-<locale>/strings.xml` (~33 locales).
 - Translations are managed through Crowdin (project `aa-aio-tweaker`). Add new strings to the English source only; translated locales are populated/synced via Crowdin rather than edited by hand.
 
 ## Versioning
