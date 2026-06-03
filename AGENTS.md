@@ -66,8 +66,6 @@ Signing reads keystore details from `local.properties` (not committed):
 - `STOREPASSWORD` — keystore password
 - `KEYPASSWORD` — key password
 
-The build also injects `PASTEBIN_API_KEY` (used at runtime for sharing logs/pastes).
-
 ### CI
 
 A CI pipeline using GitHub Actions is being added. It builds and signs the app using repository **secrets** rather than `local.properties`. Required secrets (placeholders):
@@ -76,7 +74,6 @@ A CI pipeline using GitHub Actions is being added. It builds and signs the app u
 - `SIGNING_STORE_PASSWORD` — keystore password
 - `SIGNING_KEY_PASSWORD` — key password
 - `SIGNING_KEY_ALIAS` — key alias
-- `PASTEBIN_API_KEY` — Pastebin API key injected at build time
 
 ## How the app works at runtime
 

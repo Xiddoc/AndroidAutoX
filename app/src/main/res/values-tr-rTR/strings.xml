@@ -106,7 +106,6 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="alpha_jump_tweak">yeni alfabe atlama</string>
     <string name="choose_accounts">Hesap Seçin</string>
     <string name="use_all">Hepsini kullan (DENEYSEL)</string>
-    <string name="copied_pastebin">Günlüğe bir bağlantı oluşturuldu ve panoya kopyalandı</string>
     <string name="log_copied">Günlük kopyalandı</string>
     <string name="new_version_available">Yeni versiyon mevcut</string>
     <string name="go_to_new_version">AA AIO TWEAKER\'ın (%1$s sürümü) yeni bir sürümü GitHub\'da kullanılabilir. Şimdi indirmek istiyor musunuz?</string>

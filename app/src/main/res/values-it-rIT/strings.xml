@@ -106,7 +106,6 @@ ATTENZIONE: Questo tweak non è stato testato estensivamente e potenzialmente pu
     <string name="alpha_jump_tweak">nuovo design pulsante alfabeto</string>
     <string name="choose_accounts">Scegli account</string>
     <string name="use_all">Usa tutti (SPERIMENTALE)</string>
-    <string name="copied_pastebin">Un collegamento al registro è stato creato e copiato negli appunti</string>
     <string name="log_copied">Il log è stato copiato</string>
     <string name="new_version_available">Nuova versione disponibile</string>
     <string name="go_to_new_version">Una nuova versione di AA AIO TWEAKER (versione %1$s) è disponibile su GitHub. Vuoi scaricare ora?</string>

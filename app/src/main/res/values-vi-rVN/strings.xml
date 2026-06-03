@@ -105,7 +105,6 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="alpha_jump_tweak">new alphabet jump</string>
     <string name="choose_accounts">Chọn tài khoản</string>
     <string name="use_all">Sử dụng tất cả (THỬ NGHIỆM) </string>
-    <string name="copied_pastebin">Một liên kết đến nhật ký đã được tạo và sao chép vào khay nhớ tạm </string>
     <string name="log_copied">Nhật ký đã được sao chép</string>
     <string name="new_version_available">Có phiên bản mới khả dụng</string>
     <string name="go_to_new_version">Một phiên bản mới của AA AIO TWEAKER (phiên bản %1$s) khả dụng trên GitHub. Bạn có muốn tải nó bây giờ?</string>

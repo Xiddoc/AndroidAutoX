@@ -118,7 +118,6 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="alpha_jump_tweak">nové abecední řazení</string>
     <string name="choose_accounts">Vyberte účty</string>
     <string name="use_all">Použít vše (EXPERIMENTÁLNÍ)</string>
-    <string name="copied_pastebin">Odkaz na protokol byl vytvořen a zkopírován do schránky</string>
     <string name="log_copied">Protokol byl zkopírován</string>
     <string name="new_version_available">Nová verze je dostupná</string>
     <string name="go_to_new_version">Nová verze AA AIO TWEAKER (verze %1$s) je dostupná na GitHub. Chcete ji nyní stáhnout?</string>

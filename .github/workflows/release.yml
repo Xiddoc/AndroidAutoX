@@ -49,7 +49,6 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          PASTEBIN_API_KEY: ${{ secrets.PASTEBIN_API_KEY }}
           VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew assembleRelease
 

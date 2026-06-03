@@ -107,7 +107,6 @@
     <string name="alpha_jump_tweak">новый переход по алфавиту</string>
     <string name="choose_accounts">Выбрать аккаунт</string>
     <string name="use_all">Выбрать все (ЭКСПЕРИМЕНТ)</string>
-    <string name="copied_pastebin">Ссылка на лог была создана и скопирована в буфер обмена</string>
     <string name="log_copied">Лог скопирован</string>
     <string name="new_version_available">Доступна новая версия</string>
     <string name="go_to_new_version">Новая версия AA AIO TWEAKER (версия %1$s) доступна на GitHub. Вы хотите скачать ее сейчас?</string>

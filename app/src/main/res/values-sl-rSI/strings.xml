@@ -108,7 +108,6 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="alpha_jump_tweak">novo abecedno iskanje</string>
     <string name="choose_accounts">Izberite račun</string>
     <string name="use_all">Uporabi vse (EKSPERIMENTALNA FUNKCIJA)</string>
-    <string name="copied_pastebin">Povezava na spisek je bila ustvarjena in kopirana v odložišče</string>
     <string name="log_copied">Dnevnik aktivnosti je bil kopiran</string>
     <string name="new_version_available">Na voljo je nova verzija</string>
     <string name="go_to_new_version">Na razpolago je nova verzija AA AIO TWEAKER (verzija %1$s) na Github platformi. Ali si jo hočete prevzeti sedaj?</string>

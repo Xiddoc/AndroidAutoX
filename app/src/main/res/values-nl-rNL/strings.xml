@@ -106,7 +106,6 @@ WAARSCHUWING: Deze tweak is niet uitgebreid getest en kan Android Auto mogelijk 
     <string name="alpha_jump_tweak">nieuw alfabet sprong</string>
     <string name="choose_accounts">Kies account</string>
     <string name="use_all">Alles gebruiken (EXPERIMENTAL)</string>
-    <string name="copied_pastebin">Een link naar het logboek is aangemaakt en gekopieerd naar het klembord</string>
     <string name="log_copied">Het logboek is opgeslagen</string>
     <string name="new_version_available">Nieuwe versie beschikbaar</string>
     <string name="go_to_new_version">Er is een nieuwe versie van AA AIO TWEAKER (versie %1$s) beschikbaar op GitHub. Wilt u het nu downloaden?</string>

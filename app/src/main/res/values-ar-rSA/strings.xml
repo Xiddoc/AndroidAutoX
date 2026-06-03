@@ -105,7 +105,6 @@ Android Auto اصدار 5.8 او أعلى.</string>
     <string name="alpha_jump_tweak">قفزة احرف جديدة</string>
     <string name="choose_accounts">اختيار الحسابات</string>
     <string name="use_all">استخدام الكل (إكسب)</string>
-    <string name="copied_pastebin">تم إنشاء رابط إلى السجل وتم نسخه إلى الحافظة</string>
     <string name="log_copied">تم نسخ السجل</string>
     <string name="new_version_available">نسخة جديدة متاحة</string>
     <string name="go_to_new_version">يتوفر إصدار جديد من AA AIO TWEAKER AAAD (الإصدار %1$s) على GitHub. هل تريد تحميله الآن؟</string>

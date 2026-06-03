@@ -108,7 +108,6 @@ UPOZORNENIE: Toto vylepšenie nebolo dôkladne testované a môže potenciálne 
     <string name="alpha_jump_tweak">nový abecedný skok</string>
     <string name="choose_accounts">Vybrať účty</string>
     <string name="use_all">Vybrať všetky (EXPERIMENTÁLNE)</string>
-    <string name="copied_pastebin">Bol vytvorený odkaz na protokol a skopírovaný do schránky</string>
     <string name="log_copied">Protokol bol skopírovaný</string>
     <string name="new_version_available">Dostupná nová verzia</string>
     <string name="go_to_new_version">Nová verzia AA AIO TWEAKER (verzia%1$s) je dostupná na GitHub. Chcete ju teraz stiahnuť?</string>

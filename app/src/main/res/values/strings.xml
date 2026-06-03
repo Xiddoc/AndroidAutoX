@@ -110,7 +110,6 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="alpha_jump_tweak">new alphabet jump</string>
     <string name="choose_accounts">Choose accounts</string>
     <string name="use_all">Use all (EXPERIMENTAL)</string>
-    <string name="copied_pastebin">A link to the log has been created and copied to clipboard</string>
     <string name="log_copied">Log has been copied</string>
     <string name="new_version_available">New Version available</string>
     <string name="go_to_new_version">A new version of AA AIO TWEAKER (version %1$s) is available on GitHub. Do you want to download it now?</string>

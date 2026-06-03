@@ -112,7 +112,6 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="alpha_jump_tweak">新的字母跳转</string>
     <string name="choose_accounts">选择帐号</string>
     <string name="use_all">使用全部(实验性)</string>
-    <string name="copied_pastebin">日志链接已创建并复制到剪贴板</string>
     <string name="log_copied">日志已复制</string>
     <string name="new_version_available">新版本可用</string>
     <string name="go_to_new_version">新版本的 AA AIO TWEAKER (版本 %1$s) 可在 GitHub 上下载。您想现在前往下载吗？</string>

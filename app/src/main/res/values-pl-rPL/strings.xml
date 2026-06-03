@@ -108,7 +108,6 @@ OSTRZEŻENIE: ta modyfikacja nie została dokładnie przetestowana i może poten
     <string name="alpha_jump_tweak">wyszukiwanie wg litery</string>
     <string name="choose_accounts">Wybierz konto</string>
     <string name="use_all">Użyj wszystkie (EKSPERYMENTALNE)</string>
-    <string name="copied_pastebin">Link do log został utworzony i skopiowany do schowka</string>
     <string name="log_copied">Log został skopiowany</string>
     <string name="new_version_available">Dostępna jest nowa wersja</string>
     <string name="go_to_new_version">Nowa wersja AA AIO TWEAKER (wersja% 1 $ s) jest dostępna na GitHub. Czy chcesz ją teraz pobrać?</string>

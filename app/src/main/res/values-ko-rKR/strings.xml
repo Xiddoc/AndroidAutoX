@@ -105,7 +105,6 @@
     <string name="alpha_jump_tweak">새로운 알파벳으로 이동</string>
     <string name="choose_accounts">계정을 선택하세요</string>
     <string name="use_all">모두 사용합니다 (실험모드)</string>
-    <string name="copied_pastebin">Log가 생성되어 클립보드에 복사되었습니다</string>
     <string name="log_copied">Log 가 이미 복사되었습니다</string>
     <string name="new_version_available">새로운 버전이 있습니다</string>
     <string name="go_to_new_version">새로운 버전의 AAAD(버전 %1$s) 를 GitHub에서 사용할 수 있습니다. 지금 다운로드하시겠습니까?</string>

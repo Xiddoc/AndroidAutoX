@@ -106,7 +106,6 @@ WARNUNG: Dieser Tweak wurde nicht ausgiebig getestet und könnte möglicherweise
     <string name="alpha_jump_tweak">neuer Alphabet-Sprung</string>
     <string name="choose_accounts">Konten auswählen</string>
     <string name="use_all">Alle verwenden (EXPERIMENTAL)</string>
-    <string name="copied_pastebin">Ein Link zum Protokoll wurde erstellt und in die Zwischenablage kopiert</string>
     <string name="log_copied">Protokoll wurde kopiert</string>
     <string name="new_version_available">Neue Version vefügbar</string>
     <string name="go_to_new_version">Eine neue Version von AA AIO TWEAKER (Version %1$s) ist auf GitHub verfügbar. Möchten Sie sie jetzt herunterladen?</string>

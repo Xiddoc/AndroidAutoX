@@ -108,7 +108,6 @@ ADVERTENCIA: Esta modificación no ha sido probada extensivamente y podría pote
     <string name="alpha_jump_tweak">Nuevo salto alfabético</string>
     <string name="choose_accounts">Elige cuenta</string>
     <string name="use_all">Usar todo (EXPERIMENTAL)</string>
-    <string name="copied_pastebin">Un enlace al registro ha sido creado y copiado al portapapeles</string>
     <string name="log_copied">El registro ha sido copiado</string>
     <string name="new_version_available">Nueva versión disponible</string>
     <string name="go_to_new_version">Una nueva versión de AAAD (versión %1$s) está disponible en GitHub. ¿Quieres descargarla ahora?</string>
