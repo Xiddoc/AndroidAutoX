@@ -13,19 +13,23 @@ import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.NonNull;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.view.ViewPager;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.Toolbar;
+import androidx.annotation.NonNull;
+import androidx.fragment.app.DialogFragment;
+import androidx.viewpager.widget.ViewPager;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
 import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.Animation;
@@ -94,6 +98,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView currentlySetUSBSeekbar;
     private TextView currentlySetWiFiSeekbar;
     private Button rebootButton;
+    private View rebootGlow;
     private Button nospeed;
     private Button taplimitat;
     private Button coolwalkDayNightTweak;
@@ -206,7 +211,7 @@ public class MainActivity extends AppCompatActivity {
         adapter.insertViewId(R.id.page_two, getString(R.string.tab_logs));
         viewPager.setAdapter(adapter);
 
-        android.support.design.widget.TabLayout tabLayout = findViewById(R.id.tab_layout);
+        com.google.android.material.tabs.TabLayout tabLayout = findViewById(R.id.tab_layout);
         tabLayout.setupWithViewPager(viewPager);
 
         Toolbar myToolbar = findViewById(R.id.toolbar);
@@ -237,6 +242,16 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(getApplicationContext(), getString(R.string.log_copied), Toast.LENGTH_LONG).show();
             }
         });
+
+        findViewById(R.id.clear_logs_button).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                TextView tv = findViewById(R.id.logs);
+                tv.setText(getString(R.string.log_first_line));
+                Toast.makeText(getApplicationContext(), getString(R.string.logs_cleared), Toast.LENGTH_SHORT).show();
+            }
+        });
+
         Button toapp = findViewById(R.id.toapp_button);
         toapp.setOnClickListener(
                 new View.OnClickListener() {
@@ -260,6 +275,18 @@ public class MainActivity extends AppCompatActivity {
         );
 
         rebootButton = findViewById(R.id.reboot_button);
+
+        // Phase 2 depth pass: real RenderEffect blur halo behind the FAB plus
+        // azure-tinted elevation shadows on the raised surfaces (API 31+).
+        rebootGlow = findViewById(R.id.reboot_glow);
+        if (rebootGlow != null) {
+            float blur = 12f * getResources().getDisplayMetrics().density;
+            rebootGlow.setRenderEffect(
+                    RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.DECAL));
+            rebootGlow.setAlpha(0.6f);
+        }
+        applyAzureGlow(rebootButton);
+        applyDepthGlow();
 
 
 
@@ -394,7 +421,7 @@ public class MainActivity extends AppCompatActivity {
                                 Toast.makeText(getApplicationContext(), getString(R.string.choose_apps_warning), Toast.LENGTH_LONG).show();
                             } else{
                                 temp = true;
-                                final android.support.v7.app.AlertDialog.Builder builder = new android.support.v7.app.AlertDialog.Builder(MainActivity.this);
+                                final androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this);
                                 builder.setTitle(getString(R.string.warning_title));
                                 builder.setMessage(getResources().getString(R.string.warning_patch_apps));
                                 builder.setNeutralButton( getString(android.R.string.ok),
@@ -522,6 +549,8 @@ public class MainActivity extends AppCompatActivity {
                                 }
                             });
                             uxprototypeDialog.show();
+                            // Make the window backdrop transparent so the rounded card corners aren't framed by a gray rectangle.
+                            uxprototypeDialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
                             uxprototypeDialog.getWindow().setAttributes(lp);
 
                         }
@@ -1444,7 +1473,13 @@ public class MainActivity extends AppCompatActivity {
                 dialog.show();
 
                 Window window = dialog.getWindow();
-                window.setLayout(ViewPager.LayoutParams.MATCH_PARENT, WRAP_CONTENT);
+                // Make the window backdrop transparent so the rounded card corners aren't framed by a gray rectangle.
+                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+                // Inset the card from the screen edges so it has breathing room on the sides
+                // (default dialog gravity centers it, giving equal left/right gaps).
+                int sideMargin = (int) (16 * getResources().getDisplayMetrics().density);
+                int cardWidth = getResources().getDisplayMetrics().widthPixels - (2 * sideMargin);
+                window.setLayout(cardWidth, WRAP_CONTENT);
 
                 return true;
             }
@@ -1493,7 +1528,13 @@ public class MainActivity extends AppCompatActivity {
                 dialog.show();
 
                 Window window = dialog.getWindow();
-                window.setLayout(ViewPager.LayoutParams.MATCH_PARENT, WRAP_CONTENT);
+                // Make the window backdrop transparent so the rounded card corners aren't framed by a gray rectangle.
+                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+                // Inset the card from the screen edges so it has breathing room on the sides
+                // (default dialog gravity centers it, giving equal left/right gaps).
+                int sideMargin = (int) (16 * getResources().getDisplayMetrics().density);
+                int cardWidth = getResources().getDisplayMetrics().widthPixels - (2 * sideMargin);
+                window.setLayout(cardWidth, WRAP_CONTENT);
 
                 return true;
             }
@@ -1550,7 +1591,7 @@ public class MainActivity extends AppCompatActivity {
                 break;
 
             case R.id.revert_everything:
-                final android.support.v7.app.AlertDialog.Builder builder = new android.support.v7.app.AlertDialog.Builder(MainActivity.this);
+                final androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this);
                 builder.setMessage(getString(R.string.revert_everything_dialog))
                         .setPositiveButton(getString(android.R.string.ok), new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog, int id) {
@@ -1563,7 +1604,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         });
                 builder.setCancelable(true);
-                android.support.v7.app.AlertDialog Alert1 = builder.create();
+                androidx.appcompat.app.AlertDialog Alert1 = builder.create();
                 Alert1.show();
                 break;
             case R.id.aa_settings:
@@ -4152,11 +4193,46 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 if (!animationRun) {
                     rebootButton.setVisibility(View.VISIBLE);
                     rebootButton.startAnimation(anim);
+                    if (rebootGlow != null) {
+                        rebootGlow.setVisibility(View.VISIBLE);
+                        rebootGlow.startAnimation(anim);
+                    }
                     animationRun = true;
                 }
             }
         });
 
+    }
+
+    /**
+     * Tint a view's elevation shadow with the logo azure so a raised surface
+     * casts a soft blue glow instead of a flat gray shadow (API 28+; minSdk 31).
+     */
+    private void applyAzureGlow(View v) {
+        if (v == null) return;
+        int azure = ContextCompat.getColor(this, R.color.accent_blue);
+        v.setOutlineSpotShadowColor(azure);
+        v.setOutlineAmbientShadowColor(azure);
+    }
+
+    /** Apply the azure glow to the info card and every tweak button. */
+    private void applyDepthGlow() {
+        applyAzureGlow(findViewById(R.id.info_card));
+        View buttonsArea = findViewById(R.id.buttons_area);
+        if (buttonsArea instanceof ViewGroup) {
+            tintButtonShadows((ViewGroup) buttonsArea);
+        }
+    }
+
+    private void tintButtonShadows(ViewGroup group) {
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child instanceof Button) {
+                applyAzureGlow(child);
+            } else if (child instanceof ViewGroup) {
+                tintButtonShadows((ViewGroup) child);
+            }
+        }
     }
 
     public static void openApp(Context context, String packageName) {

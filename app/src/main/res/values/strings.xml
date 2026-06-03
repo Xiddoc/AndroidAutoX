@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">AndroidAutoX</string>
-    <string name="main_string">Welcome in AndroidAutoX\n
+    <string name="main_string">Welcome to AndroidAutoX\n
 This app will let you apply some tweaks to Android Auto\n
 Simply select what tweak you want to apply :)\n
 If you are unsure of what a tweak does, long press on it and a tutorial will show up.</string>
@@ -21,9 +21,9 @@ Under no circumstances is the author of this app responsible for its use</string
     <string name="statb_opaque_string">Force Opaque Statusbar</string>
     <string name="battery_outline_string">battery saver outline</string>
     <string name="legend">Status Legend:\n
-GREEN= Patch applied\n
-YELLOW= Reboot is needed to apply patch\n
-RED= Patch is not applied\n</string>
+GREEN: Patch applied\n
+YELLOW: Reboot is needed to apply patch\n
+RED: Patch is not applied\n</string>
     <string name="set_notification_duration_to">Notification duration to</string>
     <string name="base_no_ws">Widescreen</string>
     <string name="force_widescreen_text">Force Widescreen</string>
@@ -31,30 +31,30 @@ RED= Patch is not applied\n</string>
     <string name="bluetooth_auto_connect">Bluetooth auto connect</string>
     <string name="tutorial_nospeed">This tweak will make Android Auto think that the car is at 0 speed. As a result, Android Auto will always show the preview of messages. This tweak does not apply to keyboard or first configuration of Android Auto.</string>
     <string name="tutorial_sixtap">This tweak will override the 6 tap limit of Android Auto and will make unlimited browsing of content always possible.</string>
-    <string name="tutorial_shortcuts">This tweak will unlock the new Assistant Shortcuts feature. Once activated you can go in Android Auto settings, and in the customize launcher section you can start adding shortcuts to Google Assistant commands</string>
+    <string name="tutorial_shortcuts">This tweak will unlock the new Assistant Shortcuts feature. Once activated you can go to Android Auto settings, and in the customize launcher section you can start adding shortcuts to Google Assistant commands.</string>
     <string name="tutorial_startup">This tweak will override the default behaviour of Android Auto opening a navigation app at start and will make Android Auto start on launcher.\n
 In some cases this tweak will disable auto start of music. A known workaround is to disable and re-enable the option within Android Auto settings.\n
-IT\'S NOT POSSIBLE TO SET A SPECIFIC APP TO START FIRST.</string>
+It\'s not possible to set a specific app to start first.</string>
     <string name="tutorial_widescreen">This tweak will force Android Auto in widescreen mode.</string>
     <string name="tutorial_no_widescreen">This tweak will force Android Auto in no widescreen mode.</string>
     <string name="tutorial_autoplay_message">This tweak enables the possibility to set whether Android Auto must read the incoming messages or not. Android Auto 8.3 or superior is required.</string>
     <string name="tutorial_statusbar_opaque">This tweak will make the status bar always black.</string>
     <string name="tutorial_battery_outline">This tweak will prevent the battery icon with the red outline when battery saver is on.</string>
-    <string name="tutorial_hun">This tweak let you set a custom duration for heads up notifications</string>
-    <string name="tutorial_media_hun">This tweak let you set a custom duration for media notifications in navigation bar to up to 15 minutes.</string>
+    <string name="tutorial_hun">This tweak lets you set a custom duration for heads-up notifications.</string>
+    <string name="tutorial_media_hun">This tweak lets you set a custom duration for media notifications in navigation bar to up to 15 minutes.</string>
     <string name="tutorial_bluetooth">This tweak should prevent Bluetooth from turning on when Android Auto is connected. This tweak won\'t work if Bluetooth is already on.</string>
     <string name="tutorial_patchapps">This tweak will enable third-party apps made specifically with Android Auto custom SDK to work on Android Auto.\n
 If you are familiar with AA Phenotype Patcher, this tweak is pretty much identical to it.\n
 It\'s not possible to add just any app to Android Auto, but it\'s possible to patch sideloaded apps MADE FOR ANDROID AUTO to work in cars.</string>
     <string name="multi_display_string">Multi Display</string>
-    <string name="tutorial_multidisplay">This is an hidden feature inside Android Auto that will turn the second space in widescreen mode to a real second display that is completely taken by a seond activity. Google Maps will display a full map with navigation status, music and phones will take the full space.\n
-Additionally, this mode activates another feature that will turn the phone\'s screen in a second display for navigation in Android Auto.\n
+    <string name="tutorial_multidisplay">This is a hidden feature inside Android Auto that will turn the second space in widescreen mode into a real second display that is completely taken by a second activity. Google Maps will display a full map with navigation status, music and phones will take the full space.\n
+Additionally, this mode activates another feature that will turn the phone\'s screen into a second display for navigation in Android Auto.\n
 Settings for tweaking this feature will be available in Android Auto homescreen.\n
 Apparently, only Google Maps currently supports this mode.\n
 This feature is probably under development and could potentially not work as intended.\n
 Android Auto 5.8 or superior is required.</string>
     <string name="battery_warning">Battery saver warning</string>
-    <string name="tutorial_battery_saver_warning">This tweak will prevent Android Auto from giving popup warnings when battery saver mode is on</string>
+    <string name="tutorial_battery_saver_warning">This tweak will prevent Android Auto from showing pop-up warnings when battery saver mode is on.</string>
     <string name="disable_tweak_string">Disable\u0020</string>
     <string name="enable_tweak_string">Enable\u0020</string>
     <string name="re_enable_tweak_string">Re-enable\u0020</string>
@@ -69,6 +69,7 @@ Android Auto 5.8 or superior is required.</string>
     <string name="legend_reboot">Reboot needed</string>
     <string name="legend_not_applied">Not applied</string>
     <string name="copy_logs_button">Copy logs</string>
+    <string name="clear_logs_button">Clear logs</string>
     <string name="force_disable_tweak">Force Disable\u0020</string>
     <string name="reset_tweak">Reset\u0020</string>
     <string name="force_widescreen_warning">Force widescreen has been automatically disabled</string>
@@ -84,10 +85,10 @@ Android Auto 5.8 or superior is required.</string>
     <string name="about_part_one"><![CDATA[AndroidAutoX<br><br>Made with &#10084; by <a href=\"https://github.com/Xiddoc\">Xiddoc</a><br><br>Source code is available on <a href=\"https://github.com/Xiddoc/AndroidAutoX\">GitHub</a>]]></string>
     <string name="custom_wallpapers">Wallpapers</string>
     <string name="tutorial_wallpapers">This tweak will activate the new built in wallpaper changer in Android Auto. Android Auto 5.8 or superior is required.\nWARNING: If you are a user of Wallpapers For Android Auto, you will need to update it to at least version 3.0, otherwise this tweak will break Wallpapers For Android Auto functionality.</string>
-    <string name="tutorial_dark_mode">Starting from December 2020, Google reverted a behaviour that happened since Android 10. Previously, the light/dark mode on Android Auto followed the light/dark mode on the phone and vice versa. This meant that switching the phone to dark mode had effect on the car, or if the phone was in dark mode and the car had lights off it used to switch on the light theme on the phone.\n However, since this feature of \"independent\" dark mode was introduced, users with Aftermarket headunits have no way to switch to dark mode anymore without actually wiring the stereo to the car\'s lights.\n This tweak makes sure that night mode is again dependent from phone and switching light/dark mode on phone will have its effects on cars too.</string>
+    <string name="tutorial_dark_mode">Starting from December 2020, Google reverted a behaviour that happened since Android 10. Previously, the light/dark mode on Android Auto followed the light/dark mode on the phone and vice versa. This meant that switching the phone to dark mode had an effect on the car, or if the phone was in dark mode and the car had lights off it used to switch on the light theme on the phone.\n However, since this feature of \"independent\" dark mode was introduced, users with aftermarket headunits have no way to switch to dark mode anymore without actually wiring the stereo to the car\'s lights.\n This tweak makes sure that night mode is again dependent on the phone and switching light/dark mode on the phone will have its effects on cars too.</string>
     <string name="dark_mode_tweak">independent dark mode</string>
     <string name="telemetry_string">telemetry</string>
-    <string name="tutorial_telemetry">It\'s no mystery that Google logs a lot of data about us. This tweak will make so that Google Play Services will stop a lot of tracking and logging activity.\n
+    <string name="tutorial_telemetry">It\'s no mystery that Google logs a lot of data about us. This tweak will make it so that Google Play Services will stop a lot of tracking and logging activity.\n
 WARNING: This tweak has not been extensively tested and could potentially break Android Auto. If you find out that this tweak breaks Android Auto, please open an issue on GitHub.</string>
     <string name="reboot_prompt">Reboot phone now?</string>
     <string name="rebooting_action">Rebooting…</string>
@@ -97,47 +98,48 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="revert_everything_dialog">This will revert ALL applied Android Auto flag and Gearhead modifications back to their default values. Your tweak selections will be cleared. Please restart the app manually after this completes.</string>
     <string name="calendar_tweak">Set %1$s visible days in calendar</string>
     <string name="calendar_tweak_single">Set %1$s visible day in calendar</string>
-    <string name="tutorial_calendar_tweak">This tweak will make so that calendar app into Android Auto can show more days than just one. Please note that even increasing the number of days, it\'s still not obviously possible to distinguish which day you are viewing the events of. Android Auto will just show how many events are set in one day and it won\'t show which day it is.</string>
+    <string name="tutorial_calendar_tweak">This tweak will make it so that the calendar app in Android Auto can show more days than just one. Please note that even increasing the number of days, it\'s still not obviously possible to distinguish which day you are viewing the events of. Android Auto will just show how many events are set in one day and it won\'t show which day it is.</string>
     <string name="choose_apps_warning">Choose apps to whitelist</string>
     <string name="log_first_line">LOG:\n</string>
     <string name="menu_aa_settings">Open Android Auto settings</string>
     <string name="not_enabled_warning">Android Auto is not enabled</string>
     <string name="not_installed_warning">Android Auto is not installed</string>
     <string name="currently_set">"Currently set: "</string>
-    <string name="no_accounts_warning">AndroidAutoX could not find any account in Google Play Services database. This can be caused by several different things such as:\n • Device that is mostly not connected to internet\n • Fresh install of the phone\n • Corrupted Google Play Services database\n • Removal of Google account(s) from the phone\n • Cleared datas of Google Play Services\n\nIn this scenario, AndroidAutoX will FAIL to work properly. If you recently removed a Google account or cleared Google Play Services datas, please keep the phone connected to internet and let it build the Google Play Services database fully. This might take several hours, in some cases also days.\n\nIf you are not in one of the above conditions, please open a issue on GitHub.</string>
+    <string name="no_accounts_warning">AndroidAutoX could not find any account in Google Play Services database. This can be caused by several different things such as:\n • Device that is mostly not connected to internet\n • Fresh install of the phone\n • Corrupted Google Play Services database\n • Removal of Google account(s) from the phone\n • Cleared data of Google Play Services\n\nIn this scenario, AndroidAutoX will FAIL to work properly. If you recently removed a Google account or cleared Google Play Services data, please keep the phone connected to internet and let it build the Google Play Services database fully. This might take several hours, in some cases also days.\n\nIf you are not in one of the above conditions, please open an issue on GitHub.</string>
     <string name="tweak_loading">Applying the tweak...</string>
     <string name="loading">Loading, please wait...</string>
-    <string name="tutorial_bitrate">This tweak will increase or decrease video bitrate according to the multiplier set (up to 2.0x). Increasing the bitrate (more than 1.0x) will mean that more datas will be streamed to the car and quality of video streaming could be improved in visual quality, however it might cause instability. Decreasing the bitrate (less than 1.0x) will compress the stream to the car and quality will be decreased, but it will result in a more reliable and fast connection.</string>
+    <string name="tutorial_bitrate">This tweak will increase or decrease video bitrate according to the multiplier set (up to 2.0x). Increasing the bitrate (more than 1.0x) will mean that more data will be streamed to the car and quality of video streaming could be improved in visual quality, however it might cause instability. Decreasing the bitrate (less than 1.0x) will compress the stream to the car and quality will be decreased, but it will result in a more reliable and fast connection.</string>
     <string name="set_wifi_tweak">wifi bitrate to</string>
     <string name="set_usb_bitrate">USB bitrate to</string>
     <string name="choose_value_first">Choose a value first</string>
     <string name="open_issue_button">Open Issue</string>
     <string name="no_browser_found">No browser found to open the issue page</string>
-    <string name="error_generic">The command was not successful. Please wait some minutes and try again. If problem is still ongoing, please open a issue on GitHub</string>
-    <string name="tutorial_alphajump">This tweak will activate a new (and hidden) redesign that changes how lists can be browsed with letters. Instead of the A-Z button at the top, the button will appear on the scrollbar when there\'s no scroll happening and you won\'t be forced to go to top to browse with letters again.</string>
+    <string name="error_generic">The command was not successful. Please wait some minutes and try again. If the problem is still ongoing, please open an issue on GitHub</string>
+    <string name="tutorial_alphajump">This tweak will activate a new (and hidden) redesign that changes how lists can be browsed with letters. Instead of the A-Z button at the top, the button will appear on the scrollbar when there\'s no scroll happening and you won\'t be forced to go to the top to browse with letters again.</string>
     <string name="alpha_jump_tweak">new alphabet jump</string>
     <string name="choose_accounts">Choose accounts</string>
     <string name="use_all">Use all (EXPERIMENTAL)</string>
     <string name="log_copied">Log has been copied</string>
-    <string name="new_version_available">New Version available</string>
+    <string name="logs_cleared">Logs cleared</string>
+    <string name="new_version_available">New version available</string>
     <string name="go_to_new_version">A new version of AndroidAutoX (version %1$s) is available on GitHub. Do you want to download it now?</string>
     <string name="go_to_download">Go to download</string>
     <string name="ignore_for_now">Ignore for now</string>
-    <string name="many_accounts_warning">AndroidAutoX found a large number (%1$s) of Google accounts saved in the device.\nThis can negatively impact on the success of the patching process and AndroidAutoX might fail.\nYou can either choose the account(s) that you mostly use with Google Play Services to apply the patch to just them (2 or less is recommended) or activate an experimental mode that should patch all accounts.\nPLEASE NOTE that the experimental mode might cause some crashes to the phone while the patch is running.</string>
+    <string name="many_accounts_warning">AndroidAutoX found a large number (%1$s) of Google accounts saved in the device.\nThis can negatively impact the success of the patching process and AndroidAutoX might fail.\nYou can either choose the account(s) that you mostly use with Google Play Services to apply the patch to just them (2 or less is recommended) or activate an experimental mode that should patch all accounts.\nPLEASE NOTE that the experimental mode might cause some crashes to the phone while the patch is running.</string>
     <string name="dark_switch_tweak">day/night option</string>
-    <string name="tutorial_assistant_suggestions">This tweak will activate a new feature that adds some quick shortcuts to Assistant actions on top of home screen.</string>
+    <string name="tutorial_assistant_suggestions">This tweak will activate a new feature that adds some quick shortcuts to Assistant actions on top of the home screen.</string>
     <string name="remove_paired_car">Remove a paired car</string>
     <string name="choose_cars">Choose car(s)</string>
     <string name="tutorial_carremover">Did you know that you can only remove all the paired cars from Android Auto and you cannot remove just one at a time? This option will rescue you if you want to delete a car from Android Auto, just select which car(s) you want and it/they will be removed.</string>
     <string name="coolwalk_daynight_tweak">Light/Dark Coolwalk</string>
     <string name="coolwalk_daynight_tutorial">This tweak will activate day/night mode for Coolwalk mode. Looks kind of broken right now and can\'t handle switch very well.</string>
     <string name="custom_hotseat_option">Custom seating option</string>
-    <string name="tutorial_coolwalk">This tweak will activate a new design in Android Auto (codename Coolwalk) that can be toggled in Android Auto\'s settings and that tweaks a bit the appearance on smaller screens. This design features a always on side panel and some different graphics. This feature is in early stage at the moment. Android Auto 6.9 or superior is required.</string>
+    <string name="tutorial_coolwalk">This tweak will activate a new design in Android Auto (codename Coolwalk) that can be toggled in Android Auto\'s settings and that tweaks a bit the appearance on smaller screens. This design features an always-on side panel and some different graphics. This feature is in early stage at the moment. Android Auto 6.9 or superior is required.</string>
     <string name="coolwalk_tweak">Coolwalk design</string>
-    <string name="tutorial_focus_settings">This tweak will activate a new options in Android Auto settings to manually customize whether Android Auto must be launched as soon as you connect your phone with the car. Android Auto 6.8 or superior is required.</string>
+    <string name="tutorial_focus_settings">This tweak will activate a new option in Android Auto settings to manually customize whether Android Auto must be launched as soon as you connect your phone with the car. Android Auto 6.8 or superior is required.</string>
     <string name="focus_tweak">Focus settings</string>
     <string name="assistant_tips">Assistant tips</string>
-    <string name="tutorial_mirroring_app">This tweak will enable Assistant Tips on the top of the home screen for most used actions. Android Auto 8.2 or superior is required.</string>
+    <string name="tutorial_mirroring_app">This tweak will enable Assistant Tips at the top of the home screen for most used actions. Android Auto 8.2 or superior is required.</string>
     <string name="decline_message_tweak">Decline with message</string>
     <string name="tutorial_decline_message">This tweak will enable the possibility to decline an incoming call with SMS (with Google Assistant).</string>
     <string name="section_one">General tweaks</string>
@@ -146,20 +148,20 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="section_four">Video quality settings</string>
     <string name="section_five">Pre-activate features</string>
     <string name="restricted_coolwalk">\nThis option will only work with Coolwalk enabled.</string>
-    <string name="warning_patch_apps">Warning! This operation will ERASE ALL THE DATA from the selected app(s). Please make sure you have a backup of the data. Do you want to proceed anyways?</string>
+    <string name="warning_patch_apps">Warning! This operation will ERASE ALL THE DATA from the selected app(s). Please make sure you have a backup of the data. Do you want to proceed anyway?</string>
     <string name="tappable_progress">New progress bar</string>
-    <string name="tappable_progress_tutorial">Finally we are gaining a touchable progress bar for what\'s playing on Android Auto. Yes, we can seek through the current track Requires Android Auto 8.3 or superior.</string>
-    <string name="uxprototype_tutorial">All this tweak does is basically creates a free shortcut on the home page to open a web page. It involves an Easter egg hidden in Android Auto released on 1st of April 2022. Activate \"Developer mode\" in \"Developer settings\" under \"Application mode\". It\'s the only way to have an actual fullscreen app on Android Auto right now. WARNING: Not exitable, use this if you only plan on using this on your car. There\'s no back button either.</string>
+    <string name="tappable_progress_tutorial">Finally we are gaining a touchable progress bar for what\'s playing on Android Auto. Yes, we can seek through the current track. Requires Android Auto 8.3 or superior.</string>
+    <string name="uxprototype_tutorial">All this tweak does is basically create a free shortcut on the home page to open a web page. It involves an Easter egg hidden in Android Auto released on 1st of April 2022. Activate \"Developer mode\" in \"Developer settings\" under \"Application mode\". It\'s the only way to have an actual fullscreen app on Android Auto right now. WARNING: Not exitable, use this if you only plan on using this on your car. There\'s no back button either.</string>
     <string name="uxprototype_dialog">Enter a valid full URL</string>
     <string name="uxprototype_tweak">Custom shortcut</string>
     <string name="tutorial_new_seekbar">"This tweak enables a movable seekbar for media apps."</string>
-    <string name="tutorial_materialyou">"This tweak enables material you style for the Android Auto's settings on the phone. This properly works only on Android Auto 8.8> as tested"</string>
+    <string name="tutorial_materialyou">"This tweak enables Material You style for the Android Auto's settings on the phone. This properly works only on Android Auto 8.8 or superior, as tested."</string>
     <string name="materialyou_tweak" translatable="false">"Material You UI"</string>
     <string name="tutorial_nocoolwalk">Are you absolutely hating Coolwalk? This tweak is for you.</string>
     <string name="portrait_layout">Force vertical layout</string>
     <string name="tutorial_portrait">This tweak will force the portrait layout of Android Auto with dashboard on the bottom.</string>
-    <string name="inertial_scroll_tweak">Inertial scroll</string>
-    <string name="tutorial_inertial_scroll">This tweak will override the default scrolling behaviour of Android Auto making so that it doesn\'t stop page by page.</string>
+    <string name="inertial_scroll_tweak">inertial scroll</string>
+    <string name="tutorial_inertial_scroll">This tweak will override the default scrolling behaviour of Android Auto, making it so that it doesn\'t stop page by page.</string>
     <string name="vertical_bar_tweak">Vertical Bar</string>
     <string name="tutorial_vertical_bar_tweak">This tweak will force the bar to be vertical. This tweak will only work on Coolwalk UI.</string>
 </resources>

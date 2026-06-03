@@ -5,24 +5,65 @@
     android:scrollbarDefaultDelayBeforeFade="3000"
     android:layout_height="match_parent"
     android:orientation="vertical">
-<android.support.constraint.ConstraintLayout
+<androidx.constraintlayout.widget.ConstraintLayout
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp">
 
-        <android.support.constraint.ConstraintLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             app:layout_constraintTop_toTopOf="parent"
             android:id="@+id/buttons_area"
             android:layout_width="match_parent"
             android:layout_height="0dp">
 
-                <TextView
-                        android:id="@+id/section_one"
-                    android:layout_width="wrap_content"
+                <!-- Status legend lives in the Tweaks page so it swipes with the
+                     page (and is naturally absent from the Logs page). -->
+                <LinearLayout
+                    android:id="@+id/legend_strip"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="10dp"
                     app:layout_constraintTop_toTopOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent">
+
+                    <View android:layout_width="12dp" android:layout_height="12dp"
+                        android:background="@drawable/dot_green" android:layout_gravity="center_vertical"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp" android:layout_marginEnd="12dp"
+                        android:text="@string/legend_applied"
+                        android:textColor="@color/text_muted" android:textSize="12sp"/>
+
+                    <View android:layout_width="12dp" android:layout_height="12dp"
+                        android:background="@drawable/dot_yellow" android:layout_gravity="center_vertical"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp" android:layout_marginEnd="12dp"
+                        android:text="@string/legend_reboot"
+                        android:textColor="@color/text_muted" android:textSize="12sp"/>
+
+                    <View android:layout_width="12dp" android:layout_height="12dp"
+                        android:background="@drawable/dot_red" android:layout_gravity="center_vertical"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:text="@string/legend_not_applied"
+                        android:textColor="@color/text_muted" android:textSize="12sp"/>
+                </LinearLayout>
+
+                <TextView
+                        android:id="@+id/section_one"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    app:layout_constraintTop_toBottomOf="@id/legend_strip"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                        android:layout_marginTop="16dp"
                         android:layout_marginBottom="15dp"
-                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:textAlignment="center"
                         android:text="@string/section_one"
                     android:textAllCaps="true"
                         android:textStyle="bold"
@@ -167,8 +208,6 @@
                     android:layout_height="wrap_content"
                     android:clickable="true"
                     android:focusable="true"
-                    android:drawableEnd="@drawable/ic_beta_logo"
-                    android:drawablePadding="9dp"
                     android:text="@string/telemetry_string"
                     app:layout_constraintEnd_toStartOf="@id/message_autoread_tweak_status"
                     app:layout_constraintTop_toBottomOf="@id/bluetooth_disable_button"
@@ -186,12 +225,15 @@
 
                 <TextView
                     android:id="@+id/section_two"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     app:layout_constraintTop_toBottomOf="@id/telemetry_disable_tweak"
                     app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginTop="24dp"
                     android:layout_marginBottom="15dp"
-                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:textAlignment="center"
                     android:text="@string/section_two"
                     android:textAllCaps="true"
                     android:textStyle="bold"
@@ -317,12 +359,15 @@
 
                 <TextView
                     android:id="@+id/section_three"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     app:layout_constraintTop_toBottomOf="@id/nocoolwalk_tweak_status"
                     app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginTop="24dp"
                     android:layout_marginBottom="15dp"
-                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:textAlignment="center"
                     android:text="@string/section_three"
                     android:textAllCaps="true"
                     android:textStyle="bold"
@@ -442,29 +487,36 @@
             android:layout_marginVertical="8dp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/hunthrottlingbutton"
-            app:layout_constraintEnd_toStartOf="@id/seekbar_text"
+            app:layout_constraintEnd_toStartOf="@id/messages_hun_value_group"
             android:paddingVertical="15dp"
             android:progressTint="@color/brand_blue"
             android:thumbTint="@color/brand_blue_dark"
             android:thumb="@drawable/thumb_bg"
             android:max="20000" />
 
-        <TextView
-            android:id="@+id/seekbar_text"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:id="@+id/messages_hun_value_group"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="end"
+            android:layout_marginEnd="4dp"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintBottom_toBottomOf="@id/messages_hun_seekbar"
-            android:layout_marginEnd="3dp" />
+            app:layout_constraintTop_toTopOf="@id/messages_hun_seekbar"
+            app:layout_constraintBottom_toBottomOf="@id/messages_hun_seekbar">
 
-                <TextView
-                    android:id="@+id/notification_currently_set"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="@id/messages_hun_seekbar"
-                    android:layout_marginEnd="3dp"
-                    android:layout_gravity="top" />
+            <TextView
+                android:id="@+id/notification_currently_set"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="end" />
+
+            <TextView
+                android:id="@+id/seekbar_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="end" />
+        </LinearLayout>
 
         <Button
             android:paddingTop="9dp"
@@ -505,32 +557,39 @@
             android:id="@+id/media_hun_seekbar"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginVertical="8dp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/media_throttling_button"
-            app:layout_constraintEnd_toStartOf="@id/second_seekbar_text"
+            app:layout_constraintEnd_toStartOf="@id/media_hun_value_group"
             android:paddingVertical="15dp"
             android:progressTint="@color/brand_blue"
             android:thumbTint="@color/brand_blue_dark"
             android:thumb="@drawable/thumb_bg"
             android:max="900000" />
 
-        <TextView
-            android:id="@+id/second_seekbar_text"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:id="@+id/media_hun_value_group"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="end"
+            android:layout_marginEnd="4dp"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintBottom_toBottomOf="@id/media_hun_seekbar"
-            android:layout_marginEnd="3dp"
-            android:gravity="center" />
+            app:layout_constraintTop_toTopOf="@id/media_hun_seekbar"
+            app:layout_constraintBottom_toBottomOf="@id/media_hun_seekbar">
 
-                <TextView
-                    android:id="@+id/media_notification_currently_set"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="@id/media_hun_seekbar"
-                    android:layout_marginEnd="3dp"
-                    android:gravity="center" />
+            <TextView
+                android:id="@+id/media_notification_currently_set"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="end" />
+
+            <TextView
+                android:id="@+id/second_seekbar_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="end" />
+        </LinearLayout>
 
 
 
@@ -545,7 +604,7 @@
             android:drawablePadding="9dp"
             android:text="@string/calendar_tweak"
             app:layout_constraintEnd_toEndOf="@id/multi_display_button"
-            app:layout_constraintTop_toBottomOf="@id/second_seekbar_text"
+            app:layout_constraintTop_toBottomOf="@id/media_hun_seekbar"
             app:layout_constraintStart_toStartOf="parent" />
 
         <ImageView
@@ -561,12 +620,15 @@
 
                 <TextView
                     android:id="@+id/section_four"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     app:layout_constraintTop_toBottomOf="@id/inertial_scroll_button"
                     app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginTop="24dp"
                     android:layout_marginBottom="15dp"
-                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:textAlignment="center"
                     android:text="@string/section_four"
                     android:textAllCaps="true"
                     android:textStyle="bold"
@@ -616,29 +678,36 @@
                     android:layout_marginVertical="8dp"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/tweak_bitrate_wifi"
-                    app:layout_constraintEnd_toStartOf="@id/wifi_bitrate_to_be_set"
+                    app:layout_constraintEnd_toStartOf="@id/wifi_bitrate_value_group"
                     android:paddingVertical="15dp"
                     android:progressTint="@color/brand_blue"
                     android:thumbTint="@color/brand_blue_dark"
                     android:thumb="@drawable/thumb_bg"
                     android:max="20" />
 
-                <TextView
-                    android:id="@+id/wifi_bitrate_to_be_set"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:id="@+id/wifi_bitrate_value_group"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintBottom_toBottomOf="@id/wifi_bitrate_seekbar"
-                    android:layout_marginEnd="3dp" />
-
-                <TextView
-                    android:id="@+id/wifi_bitrate_currently_set"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="end"
+                    android:layout_marginEnd="4dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toTopOf="@id/wifi_bitrate_seekbar"
-                    android:layout_marginEnd="3dp"
-                    android:layout_gravity="top" />
+                    app:layout_constraintBottom_toBottomOf="@id/wifi_bitrate_seekbar">
+
+                    <TextView
+                        android:id="@+id/wifi_bitrate_currently_set"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="end" />
+
+                    <TextView
+                        android:id="@+id/wifi_bitrate_to_be_set"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="end" />
+                </LinearLayout>
 
                 <Button
                     android:id="@+id/tweak_bitrate_usb"
@@ -684,38 +753,48 @@
                     android:layout_marginVertical="8dp"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/tweak_bitrate_usb"
-                    app:layout_constraintEnd_toStartOf="@id/usb_bitrate_to_be_set"
+                    app:layout_constraintEnd_toStartOf="@id/usb_bitrate_value_group"
                     android:paddingVertical="15dp"
                     android:progressTint="@color/brand_blue"
                     android:thumbTint="@color/brand_blue_dark"
                     android:thumb="@drawable/thumb_bg"
                     android:max="20" />
 
-                <TextView
-                    android:id="@+id/usb_bitrate_to_be_set"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:id="@+id/usb_bitrate_value_group"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintBottom_toBottomOf="@id/usb_bitrate_seekbar"
-                    android:layout_marginEnd="3dp" />
-
-                <TextView
-                    android:id="@+id/usb_bitrate_currently_set"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="end"
+                    android:layout_marginEnd="4dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toTopOf="@id/usb_bitrate_seekbar"
-                    android:layout_marginEnd="3dp"
-                    android:layout_gravity="top" />
+                    app:layout_constraintBottom_toBottomOf="@id/usb_bitrate_seekbar">
+
+                    <TextView
+                        android:id="@+id/usb_bitrate_currently_set"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="end" />
+
+                    <TextView
+                        android:id="@+id/usb_bitrate_to_be_set"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="end" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/section_five"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     app:layout_constraintTop_toBottomOf="@id/usb_bitrate_seekbar"
                     app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginTop="24dp"
                     android:layout_marginBottom="15dp"
-                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:textAlignment="center"
                     android:text="@string/section_five"
                     android:textAllCaps="true"
                     android:textStyle="bold"
@@ -911,7 +990,7 @@
 
 
 
-        </android.support.constraint.ConstraintLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
 
 
@@ -925,6 +1004,6 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"/>
 
-</android.support.constraint.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
 
 </ScrollView>

@@ -7,6 +7,7 @@ See **@AGENTS.md** for the canonical project documentation (overview, repo layou
 - `MainActivity.java` is huge (~4300 lines). Prefer targeted reads (Grep for a button id, handler, or `runSuWithCmd` call) over reading the whole file.
 - Tweak UI lives in `app/src/main/res/layout/scrollview.xml`; handlers are in `MainActivity.java`. Changing one usually means changing the other.
 - Sanity-check changes with `./gradlew assembleDebug` before considering a Java/resource change done.
+- **Fresh container build setup (common gotcha):** a bare `./gradlew assembleDebug` fails here — the repo uses Gradle 8.7/AGP 8.5.2 (needs JDK 17+, which containers have) but ships **no Android SDK**. See the **"Toolchain in a fresh / cloud environment"** section in `AGENTS.md` for the one-time provisioning (install `platforms;android-34` + `build-tools;34.0.0`, then build with JDK 21).
 - Add user-facing strings only to `app/src/main/res/values/strings.xml` (English source); `values-*/` locales are translated via PRs.
 - Do not edit `local.properties`, keystores, or other secrets. Do not bump the version unless explicitly asked.
 - Work on a feature branch and keep commits small and focused.

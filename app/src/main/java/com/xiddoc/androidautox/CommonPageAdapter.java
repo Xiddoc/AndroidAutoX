@@ -1,8 +1,8 @@
 package com.xiddoc.androidautox;
 
-import android.support.annotation.IdRes;
-import android.support.annotation.NonNull;
-import android.support.v4.view.PagerAdapter;
+import androidx.annotation.IdRes;
+import androidx.annotation.NonNull;
+import androidx.viewpager.widget.PagerAdapter;
 import android.view.View;
 import android.view.ViewGroup;
 

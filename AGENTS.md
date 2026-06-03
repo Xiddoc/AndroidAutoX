@@ -14,8 +14,8 @@ AndroidAutoX is a native Android app that applies "tweaks" to Google's Android A
 ## Tech stack
 
 - Language: Java
-- Build system: Gradle with Android Gradle Plugin 4.0.1 (Gradle wrapper included)
-- minSdk 23, targetSdk 29, compileSdk 29
+- Build system: Gradle 8.7 with Android Gradle Plugin 8.5.2 (Gradle wrapper included); AndroidX
+- minSdk 31 (Android 12), targetSdk 34, compileSdk 34
 - No `libsu` — root commands are executed directly via `Runtime.getRuntime().exec("su")`
 - Ships a bundled `sqlite3` binary (in `res/raw`) that is copied to app data and executed at runtime
 
@@ -57,6 +57,37 @@ Build types include `debug`, `release`, plus `RC` and `daily` variants. The rele
 ```
 AndroidAutoX-<versionName>.apk
 ```
+
+### Toolchain in a fresh / cloud environment (READ THIS — common gotcha)
+
+This project uses **Gradle 8.7** + **Android Gradle Plugin 8.5.2**, which need
+**JDK 17+** to run (JDK 21 is fine). Fresh containers (e.g. Claude Code on the
+web) usually ship a modern JDK (17/21) already but have **no Android SDK**, so a
+bare `./gradlew assembleDebug` fails until you install the SDK. Provision it once
+per container:
+
+```bash
+# 1. Install the Android SDK (compileSdk 34). cmdline-tools + sdkmanager run on JDK 17+.
+export ANDROID_SDK_ROOT=$HOME/android-sdk
+mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+curl -s -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+unzip -q -o /tmp/cmdtools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
+mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+SDKMGR="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+yes | "$SDKMGR" --sdk_root="$ANDROID_SDK_ROOT" --licenses
+"$SDKMGR" --sdk_root="$ANDROID_SDK_ROOT" \
+    "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+# 2. Build (JDK 21 + the SDK via env; no local.properties needed).
+export ANDROID_HOME=$ANDROID_SDK_ROOT
+./gradlew assembleDebug --no-daemon
+```
+
+The Gradle plugin reads `ANDROID_HOME`/`ANDROID_SDK_ROOT` from the environment,
+so you do **not** need to create `local.properties` just to build (and per the
+conventions below, don't). The first build downloads Gradle 8.7 and the AGP/
+AndroidX artifacts.
 
 ### Signing & local configuration
 

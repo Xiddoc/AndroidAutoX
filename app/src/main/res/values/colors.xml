@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Brand palette (sampled from the AndroidAutoX launcher icon) -->
-    <color name="brand_navy">#23303B</color>
-    <color name="brand_navy_dark">#1A242D</color>
-    <color name="brand_surface">#2E3D4A</color>
-    <color name="brand_blue">#1385C4</color>
-    <color name="brand_blue_light">#27A6E5</color>
+    <!-- Brand palette (sampled from the AndroidAutoX launcher icon: navy ground,
+         azure/blue accent, white). Tonal navy system: surfaces lift toward a
+         lighter navy as they rise in elevation (Material-3 style depth). -->
+    <color name="brand_navy_dark">#121A21</color>   <!-- window background (darkest) -->
+    <color name="brand_navy">#1B2832</color>        <!-- toolbar / tab bar / colorPrimary -->
+    <color name="brand_surface">#25333F</color>     <!-- elevated surface: cards, buttons, dialog -->
+    <color name="surface_outline">#3A4B59</color>   <!-- hairline outline on surfaces -->
+    <color name="brand_blue">#1385C4</color>        <!-- deeper blue: FAB / progress fill -->
+    <color name="brand_blue_light">#27A6E5</color>  <!-- logo accent: slider, tab indicator -->
     <color name="brand_blue_dark">#0F6EA4</color>
     <color name="text_primary">#ECF1F5</color>
     <color name="text_muted">#9FB0BC</color>
@@ -29,10 +32,48 @@
     <color name="menu_text_color">@color/text_primary</color>
     <color name="common_blue_revert">@color/brand_blue_light</color>
 
-    <!-- Flat modern accent (replaces the old button gradient) -->
-    <color name="accent_blue">#2196F3</color>
-    <color name="accent_blue_pressed">#1976D2</color>
-    <color name="ripple_light">#33FFFFFF</color>
+    <!-- Accent retuned to the logo's azure blue -->
+    <color name="accent_blue">#27A6E5</color>
+    <color name="accent_blue_pressed">#1E88E5</color>
+    <color name="ripple_light">#26FFFFFF</color>
+
+    <!-- Neon glow palette (layered halo over the dark navy theme) -->
+    <!-- Top-of-gradient bright accent for the main fill -->
+    <color name="accent_blue_top">#42A5F5</color>
+
+    <!-- ============================================================
+         BOLD NEON GLOW (unified BLUE family #2196F3 across all rims)
+         Stepped alpha ramp: faint outer -> mid -> luminous inner.
+         The bright inner ring hugging the body is what reads as neon.
+         ============================================================ -->
+    <!-- Three-step blue halo: stepped alpha 1A -> 55 -> AA -->
+    <color name="glow_blue_ring_outer">#1A2196F3</color>
+    <color name="glow_blue_ring_mid">#552196F3</color>
+    <color name="glow_blue_ring_inner">#CC2196F3</color>
+    <!-- Bright ACCENT-colored rim (replaces white/chrome highlight) -->
+    <color name="glow_rim_bright">#CC42A5F5</color>
+    <!-- Softer rim for cards/dialog so buttons stay the loudest element -->
+    <color name="glow_rim_soft">#8042A5F5</color>
+    <!-- Subtle top highlight sheen for the clean-modern buttons / FAB -->
+    <color name="button_gloss_top">#26FFFFFF</color>
+    <color name="button_gloss_bottom">#00FFFFFF</color>
+    <!-- Subtler 2-step halo for cards / dialog (same blue hue) -->
+    <color name="glow_blue_ring_card_outer">#142196F3</color>
+    <color name="glow_blue_ring_card_inner">#552196F3</color>
+
+    <!-- Legacy glow colors (kept; some still referenced or harmless) -->
+    <!-- Faint outermost halo ring -->
+    <color name="glow_blue_outer">#332196F3</color>
+    <!-- Brighter inner halo ring -->
+    <color name="glow_blue_inner">#662196F3</color>
+    <!-- Bright glossy top-edge highlight -->
+    <color name="glow_blue_edge">#80FFFFFF</color>
+    <!-- Subtle cyan rim used on cards / dialog edges (legacy, replaced by blue) -->
+    <color name="glow_edge_soft">#3327A6E5</color>
+    <color name="glow_edge_bright">#6627A6E5</color>
+    <!-- Surface gradient tops for card / fab depth -->
+    <color name="card_bg_top">#37485A</color>
+    <color name="fab_blue_top">#3DA8F0</color>
 
     <!-- Status legend dots -->
     <color name="status_green">#4CAF50</color>
