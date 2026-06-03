@@ -10,5 +10,4 @@
 /app/build
 /captures
 .externalNativeBuild
-/crowdin.properties
 /app/release

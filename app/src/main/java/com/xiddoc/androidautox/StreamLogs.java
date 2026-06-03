@@ -1,4 +1,4 @@
-package sksa.aa.tweaker;
+package com.xiddoc.androidautox;
 
 public class StreamLogs {
     private String inputStreamLog;

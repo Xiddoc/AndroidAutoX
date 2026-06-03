@@ -1,4 +1,4 @@
-package sksa.aa.tweaker.Utils;
+package com.xiddoc.androidautox.Utils;
 
 import android.app.Dialog;
 import android.content.Context;
@@ -24,7 +24,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import sksa.aa.tweaker.R;
+import com.xiddoc.androidautox.R;
 
 
 public class BottomDialog {

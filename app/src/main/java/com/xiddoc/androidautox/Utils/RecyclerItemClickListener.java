@@ -1,4 +1,4 @@
-package sksa.aa.tweaker.Utils;
+package com.xiddoc.androidautox.Utils;
 
 import android.content.Context;
 import android.support.v7.widget.RecyclerView;

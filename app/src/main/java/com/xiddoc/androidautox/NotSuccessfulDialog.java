@@ -1,4 +1,4 @@
-package sksa.aa.tweaker;
+package com.xiddoc.androidautox;
 
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
@@ -61,7 +61,7 @@ public class NotSuccessfulDialog extends DialogFragment {
                                 .scheme("https")
                                 .authority("github.com")
                                 .appendPath("Xiddoc")
-                                .appendPath("AA-Tweaker")
+                                .appendPath("AndroidAutoX")
                                 .appendPath("issues")
                                 .appendPath("new")
                                 .appendQueryParameter("title", title)

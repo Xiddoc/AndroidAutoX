@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">Benvenuto in AA AIO Tweaker\n
+    <string name="main_string">Benvenuto in AndroidAutoX\n
 Questa app ti permetterà di applicare alcuni tweaks su Android Auto\n
 Basta selezionare quale tweak vuoi applicare :)\n
 Se non sei sicuro di ciò che un tweak fa, premi a lungo su di esso e un tutorial verrà visualizzato.</string>
@@ -93,7 +93,7 @@ ATTENZIONE: Questo tweak non è stato testato estensivamente e potenzialmente pu
     <string name="not_enabled_warning">Android Auto non è abilitato</string>
     <string name="not_installed_warning">Android Auto non è installato</string>
     <string name="currently_set">"Attualmente impostato: "</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER non ha trovato nessun account nel database dei servizi Google. Questo può essere causato da vari fattori come:\n • Dispositivo principalmente non connesso ad internet\n • Nuova installazione del dispositivo\n • Database dei servizi Google corrotto\n • Rimozione degli account Google dal dispositivo\n • Rimozione dei dati dei Google Play Services\n\nIn questo scenario, AA AIO TWEAKER NON FUNZIONERÀ. Se hai recentemente rimosso un account Google o rimosso i dati dei Google Play Services, per favore mantieni il telefono connesso ad internet e lascialo ri-costruire il database dei servizi Google completamente. Questa operazione può durare diverse ore e in alcuni casi anche giorni.\n\nSe non sei in nessuna delle condizioni citate sopra, per favore apri un issue su GitHub.</string>
+    <string name="no_accounts_warning">AndroidAutoX non ha trovato nessun account nel database dei servizi Google. Questo può essere causato da vari fattori come:\n • Dispositivo principalmente non connesso ad internet\n • Nuova installazione del dispositivo\n • Database dei servizi Google corrotto\n • Rimozione degli account Google dal dispositivo\n • Rimozione dei dati dei Google Play Services\n\nIn questo scenario, AndroidAutoX NON FUNZIONERÀ. Se hai recentemente rimosso un account Google o rimosso i dati dei Google Play Services, per favore mantieni il telefono connesso ad internet e lascialo ri-costruire il database dei servizi Google completamente. Questa operazione può durare diverse ore e in alcuni casi anche giorni.\n\nSe non sei in nessuna delle condizioni citate sopra, per favore apri un issue su GitHub.</string>
     <string name="tweak_loading">Applico il tweak...</string>
     <string name="loading">Caricamento, attendere...</string>
     <string name="tutorial_bitrate">Questa modificherà aumenterà o diminuirà il bitrate video in base al moltiplicatore impostato (fino a 2.0x). Aumentando il bitrate (più di 1.0x) significherà che più dati saranno trasmessi in streaming verso l\'auto e la qualità dello streaming video potrebbe avere una migliore qualità visiva, tuttavia potrebbe causare instabilità. Diminuendo il bitrate (meno di 1.0) il flusso di dati verso l\'auto sarà ridotto e la qualità sarà minore, ma si tradurrà in un collegamento più affidabile e veloce.</string>
@@ -108,10 +108,10 @@ ATTENZIONE: Questo tweak non è stato testato estensivamente e potenzialmente pu
     <string name="use_all">Usa tutti (SPERIMENTALE)</string>
     <string name="log_copied">Il log è stato copiato</string>
     <string name="new_version_available">Nuova versione disponibile</string>
-    <string name="go_to_new_version">Una nuova versione di AA AIO TWEAKER (versione %1$s) è disponibile su GitHub. Vuoi scaricare ora?</string>
+    <string name="go_to_new_version">Una nuova versione di AndroidAutoX (versione %1$s) è disponibile su GitHub. Vuoi scaricare ora?</string>
     <string name="go_to_download">Vai al download</string>
     <string name="ignore_for_now">Ignora per ora</string>
-    <string name="many_accounts_warning">AA AIO TWEAKER ha trovato un gran numero (%1$s) di account Google salvati nel dispositivo.\nQuesto può avere un impatto negativo sul successo del processo di patch e AA AIO TWEAKER potrebbe fallire.\nPuoi decidere di scegliere gli account più utilizzati con i Servizi Google e attivare la patch su di essi oppure attivare una modalità sperimentale che applica la patch per tutti gli account.\nNOTA BENE che la modalità sperimentale potrebbe causare alcuni crash al sistema mentre la patch è in esecuzione.</string>
+    <string name="many_accounts_warning">AndroidAutoX ha trovato un gran numero (%1$s) di account Google salvati nel dispositivo.\nQuesto può avere un impatto negativo sul successo del processo di patch e AndroidAutoX potrebbe fallire.\nPuoi decidere di scegliere gli account più utilizzati con i Servizi Google e attivare la patch su di essi oppure attivare una modalità sperimentale che applica la patch per tutti gli account.\nNOTA BENE che la modalità sperimentale potrebbe causare alcuni crash al sistema mentre la patch è in esecuzione.</string>
     <string name="dark_switch_tweak">opzione giorno/notte</string>
     <string name="tutorial_assistant_suggestions">Questa modifica attiverà una nuova funzione che aggiunge alcune rapide scorciatoie alle azioni di Assistente Google nella schermata iniziale.</string>
     <string name="remove_paired_car">Rimuovere un\'auto accoppiata</string>

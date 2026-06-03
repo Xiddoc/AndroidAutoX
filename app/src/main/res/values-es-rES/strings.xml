@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">Bienvenidos a AA AIO Tweaker.\n
+    <string name="main_string">Bienvenidos a AndroidAutoX.\n
 Esta herramienta te permitirá modificar y personalizar Android Auto.\n
 Solo tendrás que seleccionar la modificación que quieras aplicar :)\n
 Si no estás seguro de lo que hace una función, mantén pulsada la opción y aparecerá un tutorial.</string>
@@ -95,7 +95,7 @@ ADVERTENCIA: Esta modificación no ha sido probada extensivamente y podría pote
     <string name="not_enabled_warning">Android Auto no está activo</string>
     <string name="not_installed_warning">Android Auto no está instalado</string>
     <string name="currently_set">"Actualmente establecido: "</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER no pudo encontrar ninguna cuenta en la base de datos de Google Play Services. Esto puede ser debido a distintas razones, como:\n • Dispositivo no conectado a Internet\n • Instalación de fábrica reciente en el teléfono\n • Base de datos de Google Play Services corrompida\n • Cuenta(s) de Google eliminada(s) del teléfono\n • Datos eliminados de Google Play Services\n\nEn este escenario, AA AIO TWEAKER NO funcionará correctamente. Si eliminaste recientemente una cuenta de Google o borraste los datos de Google Play Services, por favor mantén el teléfono conectado a Internet y deja que se reconstruya la base de datos de Google Play Services completamente. Esto podría llevar varias horas, y en algunos casos hasta dias.\n\nSi no te encuentras en ninguna de las situaciones de arriba, por favor abre una incidencia en GitHub.</string>
+    <string name="no_accounts_warning">AndroidAutoX no pudo encontrar ninguna cuenta en la base de datos de Google Play Services. Esto puede ser debido a distintas razones, como:\n • Dispositivo no conectado a Internet\n • Instalación de fábrica reciente en el teléfono\n • Base de datos de Google Play Services corrompida\n • Cuenta(s) de Google eliminada(s) del teléfono\n • Datos eliminados de Google Play Services\n\nEn este escenario, AndroidAutoX NO funcionará correctamente. Si eliminaste recientemente una cuenta de Google o borraste los datos de Google Play Services, por favor mantén el teléfono conectado a Internet y deja que se reconstruya la base de datos de Google Play Services completamente. Esto podría llevar varias horas, y en algunos casos hasta dias.\n\nSi no te encuentras en ninguna de las situaciones de arriba, por favor abre una incidencia en GitHub.</string>
     <string name="tweak_loading">Aplicando el ajuste...</string>
     <string name="loading">Cargando, por favor espere...</string>
     <string name="tutorial_bitrate">Esta modificación incrementará o reducirá la tasa de bits de vídeo dependiendo de la configuración fijada en el multiplicador (hasta 2.0x). Incrementando la tasa de bits (más de 1. x) transmitirá más datos al coche y la calidad del streaming de vídeo podría mejorarse en calidad visual. Sin embargo, puede causar inestabilidad. Disminuir la tasa de bits (menos de 1. x) comprimirá el flujo de datos hacia el coche y la calidad visual disminuirá, pero proporcionará una conexión más estable y rápida.</string>
@@ -113,7 +113,7 @@ ADVERTENCIA: Esta modificación no ha sido probada extensivamente y podría pote
     <string name="go_to_new_version">Una nueva versión de AAAD (versión %1$s) está disponible en GitHub. ¿Quieres descargarla ahora?</string>
     <string name="go_to_download">Ir a descargas</string>
     <string name="ignore_for_now">Ignorar por ahora</string>
-    <string name="many_accounts_warning">AA AIO DWEAKER encontró un gran número (%1$s) de cuentas de Google guardadas en el dispositivo.\nEsto puede afectar negativamente al éxito del proceso de parcheo y AA AIO TWEAKER podría fallar.\nPuede elegir la cuenta(s) que utiliza principalmente con los Servicios de Google Play para aplicar el parche a sólo ellos (se recomienda 2 o menos) o activar un modo experimental que debería parchear todas las cuentas.\nPOR FAVOR TEN EN CUENTA que el modo experimental podría causar algun bloqueo en el teléfono mientras se ejecuta el parche.</string>
+    <string name="many_accounts_warning">AndroidAutoX encontró un gran número (%1$s) de cuentas de Google guardadas en el dispositivo.\nEsto puede afectar negativamente al éxito del proceso de parcheo y AndroidAutoX podría fallar.\nPuede elegir la cuenta(s) que utiliza principalmente con los Servicios de Google Play para aplicar el parche a sólo ellos (se recomienda 2 o menos) o activar un modo experimental que debería parchear todas las cuentas.\nPOR FAVOR TEN EN CUENTA que el modo experimental podría causar algun bloqueo en el teléfono mientras se ejecuta el parche.</string>
     <string name="dark_switch_tweak">opción día/noche</string>
     <string name="tutorial_assistant_suggestions">Este ajuste activará una nueva característica que añade algunos accesos directos a las acciones de Asistente en la parte superior de la pantalla de inicio.</string>
     <string name="remove_paired_car">Eliminar un coche emparejado</string>

@@ -1,4 +1,4 @@
-package sksa.aa.tweaker.AccountsChooseActivity;
+package com.xiddoc.androidautox.AccountsChooseActivity;
 
 import android.content.SharedPreferences;
 import android.support.annotation.NonNull;
@@ -13,7 +13,7 @@ import com.rm.rmswitch.RMSwitch;
 
 import java.util.ArrayList;
 
-import sksa.aa.tweaker.R;
+import com.xiddoc.androidautox.R;
 
 public class AccountAdapter extends RecyclerView.Adapter<AccountAdapter.SampleViewHolder> {
 

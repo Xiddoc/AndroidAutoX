@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">Chào mừng bạn sử dụng AA AIO Tweaker\n
+    <string name="main_string">Chào mừng bạn sử dụng AndroidAutoX\n
 Đây là ứng dụng sẽ giúp bạn tinh chỉnh một vài thông số trong Android Auto\n
 Chỉ đơn giản là chọn và điều chỉnh các thông số mà bạn muốn :)\n
 Nếu bạn chưa chắc chắn gì những gì công cụ sẽ làm, chỉ cần ấn giữ và bảng hướng dẫn sẽ hiện ra.</string>
@@ -92,7 +92,7 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="not_enabled_warning">Android Auto không khả dụng</string>
     <string name="not_installed_warning">Android Auto chưa cài đặt</string>
     <string name="currently_set">"Cài đặt hiện tại: "</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER không thể tìm thấy bất kỳ tài khoản nào trong cơ sở dữ liệu Dịch vụ của Google Play. Điều này có thể do một số nguyên nhân khác nhau, chẳng hạn như:\n • Thiết bị không được kết nối với internet\n • Điện thoại được đặt lại\n • Cơ sở dữ liệu của Dịch vụ Google Play bị hỏng\n • (Các) tài khoản Google bị xoá khỏi điện thoại\n • Đã xóa dữ liệu của Dịch vụ Google Play\n\nTrong trường hợp này, AA AIO TWEAKER sẽ KHÔNG hoạt động bình thường. Nếu gần đây bạn đã xóa tài khoản Google hoặc xóa dữ liệu Dịch vụ của Google Play, vui lòng giữ điện thoại kết nối với Internet và để điện thoại xây dựng đầy đủ cơ sở dữ liệu của Dịch vụ Google Play. Quá trình này có thể mất vài giờ, trong một số trường hợp cũng có thể vài ngày.\n\nNếu bạn không thuộc một trong các điều kiện trên, vui lòng mở sự cố trên GitHub.</string>
+    <string name="no_accounts_warning">AndroidAutoX không thể tìm thấy bất kỳ tài khoản nào trong cơ sở dữ liệu Dịch vụ của Google Play. Điều này có thể do một số nguyên nhân khác nhau, chẳng hạn như:\n • Thiết bị không được kết nối với internet\n • Điện thoại được đặt lại\n • Cơ sở dữ liệu của Dịch vụ Google Play bị hỏng\n • (Các) tài khoản Google bị xoá khỏi điện thoại\n • Đã xóa dữ liệu của Dịch vụ Google Play\n\nTrong trường hợp này, AndroidAutoX sẽ KHÔNG hoạt động bình thường. Nếu gần đây bạn đã xóa tài khoản Google hoặc xóa dữ liệu Dịch vụ của Google Play, vui lòng giữ điện thoại kết nối với Internet và để điện thoại xây dựng đầy đủ cơ sở dữ liệu của Dịch vụ Google Play. Quá trình này có thể mất vài giờ, trong một số trường hợp cũng có thể vài ngày.\n\nNếu bạn không thuộc một trong các điều kiện trên, vui lòng mở sự cố trên GitHub.</string>
     <string name="tweak_loading">Đang áp dụng tinh chỉnh...</string>
     <string name="loading">Đang tải, vui lòng chờ...</string>
     <string name="tutorial_bitrate">Tinh chỉnh này sẽ tăng hoặc giảm tốc độ bit của video theo bộ số nhân (lên đến 2.0x). Tăng tốc độ bit (nhiều hơn 1.0x) sẽ có nghĩa là nhiều dữ liệu hơn sẽ được truyền trực tuyến đến xe hơi và chất lượng phát trực tuyến video có thể được cải thiện về chất lượng hình ảnh, tuy nhiên nó có thể gây ra sự không ổn định. Giảm tốc độ bit (nhỏ hơn 1,0x) sẽ nén luồng vào ô tô và chất lượng sẽ bị giảm, nhưng nó sẽ dẫn đến kết nối nhanh và đáng tin cậy hơn.</string>
@@ -107,10 +107,10 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="use_all">Sử dụng tất cả (THỬ NGHIỆM) </string>
     <string name="log_copied">Nhật ký đã được sao chép</string>
     <string name="new_version_available">Có phiên bản mới khả dụng</string>
-    <string name="go_to_new_version">Một phiên bản mới của AA AIO TWEAKER (phiên bản %1$s) khả dụng trên GitHub. Bạn có muốn tải nó bây giờ?</string>
+    <string name="go_to_new_version">Một phiên bản mới của AndroidAutoX (phiên bản %1$s) khả dụng trên GitHub. Bạn có muốn tải nó bây giờ?</string>
     <string name="go_to_download">Đến trang tải xuống</string>
     <string name="ignore_for_now">Bỏ qua bây giờ</string>
-    <string name="many_accounts_warning">AA AIO TWEAKER đã tìm thấy một số lượng lớn (%1$s) tài khoản Google được lưu trong thiết bị.\nĐiều này có thể ảnh hưởng tiêu cực đến sự thành công của quá trình vá lỗi và AA AIO TWEAKER có thể không thành công.\nBạn có thể chọn (các) tài khoản mà bạn chủ yếu sử dụng với Dịch vụ Google Play để chỉ áp dụng bản vá cho chúng (khuyến nghị 2 hoặc ít hơn) hoặc kích hoạt chế độ thử nghiệm vá tất cả các tài khoản.\nHÃY LƯU Ý rằng chế độ thử nghiệm có thể gây ra một số sự cố cho điện thoại trong khi vá đang chạy.</string>
+    <string name="many_accounts_warning">AndroidAutoX đã tìm thấy một số lượng lớn (%1$s) tài khoản Google được lưu trong thiết bị.\nĐiều này có thể ảnh hưởng tiêu cực đến sự thành công của quá trình vá lỗi và AndroidAutoX có thể không thành công.\nBạn có thể chọn (các) tài khoản mà bạn chủ yếu sử dụng với Dịch vụ Google Play để chỉ áp dụng bản vá cho chúng (khuyến nghị 2 hoặc ít hơn) hoặc kích hoạt chế độ thử nghiệm vá tất cả các tài khoản.\nHÃY LƯU Ý rằng chế độ thử nghiệm có thể gây ra một số sự cố cho điện thoại trong khi vá đang chạy.</string>
     <string name="dark_switch_tweak">lựa chọn ngày/đêm</string>
     <string name="tutorial_assistant_suggestions">This tweak will activate a new feature that adds some quick shortcuts to Assistant actions on top of home screen.</string>
     <string name="remove_paired_car">Xoá xe đã kết nối</string>

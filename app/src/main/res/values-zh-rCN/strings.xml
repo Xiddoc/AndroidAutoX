@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">欢迎使用AA AIO Tweaker\n
+    <string name="main_string">欢迎使用AndroidAutoX\n
 此应用程序将允许您对Android Auto应用一些调整\n
 只需选择您想要应用的调整即可 :) \n
 如果您不确定一个调整是做什么的，长按它就能显示说明。</string>
@@ -99,7 +99,7 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="not_enabled_warning">Android Auto未启用</string>
     <string name="not_installed_warning">未安装 Android Auto</string>
     <string name="currently_set">"当前设置： "</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER在Google Play服务数据库中找不到任何帐户。 这可能是由于几种不同的情况造成的，例如：\n • 设备很可能未连接到互联网\n • 手机刚刚重新安装\n • 损坏的Google Play服务数据库\n • 从手机上移除谷歌帐户\n • 清除谷歌Play服务的数据\n\n在这种情况下， AA AIO TWEAKER将无法正常工作。 如果您最近删除了一个 Google 帐户或清除了Google Play 服务数据， 请保持手机连接到互联网，让它完全建立Google Play服务数据库。 这可能需要几个小时，在有些情况下也需要几天。\n\n如果您没有处于上述条件之一，请在 GitHub 上新建一个issue。</string>
+    <string name="no_accounts_warning">AndroidAutoX在Google Play服务数据库中找不到任何帐户。 这可能是由于几种不同的情况造成的，例如：\n • 设备很可能未连接到互联网\n • 手机刚刚重新安装\n • 损坏的Google Play服务数据库\n • 从手机上移除谷歌帐户\n • 清除谷歌Play服务的数据\n\n在这种情况下， AndroidAutoX将无法正常工作。 如果您最近删除了一个 Google 帐户或清除了Google Play 服务数据， 请保持手机连接到互联网，让它完全建立Google Play服务数据库。 这可能需要几个小时，在有些情况下也需要几天。\n\n如果您没有处于上述条件之一，请在 GitHub 上新建一个issue。</string>
     <string name="tweak_loading">正在应用调整...</string>
     <string name="loading">加载中，请稍候...</string>
     <string name="tutorial_bitrate">这个调节将根据设定的倍数增加或减少视频比特率 (最多2.0x)。增加比特率 (大于1.0x) 意味着将更多的数据串流到汽车上，视频流质量可以提高， 然而，这可能造成不稳定。 降低比特率 (小于 1.0x）将压缩车视频流，质量将下降，但将导致更可靠和更快的连接。</string>
@@ -114,10 +114,10 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="use_all">使用全部(实验性)</string>
     <string name="log_copied">日志已复制</string>
     <string name="new_version_available">新版本可用</string>
-    <string name="go_to_new_version">新版本的 AA AIO TWEAKER (版本 %1$s) 可在 GitHub 上下载。您想现在前往下载吗？</string>
+    <string name="go_to_new_version">新版本的 AndroidAutoX (版本 %1$s) 可在 GitHub 上下载。您想现在前往下载吗？</string>
     <string name="go_to_download">前往下载</string>
     <string name="ignore_for_now">暂时忽略</string>
-    <string name="many_accounts_warning">AA AIO TWEAKER 找到了大量的(%1$s)谷歌账户保存在设备中。\n这可能对补丁进程的成功产生负面影响，AAAIO TWEAKER可能失败。\n您可以选择最常用于 Google Play Services 的账户，将补丁仅仅应用于它们(建议为2个或更少)，或者激活实验模式来修补所有帐户。\n请注意，实验模式可能会在修补程序运行时导致一些手机崩溃。</string>
+    <string name="many_accounts_warning">AndroidAutoX 找到了大量的(%1$s)谷歌账户保存在设备中。\n这可能对补丁进程的成功产生负面影响，AAAIO TWEAKER可能失败。\n您可以选择最常用于 Google Play Services 的账户，将补丁仅仅应用于它们(建议为2个或更少)，或者激活实验模式来修补所有帐户。\n请注意，实验模式可能会在修补程序运行时导致一些手机崩溃。</string>
     <string name="dark_switch_tweak">白天/夜间选项</string>
     <string name="tutorial_assistant_suggestions">This tweak will activate a new feature that adds some quick shortcuts to Assistant actions on top of home screen.</string>
     <string name="remove_paired_car">删除部分配对车辆</string>

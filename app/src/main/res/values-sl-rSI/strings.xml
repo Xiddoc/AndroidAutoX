@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">Dobrodošli v AA AIO Tweaker\n
+    <string name="main_string">Dobrodošli v AndroidAutoX\n
 S to aplikacijo vam bo mogoče prilagoditi Android Auto\n
 Preprosto: izberite želeno spremembo :)\n
 Če niste gotovi o kaki spremembi, dolgo pritisnite nanjo, da prikličete vadnico.</string>
@@ -95,7 +95,7 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="not_enabled_warning">Android Auto ne deluje</string>
     <string name="not_installed_warning">Android Auto ni nameščen</string>
     <string name="currently_set">"Trenutno nastavljeno: "</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER ni dobil nobenega uporabniškega računa v podatkovni bazi Google Play Storitev. Razlogi za to so lahko sledeči:\n • Internetna povezava ni vzpostavljena\n • Na novo nastavljen telefon\n • Pokvarjena podatkovna baza Google Play Storitev.\n • Izbrisan(i) Google uporabniški račun(i)\n • Izbrisani podatki Google Play Storitev\n\nV tem primeru, AA AIO TWEAKER NE bo pravilno deloval. Če ste predčasno odstranili vaš Google uporabniški račun ali izbrisali podatke Google Play Storitev, povežite telefon z internetom in pustite, da znova zgradi podatkovno bazo Google Play Storitev. Za to lahko potrebuje več ur, v redkih primerih tudi več dni.\n\nČe vaš primer ni naveden, prosimo da odprete prošnjo za pomoč na GitHub platformi.</string>
+    <string name="no_accounts_warning">AndroidAutoX ni dobil nobenega uporabniškega računa v podatkovni bazi Google Play Storitev. Razlogi za to so lahko sledeči:\n • Internetna povezava ni vzpostavljena\n • Na novo nastavljen telefon\n • Pokvarjena podatkovna baza Google Play Storitev.\n • Izbrisan(i) Google uporabniški račun(i)\n • Izbrisani podatki Google Play Storitev\n\nV tem primeru, AndroidAutoX NE bo pravilno deloval. Če ste predčasno odstranili vaš Google uporabniški račun ali izbrisali podatke Google Play Storitev, povežite telefon z internetom in pustite, da znova zgradi podatkovno bazo Google Play Storitev. Za to lahko potrebuje več ur, v redkih primerih tudi več dni.\n\nČe vaš primer ni naveden, prosimo da odprete prošnjo za pomoč na GitHub platformi.</string>
     <string name="tweak_loading">Nastavljanje popravka...</string>
     <string name="loading">Nalaganje, prosimo počakajte...</string>
     <string name="tutorial_bitrate">S tem popravkom se lahko zviša ali zniža bitno hitrost (bitrate) glede na željeni multiplikator (do 2.0 kratni). Višja je hitrost (više od 1.0 krat) višja količina podatkov, ki se prenašajo v avto, in se izboljša kakovost video prenosa; lahko pa privede do nestabilnosti. ko se bitna hitrost zniža (nižje od 1.0 krat), se prenos podatkov zgosti in kakovost video prenosa pade, kar pa lahko zviša hitrost in zanesljivost prenosa podatkov.</string>
@@ -110,10 +110,10 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="use_all">Uporabi vse (EKSPERIMENTALNA FUNKCIJA)</string>
     <string name="log_copied">Dnevnik aktivnosti je bil kopiran</string>
     <string name="new_version_available">Na voljo je nova verzija</string>
-    <string name="go_to_new_version">Na razpolago je nova verzija AA AIO TWEAKER (verzija %1$s) na Github platformi. Ali si jo hočete prevzeti sedaj?</string>
+    <string name="go_to_new_version">Na razpolago je nova verzija AndroidAutoX (verzija %1$s) na Github platformi. Ali si jo hočete prevzeti sedaj?</string>
     <string name="go_to_download">Povezava na prenos</string>
     <string name="ignore_for_now">Za zdaj ignoriraj</string>
-    <string name="many_accounts_warning">AA AIO TWEAKER je zaznal veliko število (%1$s) Google uporabnikov v napravi.\nTo lahko negativno vpliva na uvedbo popravkov in AA AIO TWEAKER lahko odpove.\nImate na razpolago dve možnosti: lahko izberete, da boste uvedli popravke samo na določene Google Play uporabnike (priporočeno 2 ali manj) ali pa aktivirate eksperimentalno način, kateri naj bi uvedel popravke na vse uporabnike.\nPOZOR: eksperimentalni način lahko povzroči, da se telefon sesuje medtem ko popravek deluje.</string>
+    <string name="many_accounts_warning">AndroidAutoX je zaznal veliko število (%1$s) Google uporabnikov v napravi.\nTo lahko negativno vpliva na uvedbo popravkov in AndroidAutoX lahko odpove.\nImate na razpolago dve možnosti: lahko izberete, da boste uvedli popravke samo na določene Google Play uporabnike (priporočeno 2 ali manj) ali pa aktivirate eksperimentalno način, kateri naj bi uvedel popravke na vse uporabnike.\nPOZOR: eksperimentalni način lahko povzroči, da se telefon sesuje medtem ko popravek deluje.</string>
     <string name="dark_switch_tweak">preklop dan / noč</string>
     <string name="tutorial_assistant_suggestions">This tweak will activate a new feature that adds some quick shortcuts to Assistant actions on top of home screen.</string>
     <string name="remove_paired_car">Odstrani povezan avto</string>

@@ -1,14 +1,14 @@
 # AGENTS.md
 
-Canonical project documentation for **AA AIO TWEAKER**. This is the source of truth for both human contributors and AI coding agents working in this repository.
+Canonical project documentation for **AndroidAutoX**. This is the source of truth for both human contributors and AI coding agents working in this repository.
 
 ## Project overview
 
-AA AIO TWEAKER is a native Android app that applies "tweaks" to Google's Android Auto. It works by toggling Phenotype feature flags and Gearhead settings on a rooted device, exposing them through a simple button-per-tweak UI. Tweaks cover things like screen layout, appearance, video quality, and pre-activation of experimental Android Auto features.
+AndroidAutoX is a native Android app that applies "tweaks" to Google's Android Auto. It works by toggling Phenotype feature flags and Gearhead settings on a rooted device, exposing them through a simple button-per-tweak UI. Tweaks cover things like screen layout, appearance, video quality, and pre-activation of experimental Android Auto features.
 
-- Application ID / package: `sksa.aa.tweaker`
-- App name: "AA AIO TWEAKER"
-- Repository: https://github.com/Xiddoc/AA-Tweaker
+- Application ID / package: `com.xiddoc.androidautox`
+- App name: "AndroidAutoX"
+- Repository: https://github.com/Xiddoc/AndroidAutoX
 - Requires a **rooted** device.
 
 ## Tech stack
@@ -27,21 +27,21 @@ AA AIO TWEAKER is a native Android app that applies "tweaks" to Google's Android
 | `build.gradle`, `settings.gradle`, `gradle.properties` | Top-level Gradle config |
 | `gradlew`, `gradlew.bat`, `gradle/` | Gradle wrapper |
 | `app/src/main/AndroidManifest.xml` | App manifest / declared activities |
-| `app/src/main/java/sksa/aa/tweaker/` | All Java source |
-| `app/src/main/java/sksa/aa/tweaker/SplashActivity.java` | Entry point: disclaimer, root check, asset copy |
-| `app/src/main/java/sksa/aa/tweaker/MainActivity.java` | Main UI + all tweak handlers (~4300 lines) |
-| `app/src/main/java/sksa/aa/tweaker/AppsList.java` | App list helper |
-| `app/src/main/java/sksa/aa/tweaker/StreamLogs.java` | Log streaming view |
-| `app/src/main/java/sksa/aa/tweaker/AboutDialog.java` | About dialog |
-| `app/src/main/java/sksa/aa/tweaker/NoRootDialog.java` | Shown when root is unavailable |
-| `app/src/main/java/sksa/aa/tweaker/NotSuccessfulDialog.java` | Shown when a tweak fails |
-| `app/src/main/java/sksa/aa/tweaker/RebootDialog.java` | Prompts a reboot after a tweak |
-| `app/src/main/java/sksa/aa/tweaker/Utils/` | `UtilsLibrary`, `Version`, `BottomDialog` helpers |
+| `app/src/main/java/com/xiddoc/androidautox/` | All Java source |
+| `app/src/main/java/com/xiddoc/androidautox/SplashActivity.java` | Entry point: disclaimer, root check, asset copy |
+| `app/src/main/java/com/xiddoc/androidautox/MainActivity.java` | Main UI + all tweak handlers (~4300 lines) |
+| `app/src/main/java/com/xiddoc/androidautox/AppsList.java` | App list helper |
+| `app/src/main/java/com/xiddoc/androidautox/StreamLogs.java` | Log streaming view |
+| `app/src/main/java/com/xiddoc/androidautox/AboutDialog.java` | About dialog |
+| `app/src/main/java/com/xiddoc/androidautox/NoRootDialog.java` | Shown when root is unavailable |
+| `app/src/main/java/com/xiddoc/androidautox/NotSuccessfulDialog.java` | Shown when a tweak fails |
+| `app/src/main/java/com/xiddoc/androidautox/RebootDialog.java` | Prompts a reboot after a tweak |
+| `app/src/main/java/com/xiddoc/androidautox/Utils/` | `UtilsLibrary`, `Version`, `BottomDialog` helpers |
 | `app/src/main/res/layout/scrollview.xml` | Tweak buttons UI (the main tweak list) |
 | `app/src/main/res/layout/activity_splash.xml` | Splash / disclaimer layout |
 | `app/src/main/res/raw/sqlite3` | Bundled sqlite3 binary used at runtime |
 | `app/src/main/res/values/strings.xml` | English source strings (localization source of truth) |
-| `app/src/main/res/values-*/strings.xml` | ~33 translated locales (Crowdin-managed) |
+| `app/src/main/res/values-*/strings.xml` | ~33 translated locales (edited via PRs) |
 
 ## Building
 
@@ -55,7 +55,7 @@ The Gradle wrapper drives all builds.
 Build types include `debug`, `release`, plus `RC` and `daily` variants. The release APK is archived as:
 
 ```
-AA-AIO-TWEAKER-<versionName>.apk
+AndroidAutoX-<versionName>.apk
 ```
 
 ### Signing & local configuration
@@ -92,11 +92,11 @@ A CI pipeline using GitHub Actions is being added. It builds and signs the app u
 2. In `MainActivity.java`, wire a click handler for the new button that runs the required root/`sqlite3` commands via `runSuWithCmd(...)`, and update the status `ImageView` to reflect applied state.
 3. Add any user-facing text to `app/src/main/res/values/strings.xml` (English source) so it can be translated.
 
-## Localization / Crowdin workflow
+## Localization workflow
 
 - English is the source of truth: `app/src/main/res/values/strings.xml`.
 - Translations live under `app/src/main/res/values-<locale>/strings.xml` (~33 locales).
-- Translations are managed through Crowdin (project `aa-aio-tweaker`). Add new strings to the English source only; translated locales are populated/synced via Crowdin rather than edited by hand.
+- Localization is PR-based: add new strings to the English source first, then contributors translate by editing (or adding) the matching `values-<locale>/strings.xml` and opening a pull request. The app name is a non-translatable proper noun (`AndroidAutoX`) and should not be localized.
 
 ## Versioning
 

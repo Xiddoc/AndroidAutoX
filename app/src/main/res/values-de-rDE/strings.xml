@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">Willkommen im AA AIO Tweaker\n
+    <string name="main_string">Willkommen im AndroidAutoX\n
 Mit dieser App können Sie einige Optimierungen auf Android Auto anwenden\n
 Wählen Sie einfach aus, was Sie anwenden möchten :)\n
 Wenn Sie sich nicht sicher sind, was eine Optimierung bewirkt, drücken Sie lange darauf und es wird eine Anleitung angezeigt.</string>
@@ -93,7 +93,7 @@ WARNUNG: Dieser Tweak wurde nicht ausgiebig getestet und könnte möglicherweise
     <string name="not_enabled_warning">Android Auto ist nicht aktiviert</string>
     <string name="not_installed_warning">Android Auto ist nicht installiert</string>
     <string name="currently_set">"Aktuell gesetzt:"</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER konnte kein Konto in der Google Play Services-Datenbank finden. Dies kann verschiedene Ursachen haben: \n • Ihr Gerät ist größtenteils nicht mit dem Internet verbunden \n • Neuinstallation des Telefons \n • Beschädigte Google Play Services-Datenbank \n • Entfernung des Google-Kontos aus dem Telefon \n • Gelöschte Daten von Google Play Services \n\nIn diesem Fall funktioniert AA AIO TWEAKER nicht ordnungsgemäß. Wenn Sie kürzlich ein Google-Konto entfernt oder Google Play Services-Daten gelöscht haben, lassen Sie das Telefon mit dem Internet verbunden und lassen Sie es die Google Play Services-Datenbank vollständig erstellen. Dies kann mehrere Stunden dauern, in einigen Fällen auch Tage.\n\nWenn eine der oben genannten Bedingungen nicht zutrifft, öffnen Sie bitte ein Problem auf GitHub.</string>
+    <string name="no_accounts_warning">AndroidAutoX konnte kein Konto in der Google Play Services-Datenbank finden. Dies kann verschiedene Ursachen haben: \n • Ihr Gerät ist größtenteils nicht mit dem Internet verbunden \n • Neuinstallation des Telefons \n • Beschädigte Google Play Services-Datenbank \n • Entfernung des Google-Kontos aus dem Telefon \n • Gelöschte Daten von Google Play Services \n\nIn diesem Fall funktioniert AndroidAutoX nicht ordnungsgemäß. Wenn Sie kürzlich ein Google-Konto entfernt oder Google Play Services-Daten gelöscht haben, lassen Sie das Telefon mit dem Internet verbunden und lassen Sie es die Google Play Services-Datenbank vollständig erstellen. Dies kann mehrere Stunden dauern, in einigen Fällen auch Tage.\n\nWenn eine der oben genannten Bedingungen nicht zutrifft, öffnen Sie bitte ein Problem auf GitHub.</string>
     <string name="tweak_loading">Optimierung wird angewandt...</string>
     <string name="loading">Lädt, bitte warten...</string>
     <string name="tutorial_bitrate">Diese Optimierung erhöht oder verringert die Video-Bitrate entsprechend dem eingestellten Multiplikator (bis zu 2,0x). Die Erhöhung der Bitrate (mehr als 1,0x) bedeutet, dass mehr Daten zum Fahrzeug gestreamt werden und die visuelle Qualität des Videostreamings verbessert werden kann, allerdings kann dies zu Instabilität führen. Wenn Sie die Bitrate verringern (weniger als 1,0x), wird der Datenstrom zum Fahrzeug komprimiert und die Qualität verringert sich, aber die Verbindung wird zuverlässiger und schneller.</string>
@@ -108,10 +108,10 @@ WARNUNG: Dieser Tweak wurde nicht ausgiebig getestet und könnte möglicherweise
     <string name="use_all">Alle verwenden (EXPERIMENTAL)</string>
     <string name="log_copied">Protokoll wurde kopiert</string>
     <string name="new_version_available">Neue Version vefügbar</string>
-    <string name="go_to_new_version">Eine neue Version von AA AIO TWEAKER (Version %1$s) ist auf GitHub verfügbar. Möchten Sie sie jetzt herunterladen?</string>
+    <string name="go_to_new_version">Eine neue Version von AndroidAutoX (Version %1$s) ist auf GitHub verfügbar. Möchten Sie sie jetzt herunterladen?</string>
     <string name="go_to_download">Zum Download</string>
     <string name="ignore_for_now">Vorläufig ignorieren</string>
-    <string name="many_accounts_warning">AA AIO TWEAKER hat eine große Zahl von Google-Konten, die auf dem Gerät gespeichert sind, gefunden (%1$s).\nDies kann sich negativ auf den Erfolg des Patching-Prozesses auswirken und AA AIO TWEAKER könnte fehlschlagen.\nSie können entweder die Konten wählen, die Sie hauptsächlich mit den Google Play Services verwenden, um den Patch nur auf sie anzuwenden (2 oder weniger wird empfohlen) oder einen experimentellen Modus aktivieren, der alle Konten patchen soll.\nBITTE BEACHTEN SIE, dass der experimentelle Modus einige Abstürze auf dem Telefon verursachen könnte, während der Patch läuft.</string>
+    <string name="many_accounts_warning">AndroidAutoX hat eine große Zahl von Google-Konten, die auf dem Gerät gespeichert sind, gefunden (%1$s).\nDies kann sich negativ auf den Erfolg des Patching-Prozesses auswirken und AndroidAutoX könnte fehlschlagen.\nSie können entweder die Konten wählen, die Sie hauptsächlich mit den Google Play Services verwenden, um den Patch nur auf sie anzuwenden (2 oder weniger wird empfohlen) oder einen experimentellen Modus aktivieren, der alle Konten patchen soll.\nBITTE BEACHTEN SIE, dass der experimentelle Modus einige Abstürze auf dem Telefon verursachen könnte, während der Patch läuft.</string>
     <string name="dark_switch_tweak">Tag/Nacht Option</string>
     <string name="tutorial_assistant_suggestions">Mit diesem Tweak wird eine neue Funktion aktiviert, die einige Schnellverknüpfungen für Assistant-Aktionen oben auf dem Startbildschirm hinzufügt.</string>
     <string name="remove_paired_car">Ein gekoppeltes Fahrzeug entfernen</string>

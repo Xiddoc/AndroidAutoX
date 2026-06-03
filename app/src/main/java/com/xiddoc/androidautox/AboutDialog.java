@@ -1,4 +1,4 @@
-package sksa.aa.tweaker;
+package com.xiddoc.androidautox;
 
 import android.app.Dialog;
 import android.content.DialogInterface;
@@ -48,7 +48,7 @@ public class AboutDialog extends DialogFragment {
                         "Greek: panbimis<br>" +
                         "Turkish: un4saken<br>" +
                         "Arabic: almaqhor<br>" +
-                        "<br>Interested in translating AA AIO TWEAKER in your own language? Join translations on <a href=\"https://crowdin.com/project/aa-aio-tweaker\">Crowdin</a>!"));
+                        "<br>Interested in translating AndroidAutoX in your own language? Open a translation PR on <a href=\"https://github.com/Xiddoc/AndroidAutoX\">GitHub</a>!"));
                 builder.setCancelable(true);
                 builder.setPositiveButton(getString(android.R.string.ok), new DialogInterface.OnClickListener() {
                     @Override

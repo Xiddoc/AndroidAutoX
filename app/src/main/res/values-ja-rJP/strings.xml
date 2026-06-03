@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">AA AIO Tweakerへようこそ\n
+    <string name="main_string">AndroidAutoXへようこそ\n
 このアプリではAndroid Autoにいくつかの調整を適用できます。\n
 適用したい調整を選択してください :)\n
 調整が何をするのかわからない場合は、それを長押しするとチュートリアルが表示されます。</string>
@@ -92,7 +92,7 @@ Android Auto 5.8以降が必要です。</string>
     <string name="not_enabled_warning">Android Autoは有効になっていません</string>
     <string name="not_installed_warning">Android Autoがインストールされていません</string>
     <string name="currently_set">"現在の設定: "</string>
-    <string name="no_accounts_warning">AA AIO TWEAKERは、Google Play 開発者サービスのデータベースでアカウントが見つけられませまんでした。これは、次のようなことが原因である可能性があります:\n • インターネットにほとんど接続されていない端末\n • インストールしたばかりのスマホ\n • Google Play 開発者サービスのデータベースの破損\n • スマホからのGoogleアカウントの削除\n • Google Play 開発者サービスのデータの削除\n\nこれらの場合、AA AIO TWEAKERは正常に動作しません。最近、GoogleアカウントやGoogle Play 開発者サービスのデータを削除した場合は、スマホをインターネットに接続したままにして、Google Play 開発者サービスのデータベースを完全に構築させてください。これには数時間、場合によっては数日かかることもあります。\n\n上記の条件のいずれにも該当しない場合は、GitHubでissueを立ててください。</string>
+    <string name="no_accounts_warning">AndroidAutoXは、Google Play 開発者サービスのデータベースでアカウントが見つけられませまんでした。これは、次のようなことが原因である可能性があります:\n • インターネットにほとんど接続されていない端末\n • インストールしたばかりのスマホ\n • Google Play 開発者サービスのデータベースの破損\n • スマホからのGoogleアカウントの削除\n • Google Play 開発者サービスのデータの削除\n\nこれらの場合、AndroidAutoXは正常に動作しません。最近、GoogleアカウントやGoogle Play 開発者サービスのデータを削除した場合は、スマホをインターネットに接続したままにして、Google Play 開発者サービスのデータベースを完全に構築させてください。これには数時間、場合によっては数日かかることもあります。\n\n上記の条件のいずれにも該当しない場合は、GitHubでissueを立ててください。</string>
     <string name="tweak_loading">調整を適用中...</string>
     <string name="loading">ロード中、しばらくお待ちください...</string>
     <string name="tutorial_bitrate">この調整は、設定された乗数に応じてビデオのビットレートを増減させます。 (最大 2.0x) ビットレートを上げる (1.0x 以上) と、より多くのデータが車にストリーミングされ、映像品質が向上する可能性がありますが、不安定さの原因となる可能性があります。ビットレートを下げる (1.0x未満) と、車へのストリームデータが圧縮され、品質は低下しますが、より信頼性の高い高速な接続になります。</string>
@@ -107,10 +107,10 @@ Android Auto 5.8以降が必要です。</string>
     <string name="use_all">すべて使用 (実験的)</string>
     <string name="log_copied">ログをコピーしました</string>
     <string name="new_version_available">新しいバージョンが利用可能です</string>
-    <string name="go_to_new_version">GitHubでAA AIO TWEAKER (バージョン %1$s) の新しいバージョンが利用可能です。今すぐダウンロードしますか？</string>
+    <string name="go_to_new_version">GitHubでAndroidAutoX (バージョン %1$s) の新しいバージョンが利用可能です。今すぐダウンロードしますか？</string>
     <string name="go_to_download">ダウンロードする</string>
     <string name="ignore_for_now">今は無視</string>
-    <string name="many_accounts_warning">AA AIO TWEAKERは、デバイスに保存されている多数 (%1$s) のGoogleアカウントを検出しました。\nこれはパッチ適用プロセスに悪影響を与える可能性があり、AA AIO TWEAKERは失敗しやすくなります。\nGoogle Play 開発者サービスで主に使うアカウントを選択 (2個以下を推奨) し、パッチを適用するか、すべてのアカウントにパッチを適用する実験的なモードを有効にします。\n実験的なモードでは、パッチの適用中にスマホがクラッシュする可能性があることに注意してください。</string>
+    <string name="many_accounts_warning">AndroidAutoXは、デバイスに保存されている多数 (%1$s) のGoogleアカウントを検出しました。\nこれはパッチ適用プロセスに悪影響を与える可能性があり、AndroidAutoXは失敗しやすくなります。\nGoogle Play 開発者サービスで主に使うアカウントを選択 (2個以下を推奨) し、パッチを適用するか、すべてのアカウントにパッチを適用する実験的なモードを有効にします。\n実験的なモードでは、パッチの適用中にスマホがクラッシュする可能性があることに注意してください。</string>
     <string name="dark_switch_tweak">昼/夜オプション</string>
     <string name="tutorial_assistant_suggestions">This tweak will activate a new feature that adds some quick shortcuts to Assistant actions on top of home screen.</string>
     <string name="remove_paired_car">ペアリングされた車を削除</string>

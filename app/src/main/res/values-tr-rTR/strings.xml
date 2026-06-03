@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">AA AIO Tweaker \'e Hoşgeldiniz.
+    <string name="main_string">AndroidAutoX \'e Hoşgeldiniz.
 Bu uygulama Android Auto\'ya bazı düzenlemeler uygulamanıza izin verecektir.
 Uygulamak istediğiniz ince ayarı seçmeniz yeterlidir :)
 Bir ayarın ne yaptığından emin değilseniz, üzerine uzun basın ve bir öğretici göreceksiniz.</string>
@@ -92,7 +92,7 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="not_enabled_warning">Android Auto etkin değil</string>
     <string name="not_installed_warning">Android Auto yüklü değil</string>
     <string name="currently_set">"Şu anki değeri: "</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER, Google Play Hizmetleri veritabanında herhangi bir hesap bulamadı. Bunun nedeni şu gibi birkaç farklı şey olabilir:\n• Çoğunlukla internete bağlı olmayan cihaz\n• Telefon yeni kurulduysa\n• Bozuk Google Play Hizmetleri veritabanı\n• Google hesaplarının telefondan kaldırılması\n• Google Play Services\'in verileri temizlenmiş\n\nBu senaryoda, AA AIO TWEAKER düzgün çalışamayacaktır. Yakın zamanda bir Google hesabını kaldırdıysanız veya Google Play Hizmetleri verilerini temizlediyseniz, lütfen telefonu internete bağlı tutun ve Google Play Hizmetleri veritabanını tam olarak oluşturmasına izin verin. Bu, bazı durumlarda günlerce veya birkaç saat sürebilir.\n\nYukarıdaki koşullardan birinde değilseniz, lütfen Github\'da bir sorun açın.</string>
+    <string name="no_accounts_warning">AndroidAutoX, Google Play Hizmetleri veritabanında herhangi bir hesap bulamadı. Bunun nedeni şu gibi birkaç farklı şey olabilir:\n• Çoğunlukla internete bağlı olmayan cihaz\n• Telefon yeni kurulduysa\n• Bozuk Google Play Hizmetleri veritabanı\n• Google hesaplarının telefondan kaldırılması\n• Google Play Services\'in verileri temizlenmiş\n\nBu senaryoda, AndroidAutoX düzgün çalışamayacaktır. Yakın zamanda bir Google hesabını kaldırdıysanız veya Google Play Hizmetleri verilerini temizlediyseniz, lütfen telefonu internete bağlı tutun ve Google Play Hizmetleri veritabanını tam olarak oluşturmasına izin verin. Bu, bazı durumlarda günlerce veya birkaç saat sürebilir.\n\nYukarıdaki koşullardan birinde değilseniz, lütfen Github\'da bir sorun açın.</string>
     <string name="tweak_loading">Yama uygulanıyor...</string>
     <string name="loading">Yükleniyor, lütfen bekleyin...</string>
     <string name="tutorial_bitrate">Bu ayar, video bit hızını çarpan ayarına göre artıracak veya azaltacaktır (2.0x\'e kadar). Bit hızının arttırılması (1.0 x\'den fazla), araca daha fazla veri aktarılacağı ve video akışının kalitesinin görsel kalitede geliştirilebileceği anlamına gelecektir, ancak kararsızlığa neden olabilir. Bit hızının azaltılması (1.0 x\'den az) yayın akışını sıkıştırır ve kalite azalır, ancak daha güvenilir ve hızlı bir bağlantı ile sonuçlanır.</string>
@@ -108,10 +108,10 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="use_all">Hepsini kullan (DENEYSEL)</string>
     <string name="log_copied">Günlük kopyalandı</string>
     <string name="new_version_available">Yeni versiyon mevcut</string>
-    <string name="go_to_new_version">AA AIO TWEAKER\'ın (%1$s sürümü) yeni bir sürümü GitHub\'da kullanılabilir. Şimdi indirmek istiyor musunuz?</string>
+    <string name="go_to_new_version">AndroidAutoX\'ın (%1$s sürümü) yeni bir sürümü GitHub\'da kullanılabilir. Şimdi indirmek istiyor musunuz?</string>
     <string name="go_to_download">İndirmeye git</string>
     <string name="ignore_for_now">Şimdilik yoksay</string>
-    <string name="many_accounts_warning">AA AIO TWEAKER, cihazda kayıtlı çok sayıda (%1$s) Google Hesabı buldu.\nBu, yamalama işleminin başarısını olumsuz yönde etkileyebilir ve AA Aio Tweaker başarısız olabilir.\nÇoğunlukla Google Play Servisleri ile birlikte kullandığınız hesapları seçebilirsiniz (2 veya daha az önerilir) veya tüm hesapları düzeltmesi gereken deneysel bir modu etkinleştirin.\nLütfen, deney modunun, yama çalışırken telefona bazı çöküşlere neden olabileceğini unutmayın.</string>
+    <string name="many_accounts_warning">AndroidAutoX, cihazda kayıtlı çok sayıda (%1$s) Google Hesabı buldu.\nBu, yamalama işleminin başarısını olumsuz yönde etkileyebilir ve AndroidAutoX başarısız olabilir.\nÇoğunlukla Google Play Servisleri ile birlikte kullandığınız hesapları seçebilirsiniz (2 veya daha az önerilir) veya tüm hesapları düzeltmesi gereken deneysel bir modu etkinleştirin.\nLütfen, deney modunun, yama çalışırken telefona bazı çöküşlere neden olabileceğini unutmayın.</string>
     <string name="dark_switch_tweak">gündüz/gece seçeneği</string>
     <string name="tutorial_assistant_suggestions">This tweak will activate a new feature that adds some quick shortcuts to Assistant actions on top of home screen.</string>
     <string name="remove_paired_car">Eşleştirilmiş bir arabayı kaldırma</string>

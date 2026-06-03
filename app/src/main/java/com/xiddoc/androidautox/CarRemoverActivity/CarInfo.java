@@ -1,4 +1,4 @@
-package sksa.aa.tweaker.CarRemoverActivity;
+package com.xiddoc.androidautox.CarRemoverActivity;
 
 public class CarInfo {
     private String name;

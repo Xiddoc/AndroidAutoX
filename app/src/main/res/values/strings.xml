@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">AA AIO Tweaker</string>
-    <string name="main_string">Welcome in AA AIO Tweaker\n
+    <string name="app_name" translatable="false">AndroidAutoX</string>
+    <string name="main_string">Welcome in AndroidAutoX\n
 This app will let you apply some tweaks to Android Auto\n
 Simply select what tweak you want to apply :)\n
 If you are unsure of what a tweak does, long press on it and a tutorial will show up.</string>
@@ -73,7 +73,7 @@ Android Auto 5.8 or superior is required.</string>
     <string name="default_string">\u0020Default</string>zzz
     <string name="app_list_label">Apps List</string>
     <string name="translators_button">Translated by</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER<br><br>Source code is available on <a href=\"https://github.com/Xiddoc/AA-Tweaker\">GitHub</a>]]></string>
+    <string name="about_part_one"><![CDATA[AndroidAutoX<br><br>Source code is available on <a href=\"https://github.com/Xiddoc/AndroidAutoX\">GitHub</a>]]></string>
     <string name="custom_wallpapers">Wallpapers</string>
     <string name="tutorial_wallpapers">This tweak will activate the new built in wallpaper changer in Android Auto. Android Auto 5.8 or superior is required.\nWARNING: If you are a user of Wallpapers For Android Auto, you will need to update it to at least version 3.0, otherwise this tweak will break Wallpapers For Android Auto functionality.</string>
     <string name="tutorial_dark_mode">Starting from December 2020, Google reverted a behaviour that happened since Android 10. Previously, the light/dark mode on Android Auto followed the light/dark mode on the phone and vice versa. This meant that switching the phone to dark mode had effect on the car, or if the phone was in dark mode and the car had lights off it used to switch on the light theme on the phone.\n However, since this feature of \"independent\" dark mode was introduced, users with Aftermarket headunits have no way to switch to dark mode anymore without actually wiring the stereo to the car\'s lights.\n This tweak makes sure that night mode is again dependent from phone and switching light/dark mode on phone will have its effects on cars too.</string>
@@ -96,7 +96,7 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="not_enabled_warning">Android Auto is not enabled</string>
     <string name="not_installed_warning">Android Auto is not installed</string>
     <string name="currently_set">"Currently set: "</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER could not find any account in Google Play Services database. This can be caused by several different things such as:\n • Device that is mostly not connected to internet\n • Fresh install of the phone\n • Corrupted Google Play Services database\n • Removal of Google account(s) from the phone\n • Cleared datas of Google Play Services\n\nIn this scenario, AA AIO TWEAKER will FAIL to work properly. If you recently removed a Google account or cleared Google Play Services datas, please keep the phone connected to internet and let it build the Google Play Services database fully. This might take several hours, in some cases also days.\n\nIf you are not in one of the above conditions, please open a issue on GitHub.</string>
+    <string name="no_accounts_warning">AndroidAutoX could not find any account in Google Play Services database. This can be caused by several different things such as:\n • Device that is mostly not connected to internet\n • Fresh install of the phone\n • Corrupted Google Play Services database\n • Removal of Google account(s) from the phone\n • Cleared datas of Google Play Services\n\nIn this scenario, AndroidAutoX will FAIL to work properly. If you recently removed a Google account or cleared Google Play Services datas, please keep the phone connected to internet and let it build the Google Play Services database fully. This might take several hours, in some cases also days.\n\nIf you are not in one of the above conditions, please open a issue on GitHub.</string>
     <string name="tweak_loading">Applying the tweak...</string>
     <string name="loading">Loading, please wait...</string>
     <string name="tutorial_bitrate">This tweak will increase or decrease video bitrate according to the multiplier set (up to 2.0x). Increasing the bitrate (more than 1.0x) will mean that more datas will be streamed to the car and quality of video streaming could be improved in visual quality, however it might cause instability. Decreasing the bitrate (less than 1.0x) will compress the stream to the car and quality will be decreased, but it will result in a more reliable and fast connection.</string>
@@ -112,10 +112,10 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="use_all">Use all (EXPERIMENTAL)</string>
     <string name="log_copied">Log has been copied</string>
     <string name="new_version_available">New Version available</string>
-    <string name="go_to_new_version">A new version of AA AIO TWEAKER (version %1$s) is available on GitHub. Do you want to download it now?</string>
+    <string name="go_to_new_version">A new version of AndroidAutoX (version %1$s) is available on GitHub. Do you want to download it now?</string>
     <string name="go_to_download">Go to download</string>
     <string name="ignore_for_now">Ignore for now</string>
-    <string name="many_accounts_warning">AA AIO TWEAKER found a large number (%1$s) of Google accounts saved in the device.\nThis can negatively impact on the success of the patching process and AA AIO TWEAKER might fail.\nYou can either choose the account(s) that you mostly use with Google Play Services to apply the patch to just them (2 or less is recommended) or activate an experimental mode that should patch all accounts.\nPLEASE NOTE that the experimental mode might cause some crashes to the phone while the patch is running.</string>
+    <string name="many_accounts_warning">AndroidAutoX found a large number (%1$s) of Google accounts saved in the device.\nThis can negatively impact on the success of the patching process and AndroidAutoX might fail.\nYou can either choose the account(s) that you mostly use with Google Play Services to apply the patch to just them (2 or less is recommended) or activate an experimental mode that should patch all accounts.\nPLEASE NOTE that the experimental mode might cause some crashes to the phone while the patch is running.</string>
     <string name="dark_switch_tweak">day/night option</string>
     <string name="tutorial_assistant_suggestions">This tweak will activate a new feature that adds some quick shortcuts to Assistant actions on top of home screen.</string>
     <string name="remove_paired_car">Remove a paired car</string>

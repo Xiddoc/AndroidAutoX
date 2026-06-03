@@ -1,4 +1,4 @@
-package sksa.aa.tweaker;
+package com.xiddoc.androidautox;
 
 import android.support.annotation.IdRes;
 import android.support.annotation.NonNull;
