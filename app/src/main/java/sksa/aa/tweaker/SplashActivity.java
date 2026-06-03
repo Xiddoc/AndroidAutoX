@@ -40,6 +40,9 @@ public class SplashActivity extends AppCompatActivity {
     // Result of the asynchronous root request. null = not-yet/unknown, non-null = completed.
     private volatile StreamLogs isDeviceRooted;
 
+    // Guards against kicking off the root request more than once (e.g. onResume re-entry).
+    private boolean rootRequestStarted = false;
+
     private static final String actualVersion = BuildConfig.VERSION_NAME;
     private static final String BASE_URL = "https://api.github.com/repos/shmykelsa/AA-Tweaker/releases/latest";
 
@@ -52,20 +55,6 @@ public class SplashActivity extends AppCompatActivity {
         final Intent intent = new Intent(this, MainActivity.class);
 
         final NoRootDialog noRootDialog = new NoRootDialog();
-
-        // Request root off the main thread so Magisk's grant dialog can surface over the
-        // visible splash. The 5s countdown gives the su call time to complete and the user
-        // time to tap "Grant". copyAssets() depends on root for its chmod, so it runs here too.
-        new Thread() {
-            @Override
-            public void run() {
-                // Explicit early su request so Magisk shows the prompt unmistakably.
-                StreamLogs rootResult = runSuWithCmd("echo 1");
-                isDeviceRooted = rootResult;
-
-                copyAssets();
-            }
-        }.start();
 
         SharedPreferences sharedPreferences = getSharedPreferences("MainActivity", MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPreferences.edit();
@@ -136,6 +125,35 @@ public class SplashActivity extends AppCompatActivity {
                 });
     }
 
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Kick off root acquisition once the window is up so Magisk's grant dialog
+        // surfaces over the visible splash rather than before it is drawn.
+        requestRootAsync();
+    }
+
+    // Requests root off the main thread (matching MainActivity's new Thread() idiom) and then
+    // runs copyAssets(), which depends on root for its chmod. Avoids ANR by keeping
+    // su.waitFor() off the main thread. The 5s countdown gives this time to complete and the
+    // user time to tap "Grant". Runs at most once.
+    private void requestRootAsync() {
+        if (rootRequestStarted) {
+            return;
+        }
+        rootRequestStarted = true;
+
+        new Thread() {
+            @Override
+            public void run() {
+                // Explicit early su request so Magisk shows the prompt unmistakably.
+                isDeviceRooted = runSuWithCmd("echo 1");
+
+                copyAssets();
+            }
+        }.start();
+    }
 
     private void copyFile(InputStream in, OutputStream out) throws IOException {
         byte[] buffer = new byte[1024];
