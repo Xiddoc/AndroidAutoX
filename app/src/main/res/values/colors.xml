@@ -51,6 +51,9 @@
     <color name="glow_rim_bright">#CC42A5F5</color>
     <!-- Softer rim for cards/dialog so buttons stay the loudest element -->
     <color name="glow_rim_soft">#8042A5F5</color>
+    <!-- Subtle top highlight sheen for the clean-modern buttons / FAB -->
+    <color name="button_gloss_top">#26FFFFFF</color>
+    <color name="button_gloss_bottom">#00FFFFFF</color>
     <!-- Subtler 2-step halo for cards / dialog (same blue hue) -->
     <color name="glow_blue_ring_card_outer">#142196F3</color>
     <color name="glow_blue_ring_card_inner">#552196F3</color>

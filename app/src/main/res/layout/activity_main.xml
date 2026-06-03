@@ -119,6 +119,7 @@
         android:layout_height="wrap_content"
         android:layout_margin="15dp"
         android:background="@drawable/fab_background"
+        android:elevation="6dp"
         android:clickable="true"
         android:drawableStart="@drawable/ic_baseline_settings_backup_restore_24"
         android:drawablePadding="5dp"

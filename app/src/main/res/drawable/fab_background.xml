@@ -1,36 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Clean modern FAB: glossy gradient-blue body matching the buttons, with a
+     subtle top sheen. Soft shadow comes from the view's elevation. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <layer-list>
 
-            <!-- BOLD NEON GLOW: blue stepped-ring halo around the 18dp body.
-                 Same unified blue hue (#2196F3) and vocabulary as the buttons.
-                 Body stays inset 3dp / radius 18dp; rings sized concentrically. -->
-
-            <!-- Outer ring: full bounds, faintest (alpha 1A), radius 21dp -->
+            <!-- Body: smooth vertical gradient (lighter on top). 10dp/5dp padding. -->
             <item>
-                <shape android:shape="rectangle">
-                    <corners android:radius="21dp" />
-                    <stroke
-                        android:width="2dp"
-                        android:color="@color/glow_blue_ring_outer" />
-                </shape>
-            </item>
-
-            <!-- Inner luminous ring: inset 1dp, brightest (alpha AA), radius 20dp.
-                 Hugs the body to read as neon rather than a plain border. -->
-            <item android:left="1dp" android:top="1dp" android:right="1dp" android:bottom="1dp">
-                <shape android:shape="rectangle">
-                    <corners android:radius="20dp" />
-                    <stroke
-                        android:width="2dp"
-                        android:color="@color/glow_blue_ring_inner" />
-                </shape>
-            </item>
-
-            <!-- Body: inset 3dp, smooth vertical gradient (avoids a harsh two-tone
-                 jump). Original 10dp/5dp padding preserved on this layer. -->
-            <item android:left="3dp" android:top="3dp" android:right="3dp" android:bottom="3dp">
                 <shape android:shape="rectangle">
                     <corners android:radius="18dp" />
                     <gradient
@@ -46,13 +22,15 @@
                 </shape>
             </item>
 
-            <!-- Bright ACCENT-colored rim hugging the body (neon, not chrome) -->
-            <item android:left="3dp" android:top="3dp" android:right="3dp" android:bottom="3dp">
+            <!-- Subtle top highlight sheen. -->
+            <item>
                 <shape android:shape="rectangle">
                     <corners android:radius="18dp" />
-                    <stroke
-                        android:width="1dp"
-                        android:color="@color/glow_rim_bright" />
+                    <gradient
+                        android:angle="90"
+                        android:startColor="@color/button_gloss_bottom"
+                        android:endColor="@color/button_gloss_top"
+                        android:type="linear" />
                 </shape>
             </item>
 
