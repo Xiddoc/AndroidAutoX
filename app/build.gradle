@@ -75,6 +75,19 @@ android {
         // but continue the build even when errors are found:
         abortOnError false
     }
+    // versionCode can be overridden at build time (used by the release CI to
+    // autobump from a monotonic source such as github.run_number) via either the
+    // -PversionCodeOverride=<n> project property or the VERSION_CODE env var.
+    // A manual build with neither set falls back to the hardcoded value below.
+    def baseVersionCode = 35
+    def versionCodeOverride = null
+    if (project.hasProperty('versionCodeOverride')) {
+        versionCodeOverride = project.property('versionCodeOverride')
+    } else if (System.getenv('VERSION_CODE') != null && !System.getenv('VERSION_CODE').isEmpty()) {
+        versionCodeOverride = System.getenv('VERSION_CODE')
+    }
+    def resolvedVersionCode = versionCodeOverride != null ? versionCodeOverride.toString().toInteger() : baseVersionCode
+
     compileSdkVersion 29
     defaultConfig {
 
@@ -82,7 +95,7 @@ android {
         applicationId 'sksa.aa.tweaker'
         minSdkVersion 23
         targetSdkVersion 29
-        versionCode 35
+        versionCode resolvedVersionCode
         versionName '6.0.0'
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         setProperty("archivesBaseName","AA-AIO-TWEAKER-" + versionName)
