@@ -1085,10 +1085,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onClick(View view) {
                         if (load("battery_saver_warning")) {
-                            revert("battery_saver_warning");
-                            batteryWarning.setText(getString(R.string.disable_tweak_string) + getString(R.string.battery_warning));
-                            changeStatus(batteryWarningStatus, 0, true);
-                            showRebootButton();
+                            revertBatteryWarning();
                         } else {
                             disableBatteryWarning();
                         }
@@ -2307,81 +2304,70 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
 
 
 
+    /** Flags toggled by the "battery saver warning" tweak (phixit schema). */
+    private static java.util.List<FlagSpec> batteryWarningSpecs() {
+        java.util.List<FlagSpec> l = new java.util.ArrayList<FlagSpec>();
+        l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "BatterySaver__warning_enabled", false));
+        return l;
+    }
+
     public void disableBatteryWarning() {
         final TextView logs = initiateLogsText();
-
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"BatterySaver__warning_enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
 
         new Thread() {
             @Override
             public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
+                appendText(logs, "\n\n--  Applying (phixit): battery saver warning  --");
+                final boolean ok = applyPhixitSpecs(logs, batteryWarningSpecs(), true);
+                if (ok) save(true, "battery_saver_warning");
 
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS battery_saver_warning;\n" +
-                                finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER battery_saver_warning AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"battery_saver_warning\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "battery_saver_warning");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        dialog.dismiss();
+                        if (ok) {
                             changeStatus(batteryWarningStatus, 1, true);
                             showRebootButton();
                             batteryWarning.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.battery_warning));
+                        } else {
+                            DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
+                            Bundle bundle = new Bundle();
+                            bundle.putString("tweak", "battery_saver_warning");
+                            bundle.putString("log", logs.getText().toString());
+                            notSuccessfulDialog.setArguments(bundle);
+                            notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
                         }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "battery_saver_warning");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
+                    }
+                });
             }
         }.start();
+    }
 
+    /** Reverts the battery saver warning tweak by restoring the captured baseline. */
+    public void revertBatteryWarning() {
+        final TextView logs = initiateLogsText();
+        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
+                getString(R.string.tweak_loading), true);
 
+        new Thread() {
+            @Override
+            public void run() {
+                appendText(logs, "\n\n--  Reverting (phixit): battery saver warning  --");
+                revertPhixitSpecs(logs, batteryWarningSpecs());
+                save(false, "battery_saver_warning");
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        dialog.dismiss();
+                        changeStatus(batteryWarningStatus, 0, true);
+                        showRebootButton();
+                        batteryWarning.setText(getString(R.string.disable_tweak_string) + getString(R.string.battery_warning));
+                    }
+                });
+            }
+        }.start();
     }
 
     public void battOutline() {
@@ -4392,6 +4378,223 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
             }
         }
         return name + ": NOT FOUND after apply";
+    }
+
+    // =====================================================================
+    // Phixit engine: apply/revert flag overrides on the new Phenotype schema
+    // by editing param_partitions.flags_content directly. This replaces the
+    // legacy FlagOverrides/Flags SQL, which no longer exists on recent GMS.
+    // =====================================================================
+
+    public static final String PHENO_DB =
+            "/data/data/com.google.android.gms/databases/phenotype.db";
+
+    /**
+     * Applies {@code specs} to every param_partition of each referenced package,
+     * bumps last_fetch.serving_version, clears the phenotype file cache and
+     * restarts GMS. When {@code captureBaseline} is true, the original value of
+     * each flag (or "absent") is saved first so {@link #revertPhixitSpecs} can
+     * restore it. Returns true on success.
+     */
+    private boolean applyPhixitSpecs(final TextView logs, java.util.List<FlagSpec> specs,
+                                     boolean captureBaseline) {
+        final String path = getApplicationInfo().dataDir;
+        final String filesDir = getFilesDir().getAbsolutePath();
+        StringBuilder sb = new StringBuilder();
+
+        String policy = runSuWithCmd("getenforce").getInputStreamLog();
+        runSuWithCmd("setenforce 0");
+        runSuWithCmd("am force-stop com.google.android.gms");
+
+        java.util.LinkedHashMap<String, java.util.List<FlagSpec>> byPkg =
+                new java.util.LinkedHashMap<String, java.util.List<FlagSpec>>();
+        for (FlagSpec s : specs) {
+            java.util.List<FlagSpec> l = byPkg.get(s.pkg);
+            if (l == null) { l = new java.util.ArrayList<FlagSpec>(); byPkg.put(s.pkg, l); }
+            l.add(s);
+        }
+
+        StringBuilder script = new StringBuilder();
+        boolean ok = true;
+
+        for (java.util.Map.Entry<String, java.util.List<FlagSpec>> e : byPkg.entrySet()) {
+            String pkg = e.getKey();
+            java.util.List<FlagSpec> ps = e.getValue();
+
+            StreamLogs r = runSuWithCmd(
+                    path + "/sqlite3 -batch " + PHENO_DB + " " +
+                            "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
+                            "WHERE static_config_package_id IN (SELECT static_config_package_id " +
+                            "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
+            if (!r.getErrorStreamLog().isEmpty()) {
+                sb.append("  [").append(pkg).append("] read ERR: ").append(r.getErrorStreamLog()).append("\n");
+                ok = false;
+            }
+            String out = r.getInputStreamLog();
+            if (out.isEmpty()) {
+                sb.append("  [").append(pkg).append("] no partitions matched\n");
+                ok = false;
+                continue;
+            }
+
+            java.util.List<String> pids = new java.util.ArrayList<String>();
+            java.util.List<java.util.List<PhixitSnapshot.Flag>> parts =
+                    new java.util.ArrayList<java.util.List<PhixitSnapshot.Flag>>();
+            for (String line : out.split("\\r?\\n")) {
+                int bar = line.indexOf('|');
+                if (bar <= 0) continue;
+                String pid = line.substring(0, bar).trim();
+                String hex = line.substring(bar + 1).trim();
+                if (hex.isEmpty()) continue;
+                try {
+                    pids.add(pid);
+                    parts.add(PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex))));
+                } catch (Exception ex) {
+                    sb.append("  [").append(pkg).append("] partition ").append(pid)
+                            .append(" decode EXCEPTION ").append(ex).append("\n");
+                    ok = false;
+                }
+            }
+
+            if (captureBaseline) {
+                for (FlagSpec s : ps) captureBaselineIfAbsent(pkg, s.name, parts);
+            }
+
+            for (int i = 0; i < pids.size(); i++) {
+                java.util.List<PhixitSnapshot.Flag> flags = parts.get(i);
+                for (FlagSpec s : ps) applySpecToList(flags, s);
+                byte[] blob = PhixitSnapshot.deflateRaw(PhixitSnapshot.encode(flags));
+                script.append("UPDATE param_partitions SET flags_content=x'")
+                        .append(PhixitSnapshot.bytesToHex(blob))
+                        .append("' WHERE param_partition_id=").append(pids.get(i)).append(";\n");
+            }
+            sb.append("  [").append(pkg).append("] ").append(pids.size()).append(" partitions updated\n");
+        }
+
+        if (script.length() == 0) {
+            ok = false;
+        } else {
+            int servingVersion = (int) (System.currentTimeMillis() / 1000L);
+            script.append("UPDATE last_fetch SET serving_version=").append(servingVersion)
+                    .append(" WHERE type=1;\n");
+            String sqlFile = filesDir + "/phixit_apply.sql";
+            try {
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(sqlFile);
+                fos.write(script.toString().getBytes("UTF-8"));
+                fos.close();
+                StreamLogs w = runSuWithCmd(path + "/sqlite3 -batch " + PHENO_DB + " < " + sqlFile);
+                if (!w.getErrorStreamLog().isEmpty()) {
+                    sb.append("  apply ERR: ").append(w.getErrorStreamLog()).append("\n");
+                    ok = false;
+                }
+                runSuWithCmd("rm -f " + sqlFile);
+            } catch (Exception ex) {
+                sb.append("  write ERR: ").append(ex).append("\n");
+                ok = false;
+            }
+        }
+
+        // Make GMS re-read the edited snapshot from the DB and restart fresh.
+        runSuWithCmd("rm -rf /data/data/com.google.android.gms/files/phenotype");
+        runSuWithCmd("am force-stop com.google.android.gms");
+        if (!policy.equalsIgnoreCase("Permissive")) runSuWithCmd("setenforce 1");
+
+        appendText(logs, sb.toString());
+        return ok;
+    }
+
+    /** Restores each spec's flag to the baseline captured at apply time. */
+    private boolean revertPhixitSpecs(TextView logs, java.util.List<FlagSpec> applied) {
+        SharedPreferences sp = getPreferences(Context.MODE_PRIVATE);
+        java.util.List<FlagSpec> restore = new java.util.ArrayList<FlagSpec>();
+        for (FlagSpec s : applied) {
+            String b = sp.getString(baselineKey(s.pkg, s.name), null);
+            if (b == null || b.equals("A")) {
+                restore.add(FlagSpec.remove(s.pkg, s.name)); // was absent -> drop it
+            } else {
+                restore.add(deserializeBaseline(s.pkg, s.name, b));
+            }
+        }
+        boolean ok = applyPhixitSpecs(logs, restore, false);
+        SharedPreferences.Editor ed = sp.edit();
+        for (FlagSpec s : applied) ed.remove(baselineKey(s.pkg, s.name));
+        ed.apply();
+        return ok;
+    }
+
+    private void applySpecToList(java.util.List<PhixitSnapshot.Flag> flags, FlagSpec s) {
+        int idx = -1;
+        for (int i = 0; i < flags.size(); i++) {
+            PhixitSnapshot.Flag f = flags.get(i);
+            if (!f.numericName && s.name.equals(f.name)) { idx = i; break; }
+        }
+        if (s.remove) {
+            if (idx >= 0) flags.remove(idx);
+            return;
+        }
+        if (idx >= 0) {
+            copyValue(flags.get(idx), s.flag);
+        } else {
+            PhixitSnapshot.Flag add = new PhixitSnapshot.Flag();
+            add.name = s.name;
+            add.numericName = false;
+            copyValue(add, s.flag);
+            flags.add(add);
+        }
+    }
+
+    private String baselineKey(String pkg, String name) {
+        return "phixit_base|" + pkg + "|" + name;
+    }
+
+    private void captureBaselineIfAbsent(String pkg, String name,
+                                         java.util.List<java.util.List<PhixitSnapshot.Flag>> parts) {
+        SharedPreferences sp = getPreferences(Context.MODE_PRIVATE);
+        String key = baselineKey(pkg, name);
+        if (sp.contains(key)) return;
+        PhixitSnapshot.Flag cur = null;
+        for (java.util.List<PhixitSnapshot.Flag> p : parts) {
+            for (PhixitSnapshot.Flag f : p) {
+                if (!f.numericName && name.equals(f.name)) { cur = f; break; }
+            }
+            if (cur != null) break;
+        }
+        sp.edit().putString(key, serializeBaseline(cur)).apply();
+    }
+
+    private String serializeBaseline(PhixitSnapshot.Flag f) {
+        if (f == null) return "A";
+        switch (f.type) {
+            case PhixitSnapshot.TYPE_BOOL_FALSE: return "B0";
+            case PhixitSnapshot.TYPE_BOOL_TRUE:  return "B1";
+            case PhixitSnapshot.TYPE_LONG:       return "L" + f.longValue;
+            case PhixitSnapshot.TYPE_DOUBLE:     return "D" + f.doubleBits;
+            case PhixitSnapshot.TYPE_STRING:
+                try {
+                    return "S" + android.util.Base64.encodeToString(
+                            f.stringValue.getBytes("UTF-8"), android.util.Base64.NO_WRAP);
+                } catch (Exception e) { return "S"; }
+            case PhixitSnapshot.TYPE_BYTES:
+                return "X" + PhixitSnapshot.bytesToHex(f.bytesValue);
+            default: return "A";
+        }
+    }
+
+    private FlagSpec deserializeBaseline(String pkg, String name, String b) {
+        char tag = b.charAt(0);
+        String body = b.substring(1);
+        switch (tag) {
+            case 'B': return FlagSpec.bool(pkg, name, body.equals("1"));
+            case 'L': return FlagSpec.lng(pkg, name, Long.parseLong(body));
+            case 'D': return FlagSpec.dbl(pkg, name, Double.longBitsToDouble(Long.parseLong(body)));
+            case 'S':
+                try {
+                    return FlagSpec.str(pkg, name,
+                            new String(android.util.Base64.decode(body, android.util.Base64.NO_WRAP), "UTF-8"));
+                } catch (Exception e) { return FlagSpec.str(pkg, name, ""); }
+            case 'X': return FlagSpec.bytes(pkg, name, PhixitSnapshot.hexToBytes(body));
+            default:  return FlagSpec.remove(pkg, name);
+        }
     }
 
     public static StreamLogs runSuWithCmd(String cmd) {
