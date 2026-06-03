@@ -1,20 +1,25 @@
 name: Release APK
 
-# You stay in control of releases: create the GitHub Release yourself and
-# write the description/notes. When you PUBLISH it, this workflow builds the
-# signed release APK from that release's tag and attaches it to the release.
-# It never edits your title or description — it only uploads the APK.
+# You stay in control of releases. Create a *draft* release on GitHub,
+# pick the tag (e.g. v6.2.0) and write your title/description. Saving the
+# draft fires this workflow, which builds the signed release APK and
+# attaches it to the draft. You then review and hit "Publish release" with
+# the APK already in place. It never edits your title or notes.
+#
+# Note: a draft's git tag is not created until you publish, so this builds
+# from the release's target branch (target_commitish) and uploads the APK
+# to the draft by its release id rather than by tag.
 on:
   release:
-    types: [published]
+    types: [created]
 
 # Needed so the GITHUB_TOKEN can upload the APK asset to the release.
 permissions:
   contents: write
 
-# If the same release is (re)published, supersede an in-flight build.
+# If the same draft is re-saved, supersede an in-flight build.
 concurrency:
-  group: release-${{ github.event.release.tag_name }}
+  group: release-${{ github.event.release.id }}
   cancel-in-progress: true
 
 jobs:
@@ -23,11 +28,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout the released tag
+      - name: Checkout the release target
         uses: actions/checkout@v4
         with:
-          # Build exactly the code the release points at.
-          ref: ${{ github.event.release.tag_name }}
+          # A draft has no tag yet, so build from the branch/commit the
+          # release targets (defaults to the repo's default branch).
+          ref: ${{ github.event.release.target_commitish }}
 
       - name: Resolve version from tag
         id: ver
@@ -35,7 +41,7 @@ jobs:
           tag="${{ github.event.release.tag_name }}"
           # Strip a leading "v" so v6.2.0 -> versionName 6.2.0.
           echo "version_name=${tag#v}" >> "$GITHUB_OUTPUT"
-          echo "Building version ${tag#v} from tag $tag"
+          echo "Building version ${tag#v} for draft release ${{ github.event.release.id }}"
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -85,12 +91,27 @@ jobs:
           VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew assembleRelease
 
-      - name: Attach APK to the release
+      - name: Attach APK to the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # gh release upload only adds assets; it does not touch the notes.
-          # --clobber lets a re-run replace an already-uploaded APK.
-          gh release upload "${{ github.event.release.tag_name }}" \
-            app/build/outputs/apk/release/*.apk \
-            --clobber --repo "${{ github.repository }}"
+          apk=$(ls app/build/outputs/apk/release/*.apk | head -n1)
+          name=$(basename "$apk")
+          echo "Uploading $name to release id ${{ github.event.release.id }}"
+          # Drafts can't be addressed by tag (no tag exists yet), so upload to
+          # the release id. Remove an existing same-named asset first so a
+          # re-run doesn't 422.
+          asset_id=$(gh api "/repos/${{ github.repository }}/releases/${{ github.event.release.id }}/assets" \
+            --jq ".[] | select(.name == \"$name\") | .id" | head -n1)
+          if [ -n "$asset_id" ]; then
+            echo "Replacing existing asset $asset_id"
+            gh api --method DELETE "/repos/${{ github.repository }}/releases/assets/$asset_id"
+          fi
+          upload_url="${{ github.event.release.upload_url }}"
+          upload_url="${upload_url%\{*}?name=$name"
+          curl -sSf -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary @"$apk" \
+            "$upload_url"
+          echo "Done."
