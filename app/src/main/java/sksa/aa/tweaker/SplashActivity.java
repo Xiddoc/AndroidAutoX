@@ -148,7 +148,9 @@ public class SplashActivity extends AppCompatActivity {
             @Override
             public void run() {
                 // Explicit early su request so Magisk shows the prompt unmistakably.
+                Log.v("sksa.aa.tweaker", "Requesting root (su)");
                 isDeviceRooted = runSuWithCmd("echo 1");
+                Log.v("sksa.aa.tweaker", "Root request result: " + isDeviceRooted.getInputStreamLog());
 
                 copyAssets();
             }
