@@ -37,6 +37,9 @@ public class SplashActivity extends AppCompatActivity {
     Context context;
     String newVersionName;
 
+    // Result of the asynchronous root request. null = not-yet/unknown, non-null = completed.
+    private volatile StreamLogs isDeviceRooted;
+
     private static final String actualVersion = BuildConfig.VERSION_NAME;
     private static final String BASE_URL = "https://api.github.com/repos/shmykelsa/AA-Tweaker/releases/latest";
 
@@ -49,9 +52,20 @@ public class SplashActivity extends AppCompatActivity {
         final Intent intent = new Intent(this, MainActivity.class);
 
         final NoRootDialog noRootDialog = new NoRootDialog();
-        final StreamLogs isDeviceRooted =  runSuWithCmd("echo 1");
 
-        copyAssets();
+        // Request root off the main thread so Magisk's grant dialog can surface over the
+        // visible splash. The 5s countdown gives the su call time to complete and the user
+        // time to tap "Grant". copyAssets() depends on root for its chmod, so it runs here too.
+        new Thread() {
+            @Override
+            public void run() {
+                // Explicit early su request so Magisk shows the prompt unmistakably.
+                StreamLogs rootResult = runSuWithCmd("echo 1");
+                isDeviceRooted = rootResult;
+
+                copyAssets();
+            }
+        }.start();
 
         SharedPreferences sharedPreferences = getSharedPreferences("MainActivity", MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPreferences.edit();
@@ -107,7 +121,9 @@ public class SplashActivity extends AppCompatActivity {
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        if (isDeviceRooted.getInputStreamLog().equals("1")) {
+                        // Treat null (async not-yet-arrived) or non-"1" as not-rooted.
+                        StreamLogs rootResult = isDeviceRooted;
+                        if (rootResult != null && "1".equals(rootResult.getInputStreamLog())) {
                             if (newVersionName != null) {
                                 intent.putExtra("NewVersionName", newVersionName);
                             }
