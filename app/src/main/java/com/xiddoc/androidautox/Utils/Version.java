@@ -1,4 +1,4 @@
-package sksa.aa.tweaker.Utils;
+package com.xiddoc.androidautox.Utils;
 
 public class Version implements Comparable<Version> {
 

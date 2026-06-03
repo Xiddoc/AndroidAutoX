@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">AA AIO Tweaker에 오신것을 환영합니다\n
+    <string name="main_string">AndroidAutoX에 오신것을 환영합니다\n
 이 앱을 사용하면 Android Auto에 트윅을 할 수 있습니다\n
 수정할것을 선택하기만 하면 됩니다\n
 수정할것이 무엇인지 잘 모르겠다면 수정할것을 길게 누르면 튜토리얼이 표시됩니다</string>
@@ -92,7 +92,7 @@
     <string name="not_enabled_warning">안드로이드 오토가 활성화되지 않습니다</string>
     <string name="not_installed_warning">안드로이드 오토가 설치되지 않았습니다</string>
     <string name="currently_set">"현재 설정되어 있습니다 "</string>
-    <string name="no_accounts_warning">AA AIIO TWAKER는 구글 플레이 스토어 내에 서비스 데이터베이스에서 어떠한 계정이든 찾을 수 없습니다. 이러한 문제는 다음과 같은 몇 가지 다른 문제로 인해 발생할 수 있습니다. 예를 들어, 인터넷에 대부분 연결되지 않은 장치\n • 스마트폰의 구글 플레이 서비스 데이터베이스 새로 설치\n • 손상된 구글 플레이 서비스 데이터베이스 제거\n • 구글 플레이 서비스의 지워진 데이터\n\n 이러한 문제는 AA AIO TWEAKER가 제대로 작동하지 않습니다. 최근에 구글 계정을 제거했거나 구글 플레이 서비스 데이터를 지운 경우 스마트폰을 인터넷에 연결한 상태로 유지하고 구글 플레이 서비스가 작동하도록 데이터베이스를 완전히 구축하도록 하십시오. 이 작업에는 몇 시간이 걸릴 수 있으며 경우에 따라 며칠이 걸릴 수도 있습니다.\n\n위의 조건 중 하나가 아니라면 GitHub에서  Issue를 열어주세요</string>
+    <string name="no_accounts_warning">AndroidAutoX는 구글 플레이 스토어 내에 서비스 데이터베이스에서 어떠한 계정이든 찾을 수 없습니다. 이러한 문제는 다음과 같은 몇 가지 다른 문제로 인해 발생할 수 있습니다. 예를 들어, 인터넷에 대부분 연결되지 않은 장치\n • 스마트폰의 구글 플레이 서비스 데이터베이스 새로 설치\n • 손상된 구글 플레이 서비스 데이터베이스 제거\n • 구글 플레이 서비스의 지워진 데이터\n\n 이러한 문제는 AndroidAutoX가 제대로 작동하지 않습니다. 최근에 구글 계정을 제거했거나 구글 플레이 서비스 데이터를 지운 경우 스마트폰을 인터넷에 연결한 상태로 유지하고 구글 플레이 서비스가 작동하도록 데이터베이스를 완전히 구축하도록 하십시오. 이 작업에는 몇 시간이 걸릴 수 있으며 경우에 따라 며칠이 걸릴 수도 있습니다.\n\n위의 조건 중 하나가 아니라면 GitHub에서  Issue를 열어주세요</string>
     <string name="tweak_loading">트윅 설정중...</string>
     <string name="loading">로딩 중. 잠시만 기다려 주세요...</string>
     <string name="tutorial_bitrate">이 트윅은 비디오 비트 전송률을 증가시키거나 감소시킵니다. (최대 2.0x) 비트 전송률(1.0x 이상) 이 증가하면 차량에 더 많은 데이터가 스트리밍되고 비디오 스트리밍의 품질이 시각적 품질에서 향상될 수 있지만 불안정을 초래할 수 있습니다. 비트 전송률(1.0x 미만) 을 낮추면 차량에 스트림이 압축되고 품질이 저하되지만 연결 속도가 안정적이고 빨라집니다.</string>
@@ -110,7 +110,7 @@
     <string name="go_to_new_version">새로운 버전의 AAAD(버전 %1$s) 를 GitHub에서 사용할 수 있습니다. 지금 다운로드하시겠습니까?</string>
     <string name="go_to_download">다운로드로 이동</string>
     <string name="ignore_for_now">지금은 무시하십시오.</string>
-    <string name="many_accounts_warning">AA AIIO Tweaker는 장치에 저장된 많은 수의 구글 계정(%1$s) 을 발견했습니다.\n이것은 패치 적용 프로세스의 성공에 부정적인 영향을 미칠 수 있으며 AA AIO TWIKER가 실패할 수 있습니다.\n구글 플레이 서비스에서 패치를 적용하기 위해 주로 사용하는 계정을 선택하거나(2개 이하 권장) 모든 계정에 패치를 적용하는 실험 모드를 활성화할 수 있습니다.\n실험 모드에서는 패치가 실행되는 동안 전화가 수/발신이 되지 않을 수 있습니다.</string>
+    <string name="many_accounts_warning">AndroidAutoX는 장치에 저장된 많은 수의 구글 계정(%1$s) 을 발견했습니다.\n이것은 패치 적용 프로세스의 성공에 부정적인 영향을 미칠 수 있으며 AndroidAutoX가 실패할 수 있습니다.\n구글 플레이 서비스에서 패치를 적용하기 위해 주로 사용하는 계정을 선택하거나(2개 이하 권장) 모든 계정에 패치를 적용하는 실험 모드를 활성화할 수 있습니다.\n실험 모드에서는 패치가 실행되는 동안 전화가 수/발신이 되지 않을 수 있습니다.</string>
     <string name="dark_switch_tweak">주간/야간 모드 설정</string>
     <string name="tutorial_assistant_suggestions">홈 스크린 위에 있는 Assistant action 작업에 몇 가지 바로 가기를 추가하는 새 기능이 활성화됩니다.</string>
     <string name="remove_paired_car">페어링이 제거되었습니다.</string>

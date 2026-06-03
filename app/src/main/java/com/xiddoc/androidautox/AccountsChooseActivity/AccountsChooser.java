@@ -1,4 +1,4 @@
-package sksa.aa.tweaker.AccountsChooseActivity;
+package com.xiddoc.androidautox.AccountsChooseActivity;
 
 import android.accounts.Account;
 import android.app.Dialog;
@@ -35,15 +35,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.prefs.PreferenceChangeListener;
 
-import sksa.aa.tweaker.AppInfo;
-import sksa.aa.tweaker.MainActivity;
-import sksa.aa.tweaker.MyAdapter;
-import sksa.aa.tweaker.R;
-import sksa.aa.tweaker.StreamLogs;
-import sksa.aa.tweaker.Utils.RecyclerItemClickListener;
+import com.xiddoc.androidautox.AppInfo;
+import com.xiddoc.androidautox.MainActivity;
+import com.xiddoc.androidautox.MyAdapter;
+import com.xiddoc.androidautox.R;
+import com.xiddoc.androidautox.StreamLogs;
+import com.xiddoc.androidautox.Utils.RecyclerItemClickListener;
 
 import static android.content.Context.MODE_PRIVATE;
-import static sksa.aa.tweaker.MainActivity.runSuWithCmd;
+import static com.xiddoc.androidautox.MainActivity.runSuWithCmd;
 
 
 public class AccountsChooser extends AppCompatActivity {

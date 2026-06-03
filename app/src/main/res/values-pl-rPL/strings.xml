@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">Witaj w AA AIO Tweaker\n
+    <string name="main_string">Witaj w AndroidAutoX\n
 Ta aplikacja pozwoli Ci zastosować pewne ulepszenia do Android Auto\n
 Po prostu wybierz jaką opcję chcesz zastosować :)\n
 Jeśli nie jesteś pewien, co robi ta funkcja, przytrzymaj palec na niej długo i pojawi się samouczek.\n</string>
@@ -58,7 +58,7 @@ Wymagany jest Android Auto 5.8 lub nowszy.</string>
     <string name="enable_tweak_string">Włącz\u0020</string>
     <string name="re_enable_tweak_string">Włącz Ponownie\u0020</string>
     <string name="copy_log">Kopia dziennika</string>
-    <string name="about">O AA AIO Tweaker</string>
+    <string name="about">O AndroidAutoX</string>
     <string name="revert_everything">Przywróć wszystko</string>
     <string name="force_disable_tweak">Wymuś wyłączenie\u0020</string>
     <string name="reset_tweak">Resetuj\u0020</string>
@@ -95,7 +95,7 @@ OSTRZEŻENIE: ta modyfikacja nie została dokładnie przetestowana i może poten
     <string name="not_enabled_warning">Android Auto nie jest włączony</string>
     <string name="not_installed_warning">Android Auto nie jest zainstalowany</string>
     <string name="currently_set">"Obecnie ustawiony: "</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER nie może znaleźć żadnego konta w bazie danych usług Google Play. Może to być spowodowane kilkoma różnymi przyczynami, takimi jak: \ n • Urządzenie, nie jest połączone z internetem \ n • Nowa instalacja telefonu \ n • Uszkodzona baza danych usług Google Play \ n • Usunięcie konta Google z telefon \ n • Wyczyszczone dane usług Google Play \ n \ nW tym przypadku AA AIO TWEAKER NIE DZIAŁA poprawnie. Jeśli niedawno usunąłeś konto Google lub wyczyściłeś zestaw danych usług Google Play, nie odłączaj telefonu od internetu i pozwól mu w pełni zbudować bazę danych usług Google Play. Może to zająć kilka godzin, w niektórych przypadkach także dni. \ N \ nJeśli spełniasz powyższe warunki a program nie działa, zgłoś to w serwisie GitHub. </string>
+    <string name="no_accounts_warning">AndroidAutoX nie może znaleźć żadnego konta w bazie danych usług Google Play. Może to być spowodowane kilkoma różnymi przyczynami, takimi jak: \ n • Urządzenie, nie jest połączone z internetem \ n • Nowa instalacja telefonu \ n • Uszkodzona baza danych usług Google Play \ n • Usunięcie konta Google z telefon \ n • Wyczyszczone dane usług Google Play \ n \ nW tym przypadku AndroidAutoX NIE DZIAŁA poprawnie. Jeśli niedawno usunąłeś konto Google lub wyczyściłeś zestaw danych usług Google Play, nie odłączaj telefonu od internetu i pozwól mu w pełni zbudować bazę danych usług Google Play. Może to zająć kilka godzin, w niektórych przypadkach także dni. \ N \ nJeśli spełniasz powyższe warunki a program nie działa, zgłoś to w serwisie GitHub. </string>
     <string name="tweak_loading">Stosowanie łatki ...</string>
     <string name="loading">Ładuję, proszę czekać.</string>
     <string name="tutorial_bitrate">Ta łatka zwiększy lub zmniejszy szybkość transmisji wideo zgodnie z ustawionym mnożnikiem (do 2,0x). Zwiększenie szybkości transmisji bitów (ponad 1,0x) oznacza, że ​​do samochodu zostanie przesłanych więcej danych, a jakość strumienia wideo może ulec poprawie w jakości wizualnej, jednak może to spowodować niestabilność. Zmniejszenie szybkości transmisji (poniżej 1,0x) spowoduje kompresję strumienia do samochodu i pogorszenie jakości, ale zapewni bardziej niezawodne i szybkie połączenie. </string>
@@ -110,10 +110,10 @@ OSTRZEŻENIE: ta modyfikacja nie została dokładnie przetestowana i może poten
     <string name="use_all">Użyj wszystkie (EKSPERYMENTALNE)</string>
     <string name="log_copied">Log został skopiowany</string>
     <string name="new_version_available">Dostępna jest nowa wersja</string>
-    <string name="go_to_new_version">Nowa wersja AA AIO TWEAKER (wersja% 1 $ s) jest dostępna na GitHub. Czy chcesz ją teraz pobrać?</string>
+    <string name="go_to_new_version">Nowa wersja AndroidAutoX (wersja% 1 $ s) jest dostępna na GitHub. Czy chcesz ją teraz pobrać?</string>
     <string name="go_to_download">Kliknij aby pobrać</string>
     <string name="ignore_for_now">Na razie zignoruj</string>
-    <string name="many_accounts_warning">AA AIO TWEAKER znalazł dużą liczbę (%1$s) kont Googla zapisanych w urządzeniu.\nMoże to mieć negatywny wpływ na sukces procesu patchowania, a AA AIO TWEAKER może się nie udać.\nMożesz wybrać konto, którego najczęściej używasz w ramach usług Google Play, aby zaaplikować łatkę tylko dla nich (2 lub mniej) lub aktywować tryb eksperymentalny, który powinien naprawić wszystkie konta.\nPROSZĘ PAMIĘTAĆ, że tryb eksperymentalny może spowodować pewne awarie telefonu, gdy łata jest uruchomiona.</string>
+    <string name="many_accounts_warning">AndroidAutoX znalazł dużą liczbę (%1$s) kont Googla zapisanych w urządzeniu.\nMoże to mieć negatywny wpływ na sukces procesu patchowania, a AndroidAutoX może się nie udać.\nMożesz wybrać konto, którego najczęściej używasz w ramach usług Google Play, aby zaaplikować łatkę tylko dla nich (2 lub mniej) lub aktywować tryb eksperymentalny, który powinien naprawić wszystkie konta.\nPROSZĘ PAMIĘTAĆ, że tryb eksperymentalny może spowodować pewne awarie telefonu, gdy łata jest uruchomiona.</string>
     <string name="dark_switch_tweak">opcja dzień/noc</string>
     <string name="tutorial_assistant_suggestions">Ta funkcja dodaje kilka szybkich skrótów do akcji Asystenta na ekranie głównym.</string>
     <string name="remove_paired_car">Usuń sparowany samochód</string>

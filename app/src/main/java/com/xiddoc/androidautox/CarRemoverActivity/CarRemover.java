@@ -1,4 +1,4 @@
-package sksa.aa.tweaker.CarRemoverActivity;
+package com.xiddoc.androidautox.CarRemoverActivity;
 
 import android.app.ProgressDialog;
 import android.content.Intent;
@@ -25,12 +25,12 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 
-import sksa.aa.tweaker.MainActivity;
-import sksa.aa.tweaker.NotSuccessfulDialog;
-import sksa.aa.tweaker.R;
-import sksa.aa.tweaker.Utils.RecyclerItemClickListener;
+import com.xiddoc.androidautox.MainActivity;
+import com.xiddoc.androidautox.NotSuccessfulDialog;
+import com.xiddoc.androidautox.R;
+import com.xiddoc.androidautox.Utils.RecyclerItemClickListener;
 
-import static sksa.aa.tweaker.MainActivity.runSuWithCmd;
+import static com.xiddoc.androidautox.MainActivity.runSuWithCmd;
 
 
 public class CarRemover extends AppCompatActivity {

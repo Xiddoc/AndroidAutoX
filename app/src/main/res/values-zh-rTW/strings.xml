@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">歡迎使用 AA AIO Tweaker
+    <string name="main_string">歡迎使用 AndroidAutoX
  本軟體可以調整Android Auto的隱藏選項
  只要簡單選擇您需要的選項即可 :) 
  如不確定選項內容，長按可檢視說明。</string>
@@ -78,7 +78,7 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="not_enabled_warning">未啟用Android Auto</string>
     <string name="not_installed_warning">未安裝Android Auto</string>
     <string name="currently_set">"當前設置："</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER在Google Play服務數據庫中找不到任何帳戶。這可能是由幾種不同的情況引起的，例如： • 大部分未連接到網際網路的設備 • 重新安裝電話 • 損壞的Google Play服務數據庫 • 從電話中刪除了Google帳戶 • 已清除的Google Play服務數據 在這種情況下，AA AIO TWEAKER將無法正常工作。如果您最近刪除了Google帳戶或清除了Google Play服務數據，請保持手機連接到網際網路，並完全建立Google Play服務數據庫。這可能需要幾個小時，在某些情況下還需要幾天。 如果您不符合上述條件之一，請在GitHub上回饋問題。</string>
+    <string name="no_accounts_warning">AndroidAutoX在Google Play服務數據庫中找不到任何帳戶。這可能是由幾種不同的情況引起的，例如： • 大部分未連接到網際網路的設備 • 重新安裝電話 • 損壞的Google Play服務數據庫 • 從電話中刪除了Google帳戶 • 已清除的Google Play服務數據 在這種情況下，AndroidAutoX將無法正常工作。如果您最近刪除了Google帳戶或清除了Google Play服務數據，請保持手機連接到網際網路，並完全建立Google Play服務數據庫。這可能需要幾個小時，在某些情況下還需要幾天。 如果您不符合上述條件之一，請在GitHub上回饋問題。</string>
     <string name="tweak_loading">正在應用調整...</string>
     <string name="loading">加載請稍候...</string>
     <string name="tutorial_bitrate">此調整將根據設定數值（最多2.0倍）提高或降低視頻傳輸位元速率。 增加位元率(大於1.0倍)意指將有更多數據流向傳輸到車機上，並且視頻的質量上可能會得到改善，但可能會導致不穩定； 降低位元率(小於1.0倍)則會壓縮流向車機值(降低質量)，但效能上更可靠、更快速的連接。</string>
@@ -93,10 +93,10 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="use_all">全部使用(實驗性)</string>
     <string name="log_copied">日誌已複製</string>
     <string name="new_version_available">新版本可用</string>
-    <string name="go_to_new_version">GitHub上提供了新版本的AA AIO TWEAKER (版本 %1$s) 您現在要下載嗎？</string>
+    <string name="go_to_new_version">GitHub上提供了新版本的AndroidAutoX (版本 %1$s) 您現在要下載嗎？</string>
     <string name="go_to_download">前往下載</string>
     <string name="ignore_for_now">現在忽略</string>
-    <string name="many_accounts_warning">AA AIO TWEAKER檢測到您的設備上存儲了大量 (%1$s)Google帳戶。\n這可能會對修補過程產生不利影響，並且AA AIO TWEAKER容易出現故障。\n為您的Google Play服務選擇主帳戶(建議兩個或更少)，然後修補或啟用實驗性模式以修補所有帳戶。\n請注意在實驗模式下，應用修補程序時，手機可能會崩潰。</string>
+    <string name="many_accounts_warning">AndroidAutoX檢測到您的設備上存儲了大量 (%1$s)Google帳戶。\n這可能會對修補過程產生不利影響，並且AndroidAutoX容易出現故障。\n為您的Google Play服務選擇主帳戶(建議兩個或更少)，然後修補或啟用實驗性模式以修補所有帳戶。\n請注意在實驗模式下，應用修補程序時，手機可能會崩潰。</string>
     <string name="dark_switch_tweak">白天/夜間 選項</string>
     <string name="tutorial_assistant_suggestions">This tweak will activate a new feature that adds some quick shortcuts to Assistant actions on top of home screen.</string>
     <string name="remove_paired_car">刪除配對的車子</string>

@@ -1,15 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#008577</color>
-    <color name="colorPrimaryDark">#00574B</color>
-    <color name="colorAccent">#D81B60</color>
-    <color name="gray_50">#D3D3D3</color>
-    <color name="gray_300">#696969</color>
-    <color name="bottomcolor">#ECECEC</color>
-    <color name="centercolor">#E4E4E4</color>
-    <color name="topcolor">#E8E8E8</color>
-    <color name="dialog_text_color">#ff000000</color>
-    <color name="menu_background">@android:color/background_light</color>
-    <color name="menu_text_color">@android:color/background_dark</color>
-    <color name="common_blue_revert">#7F7FFF</color>
+    <!-- Brand palette (sampled from the AndroidAutoX launcher icon) -->
+    <color name="brand_navy">#23303B</color>
+    <color name="brand_navy_dark">#1A242D</color>
+    <color name="brand_surface">#2E3D4A</color>
+    <color name="brand_blue">#1385C4</color>
+    <color name="brand_blue_light">#27A6E5</color>
+    <color name="brand_blue_dark">#0F6EA4</color>
+    <color name="text_primary">#ECF1F5</color>
+    <color name="text_muted">#9FB0BC</color>
+
+    <!-- Theme roles mapped onto the brand palette (always-on dark navy) -->
+    <color name="colorPrimary">@color/brand_navy</color>
+    <color name="colorPrimaryDark">@color/brand_navy_dark</color>
+    <color name="colorAccent">@color/brand_blue</color>
+
+    <!-- Page indicator: selected (bright) / unselected (muted) -->
+    <color name="gray_50">@color/brand_blue_light</color>
+    <color name="gray_300">#4A5A68</color>
+
+    <!-- Dialog / bottom-sheet gradient (navy) -->
+    <color name="topcolor">@color/brand_surface</color>
+    <color name="centercolor">@color/brand_navy</color>
+    <color name="bottomcolor">@color/brand_navy_dark</color>
+
+    <color name="dialog_text_color">@color/text_primary</color>
+    <color name="menu_background">@color/brand_surface</color>
+    <color name="menu_text_color">@color/text_primary</color>
+    <color name="common_blue_revert">@color/brand_blue_light</color>
 </resources>

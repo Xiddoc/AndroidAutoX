@@ -1,4 +1,4 @@
-package sksa.aa.tweaker;
+package com.xiddoc.androidautox;
 
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
@@ -53,8 +53,8 @@ import java.util.TimerTask;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import sksa.aa.tweaker.CarRemoverActivity.CarRemover;
-import sksa.aa.tweaker.Utils.BottomDialog;
+import com.xiddoc.androidautox.CarRemoverActivity.CarRemover;
+import com.xiddoc.androidautox.Utils.BottomDialog;
 
 @SuppressWarnings("ALL")
 public class MainActivity extends AppCompatActivity {
@@ -167,13 +167,13 @@ public class MainActivity extends AppCompatActivity {
             final BottomDialog builder2 = new BottomDialog.Builder(this)
                     .setTitle(R.string.new_version_available)
                     .setContent(getString(R.string.go_to_new_version, extras.getString("NewVersionName")))
-                    .setPositiveBackgroundColor(R.color.colorPrimary)
+                    .setPositiveBackgroundColor(R.color.brand_blue)
                     .setPositiveText(R.string.go_to_download)
                     .setNegativeText(R.string.ignore_for_now)
                     .onPositive(new BottomDialog.ButtonCallback() {
                         @Override
                         public void onClick(@NonNull BottomDialog dialog) {
-                            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Xiddoc/AA-Tweaker/releases/")));
+                            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Xiddoc/AndroidAutoX/releases/")));
                         }
                     })
                     .onNegative(new BottomDialog.ButtonCallback() {

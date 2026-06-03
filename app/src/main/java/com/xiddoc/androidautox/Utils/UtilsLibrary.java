@@ -1,4 +1,4 @@
-package sksa.aa.tweaker.Utils;
+package com.xiddoc.androidautox.Utils;
 
 import android.annotation.TargetApi;
 import android.content.Context;

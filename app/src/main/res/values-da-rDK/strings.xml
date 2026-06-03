@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_string">Velkommen i AA AIO Tweaker\n
+    <string name="main_string">Velkommen i AndroidAutoX\n
 Denne app vil lade dig anvende nogle tweaks til Android Auto\n
 Vælg blot hvad tweak du ønsker at anvende :)\n
 Hvis du er usikker på, hvad en tweak gør, langt tryk på det og en tutorial vil dukke op.</string>
@@ -92,7 +92,7 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="not_enabled_warning">Android Auto is not enabled</string>
     <string name="not_installed_warning">Android Auto is not installed</string>
     <string name="currently_set">"Currently set: "</string>
-    <string name="no_accounts_warning">AA AIO TWEAKER could not find any account in Google Play Services database. This can be caused by several different things such as:\n • Device that is mostly not connected to internet\n • Fresh install of the phone\n • Corrupted Google Play Services database\n • Removal of Google account(s) from the phone\n • Cleared datas of Google Play Services\n\nIn this scenario, AA AIO TWEAKER will FAIL to work properly. If you recently removed a Google account or cleared Google Play Services datas, please keep the phone connected to internet and let it build the Google Play Services database fully. This might take several hours, in some cases also days.\n\nIf you are not in one of the above conditions, please open a issue on GitHub.</string>
+    <string name="no_accounts_warning">AndroidAutoX could not find any account in Google Play Services database. This can be caused by several different things such as:\n • Device that is mostly not connected to internet\n • Fresh install of the phone\n • Corrupted Google Play Services database\n • Removal of Google account(s) from the phone\n • Cleared datas of Google Play Services\n\nIn this scenario, AndroidAutoX will FAIL to work properly. If you recently removed a Google account or cleared Google Play Services datas, please keep the phone connected to internet and let it build the Google Play Services database fully. This might take several hours, in some cases also days.\n\nIf you are not in one of the above conditions, please open a issue on GitHub.</string>
     <string name="tweak_loading">Applying the tweak...</string>
     <string name="loading">Loading, please wait...</string>
     <string name="tutorial_bitrate">This tweak will increase or decrease video bitrate according to the multiplier set (up to 2.0x). Increasing the bitrate (more than 1.0x) will mean that more datas will be streamed to the car and quality of video streaming could be improved in visual quality, however it might cause instability. Decreasing the bitrate (less than 1.0x) will compress the stream to the car and quality will be decreased, but it will result in a more reliable and fast connection.</string>
@@ -107,10 +107,10 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="use_all">Use all (EXPERIMENTAL)</string>
     <string name="log_copied">Log has been copied</string>
     <string name="new_version_available">New Version available</string>
-    <string name="go_to_new_version">A new version of AA AIO TWEAKER (version %1$s) is available on GitHub. Do you want to download it now?</string>
+    <string name="go_to_new_version">A new version of AndroidAutoX (version %1$s) is available on GitHub. Do you want to download it now?</string>
     <string name="go_to_download">Go to download</string>
     <string name="ignore_for_now">Ignorer for nu</string>
-    <string name="many_accounts_warning">AA AIO TWEAKER fundet et stort antal (%1$s) af Google-konti, der er gemt i enheden.\nDette kan have en negativ indvirkning på succesen af lappe processen og AA AIO TWEAKER kan mislykkes.\nDu kan enten vælge den eller de konti, som du oftest bruger med Google Play-tjenester, til at anvende programrettelsen på bare dem (2 eller mindre anbefales) eller aktivere en eksperimentel tilstand, der skal lappe alle konti.\nBEMÆRK at eksperimentelle tilstand kan forårsage nogle nedbrud på telefonen, mens patch kører.</string>
+    <string name="many_accounts_warning">AndroidAutoX fundet et stort antal (%1$s) af Google-konti, der er gemt i enheden.\nDette kan have en negativ indvirkning på succesen af lappe processen og AndroidAutoX kan mislykkes.\nDu kan enten vælge den eller de konti, som du oftest bruger med Google Play-tjenester, til at anvende programrettelsen på bare dem (2 eller mindre anbefales) eller aktivere en eksperimentel tilstand, der skal lappe alle konti.\nBEMÆRK at eksperimentelle tilstand kan forårsage nogle nedbrud på telefonen, mens patch kører.</string>
     <string name="dark_switch_tweak">indstillingen dag/nat</string>
     <string name="tutorial_assistant_suggestions">This tweak will activate a new feature that adds some quick shortcuts to Assistant actions on top of home screen.</string>
     <string name="remove_paired_car">Fjern en parret bil</string>

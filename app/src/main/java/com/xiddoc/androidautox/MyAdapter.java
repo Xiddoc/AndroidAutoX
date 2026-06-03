@@ -1,4 +1,4 @@
-package sksa.aa.tweaker;
+package com.xiddoc.androidautox;
 
 import android.content.SharedPreferences;
 import android.support.annotation.NonNull;

@@ -444,8 +444,8 @@
             app:layout_constraintTop_toBottomOf="@id/hunthrottlingbutton"
             app:layout_constraintEnd_toStartOf="@id/seekbar_text"
             android:paddingVertical="15dp"
-            android:progressTint="#FF0000"
-            android:thumbTint="#660000"
+            android:progressTint="@color/brand_blue"
+            android:thumbTint="@color/brand_blue_dark"
             android:thumb="@drawable/thumb_bg"
             android:max="20000" />
 
@@ -509,8 +509,8 @@
             app:layout_constraintTop_toBottomOf="@id/media_throttling_button"
             app:layout_constraintEnd_toStartOf="@id/second_seekbar_text"
             android:paddingVertical="15dp"
-            android:progressTint="#FF0000"
-            android:thumbTint="#660000"
+            android:progressTint="@color/brand_blue"
+            android:thumbTint="@color/brand_blue_dark"
             android:thumb="@drawable/thumb_bg"
             android:max="900000" />
 
@@ -618,8 +618,8 @@
                     app:layout_constraintTop_toBottomOf="@id/tweak_bitrate_wifi"
                     app:layout_constraintEnd_toStartOf="@id/wifi_bitrate_to_be_set"
                     android:paddingVertical="15dp"
-                    android:progressTint="#FF0000"
-                    android:thumbTint="#660000"
+                    android:progressTint="@color/brand_blue"
+                    android:thumbTint="@color/brand_blue_dark"
                     android:thumb="@drawable/thumb_bg"
                     android:max="20" />
 
@@ -686,8 +686,8 @@
                     app:layout_constraintTop_toBottomOf="@id/tweak_bitrate_usb"
                     app:layout_constraintEnd_toStartOf="@id/usb_bitrate_to_be_set"
                     android:paddingVertical="15dp"
-                    android:progressTint="#FF0000"
-                    android:thumbTint="#660000"
+                    android:progressTint="@color/brand_blue"
+                    android:thumbTint="@color/brand_blue_dark"
                     android:thumb="@drawable/thumb_bg"
                     android:max="20" />
 

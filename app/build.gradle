@@ -77,13 +77,13 @@ android {
     defaultConfig {
 
 
-        applicationId 'sksa.aa.tweaker'
+        applicationId 'com.xiddoc.androidautox'
         minSdkVersion 23
         targetSdkVersion 29
         versionCode resolvedVersionCode
         versionName '6.0.0'
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-        setProperty("archivesBaseName","AA-AIO-TWEAKER-" + versionName)
+        setProperty("archivesBaseName","AndroidAutoX-" + versionName)
         if (hasSigningConfig) {
             signingConfig signingConfigs.'new'
         }

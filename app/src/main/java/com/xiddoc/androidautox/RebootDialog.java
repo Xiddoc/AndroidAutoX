@@ -1,4 +1,4 @@
-package sksa.aa.tweaker;
+package com.xiddoc.androidautox;
 
 import android.app.Dialog;
 import android.content.DialogInterface;

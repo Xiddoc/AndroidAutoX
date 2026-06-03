@@ -1,4 +1,4 @@
-package sksa.aa.tweaker;
+package com.xiddoc.androidautox;
 
 import android.content.Context;
 import android.content.Intent;
@@ -27,9 +27,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import sksa.aa.tweaker.Utils.Version;
+import com.xiddoc.androidautox.Utils.Version;
 
-import static sksa.aa.tweaker.MainActivity.runSuWithCmd;
+import static com.xiddoc.androidautox.MainActivity.runSuWithCmd;
 
 public class SplashActivity extends AppCompatActivity {
 
@@ -58,7 +58,7 @@ public class SplashActivity extends AppCompatActivity {
     private boolean rootRequestStarted = false;
 
     private static final String actualVersion = BuildConfig.VERSION_NAME;
-    private static final String BASE_URL = "https://api.github.com/repos/Xiddoc/AA-Tweaker/releases/latest";
+    private static final String BASE_URL = "https://api.github.com/repos/Xiddoc/AndroidAutoX/releases/latest";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -121,7 +121,7 @@ public class SplashActivity extends AppCompatActivity {
         }
 
         continueButton.setEnabled(false);
-        Log.v("sksa.aa.tweaker", "Engaging countdown");
+        Log.v("com.xiddoc.androidautox", "Engaging countdown");
         new CountDownTimer(5000, 10) {
             public void onTick(long millisUntilFinished) {
                 int secondsRemaining = (int) ( 1 + (millisUntilFinished/1000));
@@ -211,9 +211,9 @@ public class SplashActivity extends AppCompatActivity {
             @Override
             public void run() {
                 // Explicit early su request so Magisk shows the prompt unmistakably.
-                Log.v("sksa.aa.tweaker", "Requesting root (su)");
+                Log.v("com.xiddoc.androidautox", "Requesting root (su)");
                 isDeviceRooted = runSuWithCmd("echo 1");
-                Log.v("sksa.aa.tweaker", "Root request result: " + isDeviceRooted.getInputStreamLog());
+                Log.v("com.xiddoc.androidautox", "Root request result: " + isDeviceRooted.getInputStreamLog());
 
                 copyAssets();
 
@@ -253,7 +253,7 @@ public class SplashActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    Log.v("sksa.aa.tweaker", "\n--  Copy sqlite3 to data directory  --");
+                    Log.v("com.xiddoc.androidautox", "\n--  Copy sqlite3 to data directory  --");
                 }
             });
             InputStream in;
@@ -271,9 +271,9 @@ public class SplashActivity extends AppCompatActivity {
                 out.flush();
                 out.close();
             } catch (IOException e) {
-                Log.e("sksa.aa.tweaker", "Failed to copy asset file: sqlite3", e);
+                Log.e("com.xiddoc.androidautox", "Failed to copy asset file: sqlite3", e);
             }
-            Log.v("sksa.aa.tweaker", runSuWithCmd("chmod 777 " + path + "/sqlite3").getStreamLogsWithLabels());
+            Log.v("com.xiddoc.androidautox", runSuWithCmd("chmod 777 " + path + "/sqlite3").getStreamLogsWithLabels());
 
     }
 

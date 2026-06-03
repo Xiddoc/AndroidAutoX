@@ -1,8 +1,9 @@
-[![Crowdin](https://badges.crowdin.net/aa-aio-tweaker/localized.svg)](https://crowdin.com/project/aa-aio-tweaker)
-[![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
-[![Platform: Android](https://img.shields.io/badge/Platform-Android-3DDC84.svg)](https://github.com/Xiddoc/AA-Tweaker)
+# AndroidAutoX 🚗⚙️
 
-# AA-AIO-TWEAKER 🚗⚙️
+![AndroidAutoX](assets/banner.png)
+
+[![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
+[![Platform: Android](https://img.shields.io/badge/Platform-Android-3DDC84.svg)](https://github.com/Xiddoc/AndroidAutoX)
 
 The ultimate All-In-One utility to tweak Android Auto behaviour.
 
@@ -33,7 +34,7 @@ The ultimate All-In-One utility to tweak Android Auto behaviour.
 
 ## 📥 Download
 
-Grab the latest APK from the [Releases page](https://github.com/Xiddoc/AA-Tweaker/releases).
+Grab the latest APK from the [Releases page](https://github.com/Xiddoc/AndroidAutoX/releases).
 
 ## 🔧 How it works
 
@@ -41,7 +42,7 @@ On a rooted device, the app runs `sqlite3` against Google Play Services' Phenoty
 
 ## 🌍 Translations
 
-AA AIO TWEAKER is open to translations — [join us on Crowdin](https://crwd.in/aa-aio-tweaker). Please don't reupload the APK elsewhere; just link people to the download page.
+AndroidAutoX is open to translations. Translations live in `app/src/main/res/values-<locale>/strings.xml` — to add or fix a language, copy the English source from `app/src/main/res/values/strings.xml` and open a pull request. Please don't reupload the APK elsewhere; just link people to the download page.
 
 ## 🙏 Credits
 
@@ -49,4 +50,3 @@ AA AIO TWEAKER is open to translations — [join us on Crowdin](https://crwd.in/
 - [Jen94](https://github.com/jen94) for the original app whitelist hack
 - [SAAX by agentdr8](https://gitlab.com/agentdr8/saax), which inspired several features
 - [AA Phenotype Patcher by Eselter](https://github.com/Eselter/AA-Phenotype-Patcher)
-- Icon by [FreePik](http://www.freepik.com/) / [FlatIcon](https://www.flaticon.com/)

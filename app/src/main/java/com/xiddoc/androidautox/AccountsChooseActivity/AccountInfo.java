@@ -1,4 +1,4 @@
-package sksa.aa.tweaker.AccountsChooseActivity;
+package com.xiddoc.androidautox.AccountsChooseActivity;
 
 import java.util.ArrayList;
 

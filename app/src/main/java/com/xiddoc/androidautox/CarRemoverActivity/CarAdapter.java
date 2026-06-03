@@ -1,4 +1,4 @@
-package sksa.aa.tweaker.CarRemoverActivity;
+package com.xiddoc.androidautox.CarRemoverActivity;
 
 import android.content.SharedPreferences;
 import android.support.annotation.NonNull;
@@ -12,7 +12,7 @@ import com.rm.rmswitch.RMSwitch;
 
 import java.util.ArrayList;
 
-import sksa.aa.tweaker.R;
+import com.xiddoc.androidautox.R;
 
 public class CarAdapter extends RecyclerView.Adapter<CarAdapter.SampleViewHolder> {
 
