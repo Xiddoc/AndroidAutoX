@@ -56,9 +56,6 @@
     <string name="default_string">默認設備</string>
     <string name="app_list_label">應用列表</string>
     <string name="translators_button">翻譯者</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER是由 Shmykelsa 開發和維護的。<br><br>源代碼可在<a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[如果你真的喜歡我的工作，請考慮捐贈。<br><a href=\"http://www.paypal.me/grizzo96\">Paypal</a 捐贈或者按下方的比特幣按鈕複製地址。br><br>即使小額也會受到歡迎:)]]></string>
-    <string name="copied_address_toast">地址已複製到剪貼板</string>
     <string name="custom_wallpapers">背景</string>
     <string name="tutorial_wallpapers">此調整可啟用新的內置Android Auto牆紙更換器。 需要Android Auto 5.8或更高版本。 警告：如果您是Android Auto牆紙用戶，則需要至少更新到3.0版。 否則，此調整將破壞Android Auto牆紙的功能。</string>
     <string name="tutorial_dark_mode">從2020年12月開始，Google取消了自Android 10以來發生的行為。以前，Android Auto的亮/暗模式遵循智能手機的亮/暗模式。換句話說，將智能手機切換為黑暗模式也會影響汽車，如果手機處於黑暗模式且汽車的燈光不亮，則智能手機的燈光模式也會打開。 但是，隨著這種“獨立”暗模式功能的引入，售後主機的用戶無法將模式切換到暗模式，除非他們實際將立體聲音響連接到了車燈上。 此調整使“夜間模式”再次取決於智能手機，並且在智能手機上的“亮/暗”模式之間切換，也會對汽車產生影響。</string>

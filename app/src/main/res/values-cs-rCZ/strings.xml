@@ -79,9 +79,6 @@ Je vyžadován Android Auto verze 5.8 a vyšší.</string>
     <string name="default_string">\u0020Výchozí</string>
     <string name="app_list_label">Seznam aplikací</string>
     <string name="translators_button">Přeložil</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER je vyvíjen a spravován uživatelem Shmykelsa.<br><br>Zdrojový kód je k dispozici na <a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[Pokud se Vám opravdu líbí moje práce, zvažte zaslání příspěvku.<br> Podpořit mě můžete prostřednictvím <a href=\"http://www.paypal.me/grizzo96\">PayPal</a> nebo můžete zkopírovat mou Bitcoin adresu pomocí tlačítka níže.<br><br>Dokonce i malá částka mně bude odměnou :)]]></string>
-    <string name="copied_address_toast">Adresa BTC zkopírována do schránky</string>
     <string name="custom_wallpapers">Tapety</string>
     <string name="tutorial_wallpapers">Toto nastavení aktivuje změnu vestavěné tapety v Android Auto. Je vyžadován Android Auto verze 5.8 a vyšší.\n
 UPOZORNĚNÍ: Pokud používáte aplikaci Wallpapers for Android Auto, budete jí muset aktualizovat alespoň na verzi 3, jinak toto mastavení naruší funkčnost aplikace Wallpapers for Android Auto.</string>

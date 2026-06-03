@@ -72,9 +72,6 @@ Wymagany jest Android Auto 5.8 lub nowszy.</string>
     <string name="default_string">\u0020Domyślne</string>
     <string name="app_list_label">Lista Aplikacji</string>
     <string name="translators_button">Przetłumaczone przez</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER jest rozwijany i utrzymywany przez Shmykelsa.<br><br>Kod źródłowy jest dostępny na <a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[Jeśli naprawdę podoba ci się moja praca, rozważ darowiznę.<br> Możesz przekazać mi darowiznę poprzez <a href=\"http://www.paypal.me/grizzo96\">PayPal</a> lub skopiować mój adres Bitcoin za pomocą przycisku poniżej.<br><br>Nawet niewielka kwota będzie bardzo mile widziana :)]]></string>
-    <string name="copied_address_toast">Adres BTC skopiowany do schowka</string>
     <string name="custom_wallpapers">Tapety</string>
     <string name="tutorial_wallpapers">Ta modyfikacja aktywuje nowy wbudowany zmieniacz tapet w Android Auto. Wymagany jest Android Auto 5.8 lub nowszy.\nOSTRZEŻENIE: Jeśli jesteś użytkownikiem Wallpapers For Android Auto, musisz ją zaktualizować do co najmniej wersji 3.0, w przeciwnym razie ta modyfikacja zepsuje funkcjonalność Wallpapers For Android Auto.</string>
     <string name="tutorial_dark_mode">Począwszy od grudnia 2020 r., Google przywrócił zachowanie, które miało miejsce od czasu Androida 10. Wcześniej tryb jasny/ciemny w Android Auto był zgodny z trybem jasnym / ciemnym w telefonie i odwrotnie. Oznaczało to, że przełączenie telefonu w tryb ciemny wpływało na samochód lub jeśli telefon był w trybie ciemnym, a samochód miał wyłączone światła, włączał jasny motyw w telefonie.\n Jednak, ponieważ została wprowadzona funkcja „niezależny” tryb ciemny,

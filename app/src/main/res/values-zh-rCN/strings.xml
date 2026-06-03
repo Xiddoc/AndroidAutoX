@@ -77,9 +77,6 @@
     <string name="default_string">\u0020默认设置</string>
     <string name="app_list_label">应用列表</string>
     <string name="translators_button">翻译者</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER是由 Shmykelsa 开发和维护的。<br><br>源代码可在 <a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[如果你真的喜欢我的工作，请考虑捐赠。<br> 您可以通过 <a href=\"http://www.paypal.me/grizzo96\">PayPal</a> 捐赠我，或者您可以通过下面的按钮复制我的比特币地址。<br><br>即使少量钱也会受到欢迎:)]]></string>
-    <string name="copied_address_toast">地址已复制到剪贴板</string>
     <string name="custom_wallpapers">壁纸</string>
     <string name="tutorial_wallpapers">这一调整将激活Android Auto的壁纸更换功能。需要Android Auto 5.8或更高版本。\n警告：如果您使用 Wallpapers For Android Auto应用，需要将其更新到最低3.0版本，否则此调整将破坏Wallpapers For Android Auto的功能。</string>
     <string name="tutorial_dark_mode">从2020年12月开始，谷歌取消了一个自安卓10以来的功能。之前，Android Auto上的亮/暗模式遵循手机上的亮/暗模式，反之亦然。这意味着将手机切换到暗模式会对汽车生效，或者如果手机处于暗模式，汽车熄灯将打开手机上的日间模式。\n但是，由于引入了“独立”暗模式，因此改装车机的用户无法再切换到暗模式，除非将车机连接到车灯。\n此调整可确保夜间模式再次依赖于手机，在手机上切换明暗模式可对汽车生效。</string>

@@ -73,9 +73,6 @@ Preprosto: izberite želeno spremembo :)\n
     <string name="default_string">\u0020Privzeto</string>
     <string name="app_list_label">Seznam aplikacij</string>
     <string name="translators_button">Prevedel</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER razvija in servisira Shmykelsa.<br><br>Izvirna koda je na razpolago na <a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[Če vam je moje delo všeč, prosim razmislite o donaciji.<br> Lahko donirate preko <a href=\"http://www.paypal.me/grizzo96\">PayPal</a> ali lahko kopirate moj Bitcoin naslov s sledečim gumbom.<br><br>Tudi mala vsota je zelo cenjena :)]]></string>
-    <string name="copied_address_toast">BTC Naslov kopiran v odložišče</string>
     <string name="custom_wallpapers">Ozadja</string>
     <string name="tutorial_wallpapers">Popravek bo vklopil možnost spremembe ozadja v Android Auto. Potrebna Android Auto verzija 5.8 ali višja.\nPOZOR: če uporabljate aplikacijo Wallpapers For Android Auto, bo potrebno posodobiti aplikacijo na verzijo 3.0 ali višjo, v nasprotnem primeru aplikacija Wallpapers For Android Auto ne bo delovala.</string>
     <string name="tutorial_dark_mode">Od decembra 2020 se je vrnilo obnašanje, ki je bilo prisotno že od Android 10. Sprememba temne v svetlo temo in obratno na telefonu se je odražala tudi v avtu. Torej, ko je bila izbrana temna tema na telefonu, se je tudi tema avta potemnila; prav tako, ko je bila na telefonu izbrana temna tema in so ugasnile luči, je telefon samodejno preklopil v svetlo temo.\n To je prineslo do nekaterih težav uporabnikom radijev tretjih proizvajalcev (aftermarket), saj niso mogli sami izbrati temne teme v avtu ne da bi povezali radio tudi na kable od luči.\n Popravek omogoči ročno spreminjanje svetle ali temne teme iz telefona, kar se bo odražalo tudi na temo v avtu.</string>

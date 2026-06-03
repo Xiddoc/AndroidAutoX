@@ -69,9 +69,6 @@
     <string name="default_string">\u0020원래대로</string>
     <string name="app_list_label">앱 목록</string>
     <string name="translators_button">Translated by mabig, 스프라이트</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER은 Shmykelsa가 개발 및 유지 관리합니다.<br><br>소스 코드는 <a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>에서 사용할 수 있습니다.]]></string>
-    <string name="about_part_two"><![CDATA[나의 앱이 마음에 드신다면, 기부를 해주세요. <br> 당신은 저에게 <a href=\"http://www.paypal.me/grizzo96\">PayPal</a>또는 아래 Bitcoin버튼을 눌러 제 비트코인 주소를 복사하셔도 됩니다. 적은 액수라도 매우 감사합니다 :)]]></string>
-    <string name="copied_address_toast">BTC 주소가 클립보드에 복사되었습니다.</string>
     <string name="custom_wallpapers">배경화면</string>
     <string name="tutorial_wallpapers">안드로이드 오토에 새로 생긴 배경화면 체인저를 활성화합니다.\n경고: 안드로이드 오토용 배경화면 사용자인 경우 최소 버전 3.0이상으로 업데이트해야합니다. 그렇지 않으면, 안드로이드 오토용 배경화면 기능이 손상됩니다.</string>
     <string name="tutorial_dark_mode">2020년 12월부터 구글은 안드로이드 10 이후 발생한 동작을 되돌렸습니다. 이전에는 안드로이드 오토의 주간/야간 모드가 사용자의 스마트폰 주간/야간 모드에 따라 설정되었습니다. 이것은 스마트폰을 야간모드로 전환하는 것이 자동차에 영향을 미쳤거나, 스마트폰이 Dark 모드에 있고 자동차 화면에 불이 꺼진 경우 전화기의 조명 테마를 켜는 데 사용된다는 것을 의미했습니다.\n 그러나 \"독립적\" 야간 모드의 이 기능이 도입된 이후 애프터마켓 헤드 유닛을 가진 사용자는 실제로 스테레오를 자동차 조명에 배선하지 않고 더 이상 야간 모드로 전환할 방법이 없습니다.\n이 설정은 야간 모드가 다시 스마트폰에 설정에 종속되도록 하고 스마트폰의 명암 모드를 통해 전환하는 것을 자동차에도 설정 하는 것입니다.</string>
