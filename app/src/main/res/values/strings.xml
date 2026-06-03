@@ -40,7 +40,7 @@ It\'s not possible to set a specific app to start first.</string>
     <string name="tutorial_autoplay_message">This tweak enables the possibility to set whether Android Auto must read the incoming messages or not. Android Auto 8.3 or superior is required.</string>
     <string name="tutorial_statusbar_opaque">This tweak will make the status bar always black.</string>
     <string name="tutorial_battery_outline">This tweak will prevent the battery icon with the red outline when battery saver is on.</string>
-    <string name="tutorial_hun">This tweak lets you set a custom duration for heads up notifications</string>
+    <string name="tutorial_hun">This tweak lets you set a custom duration for heads-up notifications.</string>
     <string name="tutorial_media_hun">This tweak lets you set a custom duration for media notifications in navigation bar to up to 15 minutes.</string>
     <string name="tutorial_bluetooth">This tweak should prevent Bluetooth from turning on when Android Auto is connected. This tweak won\'t work if Bluetooth is already on.</string>
     <string name="tutorial_patchapps">This tweak will enable third-party apps made specifically with Android Auto custom SDK to work on Android Auto.\n
@@ -54,7 +54,7 @@ Apparently, only Google Maps currently supports this mode.\n
 This feature is probably under development and could potentially not work as intended.\n
 Android Auto 5.8 or superior is required.</string>
     <string name="battery_warning">Battery saver warning</string>
-    <string name="tutorial_battery_saver_warning">This tweak will prevent Android Auto from giving popup warnings when battery saver mode is on</string>
+    <string name="tutorial_battery_saver_warning">This tweak will prevent Android Auto from showing pop-up warnings when battery saver mode is on.</string>
     <string name="disable_tweak_string">Disable\u0020</string>
     <string name="enable_tweak_string">Enable\u0020</string>
     <string name="re_enable_tweak_string">Re-enable\u0020</string>
@@ -148,20 +148,20 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="section_four">Video quality settings</string>
     <string name="section_five">Pre-activate features</string>
     <string name="restricted_coolwalk">\nThis option will only work with Coolwalk enabled.</string>
-    <string name="warning_patch_apps">Warning! This operation will ERASE ALL THE DATA from the selected app(s). Please make sure you have a backup of the data. Do you want to proceed anyways?</string>
+    <string name="warning_patch_apps">Warning! This operation will ERASE ALL THE DATA from the selected app(s). Please make sure you have a backup of the data. Do you want to proceed anyway?</string>
     <string name="tappable_progress">New progress bar</string>
     <string name="tappable_progress_tutorial">Finally we are gaining a touchable progress bar for what\'s playing on Android Auto. Yes, we can seek through the current track. Requires Android Auto 8.3 or superior.</string>
     <string name="uxprototype_tutorial">All this tweak does is basically create a free shortcut on the home page to open a web page. It involves an Easter egg hidden in Android Auto released on 1st of April 2022. Activate \"Developer mode\" in \"Developer settings\" under \"Application mode\". It\'s the only way to have an actual fullscreen app on Android Auto right now. WARNING: Not exitable, use this if you only plan on using this on your car. There\'s no back button either.</string>
     <string name="uxprototype_dialog">Enter a valid full URL</string>
     <string name="uxprototype_tweak">Custom shortcut</string>
     <string name="tutorial_new_seekbar">"This tweak enables a movable seekbar for media apps."</string>
-    <string name="tutorial_materialyou">"This tweak enables material you style for the Android Auto's settings on the phone. This properly works only on Android Auto 8.8> as tested"</string>
+    <string name="tutorial_materialyou">"This tweak enables Material You style for the Android Auto's settings on the phone. This properly works only on Android Auto 8.8 or superior, as tested."</string>
     <string name="materialyou_tweak" translatable="false">"Material You UI"</string>
     <string name="tutorial_nocoolwalk">Are you absolutely hating Coolwalk? This tweak is for you.</string>
     <string name="portrait_layout">Force vertical layout</string>
     <string name="tutorial_portrait">This tweak will force the portrait layout of Android Auto with dashboard on the bottom.</string>
     <string name="inertial_scroll_tweak">inertial scroll</string>
-    <string name="tutorial_inertial_scroll">This tweak will override the default scrolling behaviour of Android Auto making so that it doesn\'t stop page by page.</string>
+    <string name="tutorial_inertial_scroll">This tweak will override the default scrolling behaviour of Android Auto, making it so that it doesn\'t stop page by page.</string>
     <string name="vertical_bar_tweak">Vertical Bar</string>
     <string name="tutorial_vertical_bar_tweak">This tweak will force the bar to be vertical. This tweak will only work on Coolwalk UI.</string>
 </resources>
