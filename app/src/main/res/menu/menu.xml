@@ -21,4 +21,9 @@
         app:showAsAction="never"
         android:title="PoC: Phixit apply test" />
 
+    <item
+        android:id="@+id/phixit_dump_all"
+        app:showAsAction="never"
+        android:title="PoC: Dump all flags to file" />
+
 </menu>

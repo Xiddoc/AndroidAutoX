@@ -1617,6 +1617,10 @@ public class MainActivity extends AppCompatActivity {
                 phixitApplyTest((TextView) findViewById(R.id.logs));
                 break;
 
+            case R.id.phixit_dump_all:
+                dumpAllFlags((TextView) findViewById(R.id.logs));
+                break;
+
             default:
                 return super.onOptionsItemSelected(item);
         }
@@ -4388,6 +4392,61 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
 
     public static final String PHENO_DB =
             "/data/data/com.google.android.gms/databases/phenotype.db";
+
+    /**
+     * Decodes every gearhead + car flag from the snapshot and writes them
+     * (name = value) to a file, copied to /sdcard/Download for easy sharing.
+     */
+    private void dumpAllFlags(final TextView logs) {
+        final String path = getApplicationInfo().dataDir;
+        final String filesDir = getFilesDir().getAbsolutePath();
+        new Thread() {
+            @Override
+            public void run() {
+                StringBuilder file = new StringBuilder();
+                String[] pkgs = {FlagSpec.PKG_GEARHEAD, FlagSpec.PKG_CAR};
+                int total = 0;
+                for (String pkg : pkgs) {
+                    java.util.TreeMap<String, String> map = new java.util.TreeMap<String, String>();
+                    StreamLogs r = runSuWithCmd(
+                            path + "/sqlite3 -batch " + PHENO_DB + " " +
+                                    "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
+                                    "WHERE static_config_package_id IN (SELECT static_config_package_id " +
+                                    "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
+                    for (String line : r.getInputStreamLog().split("\\r?\\n")) {
+                        int bar = line.indexOf('|');
+                        if (bar <= 0) continue;
+                        String hex = line.substring(bar + 1).trim();
+                        if (hex.isEmpty()) continue;
+                        try {
+                            for (PhixitSnapshot.Flag f :
+                                    PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex)))) {
+                                if (!f.numericName) map.put(f.name, f.describe());
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    file.append("# ").append(pkg).append(" (").append(map.size()).append(" flags)\n");
+                    for (java.util.Map.Entry<String, String> e : map.entrySet()) {
+                        file.append(e.getValue()).append("\n");
+                    }
+                    file.append("\n");
+                    total += map.size();
+                }
+                String outFile = filesDir + "/all_flags.txt";
+                try {
+                    java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile);
+                    fos.write(file.toString().getBytes("UTF-8"));
+                    fos.close();
+                } catch (Exception e) {
+                    appendText(logs, "\n  dump write ERR: " + e + "\n");
+                }
+                runSuWithCmd("cp " + outFile + " /sdcard/Download/androidautox_flags.txt && chmod 644 /sdcard/Download/androidautox_flags.txt");
+                appendText(logs, "\n\n==== DUMPED " + total +
+                        " flags to /sdcard/Download/androidautox_flags.txt ====\n");
+            }
+        }.start();
+    }
 
     /**
      * Applies {@code specs} to every param_partition of each referenced package,
