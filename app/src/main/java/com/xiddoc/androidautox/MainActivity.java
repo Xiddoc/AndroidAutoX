@@ -300,14 +300,10 @@ public class MainActivity extends AppCompatActivity {
 
         TextView logs = initiateLogsText();
 
-        appendText(logs, runSuWithCmd(
-                path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                        "'SELECT * FROM FlagOverrides;'"
-        ).getStreamLogsWithLabels());
-        appendText(logs, runSuWithCmd(
-                path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                        "'SELECT * FROM sqlite_master WHERE type=\"trigger\";'"
-        ).getStreamLogsWithLabels());
+        // PoC (step 1): read-only diagnostic of the new "phixit" Phenotype snapshot.
+        // Decodes param_partitions.flags_content, round-trip self-tests the codec,
+        // and reports flag names/types. Does NOT write to the GMS database.
+        phixitDiagnostic(logs);
 
 
         animationRun = false;
@@ -4076,6 +4072,131 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         appendText(logs, runSuWithCmd("am kill all com.google.android.gms").getStreamLogsWithLabels());
     }
 
+
+    /**
+     * PoC step 1: read-only diagnostic for the new "phixit" Phenotype schema.
+     *
+     * <p>Reads {@code param_partitions.flags_content} for the Android Auto config
+     * packages, decompresses + decodes it with {@link PhixitSnapshot}, runs a
+     * bit-exact round-trip self-test of the codec (decode -> encode must reproduce
+     * the original decompressed bytes), and reports flag counts, naming scheme
+     * (string vs numeric), and whether known AndroidAutoX target flags are present.
+     * It performs NO writes to the GMS database.
+     */
+    private void phixitDiagnostic(final TextView logs) {
+        final String path = getApplicationInfo().dataDir;
+        final String db = "/data/data/com.google.android.gms/databases/phenotype.db";
+        final String[] pkgs = {
+                "com.google.android.projection.gearhead",
+                "com.google.android.gms.car"
+        };
+        final String[] targets = {
+                "AppQualityTester__developer_setting_enabled",
+                "ContentBrowse__sixtap_force_enabled",
+                "ContentBrowse__drawer_default_allowed_taps_touchpad",
+                "Watevra__max_list_size",
+                "BatterySaver__warning_enabled",
+                "MultiDisplay__enabled"
+        };
+
+        new Thread() {
+            @Override
+            public void run() {
+                StringBuilder sb = new StringBuilder();
+                sb.append("\n==== PHIXIT PoC DIAGNOSTIC (read-only) ====\n");
+
+                for (String pkg : pkgs) {
+                    sb.append("\n-- package: ").append(pkg).append(" --\n");
+
+                    StreamLogs r = runSuWithCmd(
+                            path + "/sqlite3 -batch " + db + " " +
+                                    "'SELECT param_partition_id, hex(flags_content) " +
+                                    "FROM param_partitions WHERE static_config_package_id IN " +
+                                    "(SELECT static_config_package_id FROM static_config_packages " +
+                                    "WHERE name=\"" + pkg + "\");'");
+
+                    if (!r.getErrorStreamLog().isEmpty()) {
+                        sb.append("  ERR: ").append(r.getErrorStreamLog()).append("\n");
+                    }
+
+                    String out = r.getInputStreamLog();
+                    if (out.isEmpty()) {
+                        sb.append("  (no partitions matched by static_config_packages.name)\n");
+                        StreamLogs names = runSuWithCmd(
+                                path + "/sqlite3 -batch " + db + " " +
+                                        "'SELECT static_config_package_id || \"=\" || name " +
+                                        "FROM static_config_packages WHERE name LIKE \"%gearhead%\" " +
+                                        "OR name LIKE \"%projection%\" OR name LIKE \"%gms.car%\";'");
+                        sb.append("  candidate static_config_packages:\n");
+                        sb.append("    ").append(names.getInputStreamLog().replace("\n", "\n    ")).append("\n");
+                        continue;
+                    }
+
+                    java.util.List<PhixitSnapshot.Flag> all = new java.util.ArrayList<PhixitSnapshot.Flag>();
+                    for (String line : out.split("\\r?\\n")) {
+                        int bar = line.indexOf('|');
+                        if (bar <= 0) continue;
+                        String pid = line.substring(0, bar).trim();
+                        String hex = line.substring(bar + 1).trim();
+                        if (hex.isEmpty()) {
+                            sb.append("  partition ").append(pid).append(": empty blob\n");
+                            continue;
+                        }
+                        try {
+                            byte[] comp = PhixitSnapshot.hexToBytes(hex);
+                            byte[] dec = PhixitSnapshot.inflateRaw(comp);
+                            java.util.List<PhixitSnapshot.Flag> flags = PhixitSnapshot.decode(dec);
+                            byte[] re = PhixitSnapshot.encode(flags);
+                            boolean ok = java.util.Arrays.equals(dec, re);
+
+                            int strNamed = 0, numNamed = 0;
+                            for (PhixitSnapshot.Flag f : flags) {
+                                if (f.numericName) numNamed++; else strNamed++;
+                            }
+
+                            sb.append("  partition ").append(pid)
+                                    .append(": comp=").append(comp.length)
+                                    .append("B decomp=").append(dec.length)
+                                    .append("B flags=").append(flags.size())
+                                    .append(" (string=").append(strNamed)
+                                    .append(", numeric=").append(numNamed).append(")")
+                                    .append("  round-trip=").append(ok ? "PASS" : "FAIL")
+                                    .append("\n");
+                            if (!ok) {
+                                sb.append("    !! re-encoded ").append(re.length)
+                                        .append("B != original ").append(dec.length).append("B\n");
+                            }
+
+                            int shown = 0;
+                            for (PhixitSnapshot.Flag f : flags) {
+                                if (f.numericName) continue;
+                                sb.append("      ").append(f.describe()).append("\n");
+                                if (++shown >= 10) break;
+                            }
+                            all.addAll(flags);
+                        } catch (Exception e) {
+                            sb.append("  partition ").append(pid)
+                                    .append(": DECODE EXCEPTION ").append(e).append("\n");
+                        }
+                    }
+
+                    sb.append("  -- target flag lookup --\n");
+                    for (String t : targets) {
+                        PhixitSnapshot.Flag found = null;
+                        for (PhixitSnapshot.Flag f : all) {
+                            if (!f.numericName && t.equals(f.name)) { found = f; break; }
+                        }
+                        sb.append("    ").append(t).append(": ")
+                                .append(found == null ? "NOT PRESENT" : found.describe())
+                                .append("\n");
+                    }
+                }
+
+                sb.append("==== END PoC DIAGNOSTIC ====\n");
+                appendText(logs, sb.toString());
+            }
+        }.start();
+    }
 
     public static StreamLogs runSuWithCmd(String cmd) {
         DataOutputStream outputStream = null;
