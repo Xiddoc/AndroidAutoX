@@ -27,7 +27,10 @@ jobs:
         # and Gradle must share JDK 11.
         uses: android-actions/setup-android@v3
         with:
-          cmdline-tools-version: '9.0'
+          # 9477386 == command-line tools 9.0, the last release that runs on
+          # JDK 11 (11.0+ require JDK 17). Value is the build number, not "9.0".
+          cmdline-tools-version: '9477386'
+          packages: 'platform-tools platforms;android-29 build-tools;29.0.3'
         env:
           SKIP_JDK_VERSION_CHECK: 'true'
 
