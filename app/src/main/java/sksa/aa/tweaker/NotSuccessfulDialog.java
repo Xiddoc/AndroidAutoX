@@ -27,7 +27,7 @@ public class NotSuccessfulDialog extends DialogFragment {
                 ,
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
-                        IssueReporterLauncher.forTarget("shmykelsa", "AA-tweaker")
+                        IssueReporterLauncher.forTarget("Xiddoc", "AA-Tweaker")
                                 // [Recommended] Theme to use for the reporter.
                                 // (See #theming for further information.)
                                 .theme(R.style.IssueTheme)

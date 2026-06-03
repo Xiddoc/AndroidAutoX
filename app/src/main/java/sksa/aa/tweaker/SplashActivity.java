@@ -58,7 +58,7 @@ public class SplashActivity extends AppCompatActivity {
     private boolean rootRequestStarted = false;
 
     private static final String actualVersion = BuildConfig.VERSION_NAME;
-    private static final String BASE_URL = "https://api.github.com/repos/shmykelsa/AA-Tweaker/releases/latest";
+    private static final String BASE_URL = "https://api.github.com/repos/Xiddoc/AA-Tweaker/releases/latest";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

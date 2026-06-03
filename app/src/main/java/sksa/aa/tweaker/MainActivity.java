@@ -176,7 +176,7 @@ public class MainActivity extends AppCompatActivity {
                     .onPositive(new BottomDialog.ButtonCallback() {
                         @Override
                         public void onClick(@NonNull BottomDialog dialog) {
-                            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/shmykelsa/AA-Tweaker/releases/")));
+                            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Xiddoc/AA-Tweaker/releases/")));
                         }
                     })
                     .onNegative(new BottomDialog.ButtonCallback() {
