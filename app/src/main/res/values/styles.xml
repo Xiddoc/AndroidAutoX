@@ -1,12 +1,17 @@
 <resources>
 
-    <!-- Base application theme. -->
+    <!-- Base application theme: always-on dark navy brand theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.DarkActionBar">
         <!-- Customize your theme here. -->
-        <item name="colorPrimary">#FFFFFF</item>
-        <item name="colorPrimaryDark">#FFFFFF</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="titleTextColor">#000000</item>
+        <item name="colorPrimary">@color/brand_navy</item>
+        <item name="colorPrimaryDark">@color/brand_navy_dark</item>
+        <item name="colorAccent">@color/brand_blue</item>
+        <item name="android:colorBackground">@color/brand_navy</item>
+        <item name="android:windowBackground">@color/brand_navy</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_muted</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="titleTextColor">@color/text_primary</item>
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
     </style>

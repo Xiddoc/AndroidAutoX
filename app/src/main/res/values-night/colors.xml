@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bottomcolor">#1E1E1E</color>
-    <color name="centercolor">#2C2C2C</color>
-    <color name="topcolor">#3C3C3C</color>
-    <color name="dialog_text_color">#ffffffff</color>
-    <color name="menu_text_color">@android:color/background_light</color>
-    <color name="menu_background">@android:color/background_dark</color>
+    <!-- Keep night identical to day: always-on dark navy brand theme. -->
+    <color name="topcolor">@color/brand_surface</color>
+    <color name="centercolor">@color/brand_navy</color>
+    <color name="bottomcolor">@color/brand_navy_dark</color>
+    <color name="dialog_text_color">@color/text_primary</color>
+    <color name="menu_text_color">@color/text_primary</color>
+    <color name="menu_background">@color/brand_surface</color>
 </resources>

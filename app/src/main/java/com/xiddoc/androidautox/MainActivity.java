@@ -167,7 +167,7 @@ public class MainActivity extends AppCompatActivity {
             final BottomDialog builder2 = new BottomDialog.Builder(this)
                     .setTitle(R.string.new_version_available)
                     .setContent(getString(R.string.go_to_new_version, extras.getString("NewVersionName")))
-                    .setPositiveBackgroundColor(R.color.colorPrimary)
+                    .setPositiveBackgroundColor(R.color.brand_blue)
                     .setPositiveText(R.string.go_to_download)
                     .setNegativeText(R.string.ignore_for_now)
                     .onPositive(new BottomDialog.ButtonCallback() {

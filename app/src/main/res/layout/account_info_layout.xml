@@ -5,6 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="5dp"
+    card_view:cardBackgroundColor="@color/brand_surface"
     card_view:cardCornerRadius="5dp"
     card_view:cardElevation="5dp">
     <LinearLayout
@@ -25,6 +26,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/raleway_semibold"
                 android:text="Name"
+                android:textColor="@color/text_primary"
                 android:textSize="20sp" />
 
         </LinearLayout>
@@ -37,10 +39,10 @@
             android:layout_gravity="center_vertical"
             app:enabled="true"
             app:switchDesign="slim"
-            app:switchBkgCheckedColor="#6363FF"
-            app:switchBkgNotCheckedColor="#474747"
-            app:switchToggleCheckedColor="#2298FF"
-            app:switchToggleNotCheckedColor="#121212" />
+            app:switchBkgCheckedColor="@color/brand_blue"
+            app:switchBkgNotCheckedColor="#4A5A68"
+            app:switchToggleCheckedColor="@color/brand_blue_light"
+            app:switchToggleNotCheckedColor="@color/brand_navy_dark" />
 
 
     </LinearLayout>

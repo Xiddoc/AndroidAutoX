@@ -14,7 +14,7 @@
             <size
                 android:height="18dp"
                 android:width="18dp" />
-            <solid android:color="#12FF00" />
+            <solid android:color="@color/brand_blue_light" />
         </shape>
     </item>
 </layer-list>

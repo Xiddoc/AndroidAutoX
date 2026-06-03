@@ -81,7 +81,7 @@
             android:layout_height="wrap_content"
             android:text="@android:string/ok"
             android:textSize="16sp"
-            android:textColor="@color/colorPrimary"
+            android:textColor="@color/brand_blue_light"
             style="?android:attr/buttonBarButtonStyle" />
 
             <Button
@@ -93,7 +93,7 @@
                 android:layout_height="wrap_content"
                 android:text="@android:string/cancel"
                 android:textSize="16sp"
-                android:textColor="@color/colorPrimary"
+                android:textColor="@color/brand_blue_light"
                 style="?android:attr/buttonBarButtonStyle" />
 
         </LinearLayout>
