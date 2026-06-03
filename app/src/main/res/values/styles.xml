@@ -39,12 +39,18 @@
     </style>
 
     <style name="ButtonStyle">
-        <item name="android:layout_margin">3dp</item>
+        <!-- Edge insets handled in layout; more vertical breathing room.
+             Use explicit top/bottom margins (layout_marginVertical is API 26+). -->
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:layout_marginBottom">6dp</item>
         <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textSize">14sp</item>
         <item name="android:background">@drawable/button_background</item>
         <item name="android:fontFamily">@font/raleway_medium</item>
         <item name="android:gravity">center</item>
         <item name="android:textAllCaps">false</item>
+        <!-- Rely on the drawable glow for depth; drop the platform shadow animator -->
+        <item name="android:stateListAnimator">@null</item>
     </style>
 
 
