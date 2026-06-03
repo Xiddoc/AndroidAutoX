@@ -17,11 +17,11 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.NonNull;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.view.ViewPager;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.Toolbar;
+import androidx.annotation.NonNull;
+import androidx.fragment.app.DialogFragment;
+import androidx.viewpager.widget.ViewPager;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -206,7 +206,7 @@ public class MainActivity extends AppCompatActivity {
         adapter.insertViewId(R.id.page_two, getString(R.string.tab_logs));
         viewPager.setAdapter(adapter);
 
-        android.support.design.widget.TabLayout tabLayout = findViewById(R.id.tab_layout);
+        com.google.android.material.tabs.TabLayout tabLayout = findViewById(R.id.tab_layout);
         tabLayout.setupWithViewPager(viewPager);
 
         Toolbar myToolbar = findViewById(R.id.toolbar);
@@ -404,7 +404,7 @@ public class MainActivity extends AppCompatActivity {
                                 Toast.makeText(getApplicationContext(), getString(R.string.choose_apps_warning), Toast.LENGTH_LONG).show();
                             } else{
                                 temp = true;
-                                final android.support.v7.app.AlertDialog.Builder builder = new android.support.v7.app.AlertDialog.Builder(MainActivity.this);
+                                final androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this);
                                 builder.setTitle(getString(R.string.warning_title));
                                 builder.setMessage(getResources().getString(R.string.warning_patch_apps));
                                 builder.setNeutralButton( getString(android.R.string.ok),
@@ -1566,7 +1566,7 @@ public class MainActivity extends AppCompatActivity {
                 break;
 
             case R.id.revert_everything:
-                final android.support.v7.app.AlertDialog.Builder builder = new android.support.v7.app.AlertDialog.Builder(MainActivity.this);
+                final androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this);
                 builder.setMessage(getString(R.string.revert_everything_dialog))
                         .setPositiveButton(getString(android.R.string.ok), new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog, int id) {
@@ -1579,7 +1579,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         });
                 builder.setCancelable(true);
-                android.support.v7.app.AlertDialog Alert1 = builder.create();
+                androidx.appcompat.app.AlertDialog Alert1 = builder.create();
                 Alert1.show();
                 break;
             case R.id.aa_settings:

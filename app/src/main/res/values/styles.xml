@@ -1,7 +1,7 @@
 <resources>
 
     <!-- Base application theme: always-on dark navy brand theme. -->
-    <style name="AppTheme" parent="Theme.AppCompat.DayNight.DarkActionBar">
+    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.DarkActionBar.Bridge">
         <!-- Customize your theme here. -->
         <item name="colorPrimary">@color/brand_navy</item>
         <item name="colorPrimaryDark">@color/brand_navy_dark</item>
