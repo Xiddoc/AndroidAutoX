@@ -11,16 +11,62 @@ allprojects {
 
 android {
 
+    // Load local.properties only if it exists. In CI (and any clean checkout)
+    // the file is absent, so fall back to an empty Properties object instead of
+    // crashing with FileNotFoundException.
     def localProperties = new Properties()
-    localProperties.load(new FileInputStream(rootProject.file("local.properties")))
+    def localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.withInputStream { localProperties.load(it) }
+    }
+
+    // Resolve a configuration value: prefer local.properties, then an
+    // environment variable (used by CI), then a safe default.
+    def resolveProp = { String localKey, String envKey, String defaultValue ->
+        def value = localProperties[localKey]
+        if (value == null || value.toString().isEmpty()) {
+            value = System.getenv(envKey)
+        }
+        if (value == null || value.toString().isEmpty()) {
+            value = defaultValue
+        }
+        return value
+    }
+
+    def signingStoreFile = resolveProp('STORELOCATION', 'SIGNING_STORE_FILE', null)
+    def signingStorePassword = resolveProp('STOREPASSWORD', 'SIGNING_STORE_PASSWORD', null)
+    def signingKeyPassword = resolveProp('KEYPASSWORD', 'SIGNING_KEY_PASSWORD', null)
+    def signingKeyAlias = resolveProp('KEYALIAS', 'SIGNING_KEY_ALIAS', 'key0')
+
+    // Signing material is only available when a keystore file is configured and
+    // actually present on disk. Otherwise the release build assembles unsigned
+    // so PR/CI builds without secrets still succeed.
+    def hasSigningConfig = signingStoreFile != null && file(signingStoreFile).exists()
+
+    // PASTEBIN_API_KEY must always be a valid quoted Java string literal. The
+    // value in local.properties already includes surrounding quotes, but the
+    // env-var / default fallbacks do not, so quote them when needed.
+    def pastebinRaw = localProperties['PASTEBIN_API_KEY']
+    def pastebinApiKey
+    if (pastebinRaw != null && !pastebinRaw.toString().isEmpty()) {
+        pastebinApiKey = pastebinRaw
+    } else {
+        def envPastebin = System.getenv('PASTEBIN_API_KEY')
+        if (envPastebin == null) {
+            envPastebin = ""
+        }
+        pastebinApiKey = "\"" + envPastebin + "\""
+    }
 
     //If you are building this on your own please comment out SigninConfigs
     signingConfigs {
         'new' {
-            storeFile file(localProperties['STORELOCATION'])
-            storePassword localProperties['STOREPASSWORD']
-            keyAlias 'key0'
-            keyPassword localProperties['KEYPASSWORD']
+            if (hasSigningConfig) {
+                storeFile file(signingStoreFile)
+                storePassword signingStorePassword
+                keyAlias signingKeyAlias
+                keyPassword signingKeyPassword
+            }
         }
     }
     lintOptions {
@@ -40,25 +86,27 @@ android {
         versionName '5.2.2'
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         setProperty("archivesBaseName","AA-AIO-TWEAKER-" + versionName)
-        signingConfig signingConfigs.'new'
+        if (hasSigningConfig) {
+            signingConfig signingConfigs.'new'
+        }
     }
 
     buildTypes {
         release {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            buildConfigField "String", "PASTEBIN_API_KEY", localProperties['PASTEBIN_API_KEY']
+            buildConfigField "String", "PASTEBIN_API_KEY", pastebinApiKey
 
         }
         debug {
-            buildConfigField "String", "PASTEBIN_API_KEY", localProperties['PASTEBIN_API_KEY']
+            buildConfigField "String", "PASTEBIN_API_KEY", pastebinApiKey
 
         }
         RC {
-            buildConfigField "String", "PASTEBIN_API_KEY", localProperties['PASTEBIN_API_KEY']
+            buildConfigField "String", "PASTEBIN_API_KEY", pastebinApiKey
 
         }
         daily {
-            buildConfigField "String", "PASTEBIN_API_KEY", localProperties['PASTEBIN_API_KEY']
+            buildConfigField "String", "PASTEBIN_API_KEY", pastebinApiKey
 
         }
     }
