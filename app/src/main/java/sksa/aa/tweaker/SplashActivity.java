@@ -47,6 +47,10 @@ public class SplashActivity extends AppCompatActivity {
     // deliberately NOT part of the tweak-default reset block in onCreate.
     private static final String SKIP_STARTUP_WARNING_KEY = "skip_startup_warning";
 
+    // When true, the disclaimer UX is bypassed and we auto-proceed (root-gated) as
+    // soon as the async root result arrives, instead of waiting for a button tap.
+    private boolean skipStartupWarning = false;
+
     // Result of the asynchronous root request. null = not-yet/unknown, non-null = completed.
     private volatile StreamLogs isDeviceRooted;
 
@@ -96,11 +100,26 @@ public class SplashActivity extends AppCompatActivity {
         editor.putBoolean("aa_vertical_bar", false);
         editor.commit();
 
+        // Read the persisted skip flag AFTER the tweak-default reset block above
+        // (which deliberately does not touch this key).
+        skipStartupWarning = sharedPreferences.getBoolean(SKIP_STARTUP_WARNING_KEY, false);
+
         requestLatest();
 
-
-
         final Button continueButton = findViewById(R.id.proceed_button);
+        final Button disableWarningButton = findViewById(R.id.disable_warning_button);
+
+        if (skipStartupWarning) {
+            // Future-launch fast path: hide the disclaimer UX entirely and let the
+            // async root result drive an auto-proceed (see requestRootAsync()). We do
+            // NOT start either countdown and we do NOT touch su on the main thread.
+            findViewById(R.id.warning_text).setVisibility(View.GONE);
+            findViewById(R.id.warning_content).setVisibility(View.GONE);
+            continueButton.setVisibility(View.GONE);
+            disableWarningButton.setVisibility(View.GONE);
+            return;
+        }
+
         continueButton.setEnabled(false);
         Log.v("sksa.aa.tweaker", "Engaging countdown");
         new CountDownTimer(5000, 10) {
@@ -126,7 +145,6 @@ public class SplashActivity extends AppCompatActivity {
 
         // Bottom "don't show this warning again" button. Starts disabled (set in XML)
         // and runs its OWN 10s countdown, mirroring the proceed button's idiom.
-        final Button disableWarningButton = findViewById(R.id.disable_warning_button);
         disableWarningButton.setEnabled(false);
         new CountDownTimer(10000, 10) {
             public void onTick(long millisUntilFinished) {
@@ -198,6 +216,19 @@ public class SplashActivity extends AppCompatActivity {
                 Log.v("sksa.aa.tweaker", "Root request result: " + isDeviceRooted.getInputStreamLog());
 
                 copyAssets();
+
+                // Future-launch fast path: now that the async root result is in,
+                // auto-proceed (root-gated) on the UI thread instead of waiting for a tap.
+                if (skipStartupWarning) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (!isFinishing()) {
+                                proceedIfRooted();
+                            }
+                        }
+                    });
+                }
             }
         }.start();
     }
