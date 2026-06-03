@@ -13,6 +13,8 @@ import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -22,10 +24,12 @@ import androidx.fragment.app.DialogFragment;
 import androidx.viewpager.widget.ViewPager;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
 import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.Animation;
@@ -94,6 +98,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView currentlySetUSBSeekbar;
     private TextView currentlySetWiFiSeekbar;
     private Button rebootButton;
+    private View rebootGlow;
     private Button nospeed;
     private Button taplimitat;
     private Button coolwalkDayNightTweak;
@@ -270,6 +275,18 @@ public class MainActivity extends AppCompatActivity {
         );
 
         rebootButton = findViewById(R.id.reboot_button);
+
+        // Phase 2 depth pass: real RenderEffect blur halo behind the FAB plus
+        // azure-tinted elevation shadows on the raised surfaces (API 31+).
+        rebootGlow = findViewById(R.id.reboot_glow);
+        if (rebootGlow != null) {
+            float blur = 12f * getResources().getDisplayMetrics().density;
+            rebootGlow.setRenderEffect(
+                    RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.DECAL));
+            rebootGlow.setAlpha(0.6f);
+        }
+        applyAzureGlow(rebootButton);
+        applyDepthGlow();
 
 
 
@@ -4176,11 +4193,46 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 if (!animationRun) {
                     rebootButton.setVisibility(View.VISIBLE);
                     rebootButton.startAnimation(anim);
+                    if (rebootGlow != null) {
+                        rebootGlow.setVisibility(View.VISIBLE);
+                        rebootGlow.startAnimation(anim);
+                    }
                     animationRun = true;
                 }
             }
         });
 
+    }
+
+    /**
+     * Tint a view's elevation shadow with the logo azure so a raised surface
+     * casts a soft blue glow instead of a flat gray shadow (API 28+; minSdk 31).
+     */
+    private void applyAzureGlow(View v) {
+        if (v == null) return;
+        int azure = ContextCompat.getColor(this, R.color.accent_blue);
+        v.setOutlineSpotShadowColor(azure);
+        v.setOutlineAmbientShadowColor(azure);
+    }
+
+    /** Apply the azure glow to the info card and every tweak button. */
+    private void applyDepthGlow() {
+        applyAzureGlow(findViewById(R.id.info_card));
+        View buttonsArea = findViewById(R.id.buttons_area);
+        if (buttonsArea instanceof ViewGroup) {
+            tintButtonShadows((ViewGroup) buttonsArea);
+        }
+    }
+
+    private void tintButtonShadows(ViewGroup group) {
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child instanceof Button) {
+                applyAzureGlow(child);
+            } else if (child instanceof ViewGroup) {
+                tintButtonShadows((ViewGroup) child);
+            }
+        }
     }
 
     public static void openApp(Context context, String packageName) {
