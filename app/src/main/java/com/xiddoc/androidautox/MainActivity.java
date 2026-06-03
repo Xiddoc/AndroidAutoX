@@ -1614,6 +1614,11 @@ public class MainActivity extends AppCompatActivity {
             case R.id.aa_settings:
                 String packageName = "com.google.android.projection.gearhead";
                 openApp(getApplicationContext(), packageName);
+                break;
+
+            case R.id.phixit_apply_test:
+                phixitApplyTest((TextView) findViewById(R.id.logs));
+                break;
 
             default:
                 return super.onOptionsItemSelected(item);
@@ -4196,6 +4201,197 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 appendText(logs, sb.toString());
             }
         }.start();
+    }
+
+    /**
+     * PoC step 2: WRITE path for the new "phixit" Phenotype schema.
+     *
+     * <p>Applies a couple of overrides to the Android Auto (gearhead) snapshot to
+     * prove the mechanism end-to-end: one flag that already exists (edited in
+     * place) and one that does not (appended). It edits the flag across ALL of
+     * the package's param_partitions, bumps last_fetch.serving_version, clears
+     * the phenotype file cache, and restarts GMS, then re-reads to confirm the
+     * value survived the restart.
+     *
+     * <p>WARNING: this writes to the live GMS database. It is gated behind an
+     * explicit menu action.
+     */
+    private void phixitApplyTest(final TextView logs) {
+        final String path = getApplicationInfo().dataDir;
+        final String filesDir = getFilesDir().getAbsolutePath();
+        final String pkg = "com.google.android.projection.gearhead";
+
+        new Thread() {
+            @Override
+            public void run() {
+                StringBuilder sb = new StringBuilder();
+                sb.append("\n==== PHIXIT PoC APPLY (writes to GMS DB) ====\n");
+
+                // Test edits: edit an existing long, append an absent bool.
+                java.util.List<PhixitSnapshot.Flag> edits = new java.util.ArrayList<PhixitSnapshot.Flag>();
+                edits.add(longFlag("ContentBrowse__drawer_default_allowed_taps_touchpad", 999));
+                edits.add(boolFlag("AppQualityTester__developer_setting_enabled", true));
+
+                String policy = runSuWithCmd("getenforce").getInputStreamLog();
+                runSuWithCmd("setenforce 0");
+                runSuWithCmd("am force-stop com.google.android.gms");
+
+                sb.append(phixitApply(path, filesDir, pkg, edits));
+
+                // Drop GMS's cached phenotype so it re-reads our edited snapshot from
+                // the DB, then force-stop so it restarts fresh on next access.
+                runSuWithCmd("rm -rf /data/data/com.google.android.gms/files/phenotype");
+                runSuWithCmd("am force-stop com.google.android.gms");
+                if (!policy.equals("Permissive")) {
+                    runSuWithCmd("setenforce 1");
+                }
+
+                // Verify: re-read and report the edited flags' current values.
+                sb.append("  -- verify after restart --\n");
+                for (PhixitSnapshot.Flag e : edits) {
+                    sb.append("    ").append(phixitReadFlag(path, pkg, e.name)).append("\n");
+                }
+
+                sb.append("==== END PoC APPLY ====\n");
+                appendText(logs, sb.toString());
+            }
+        }.start();
+    }
+
+    private static PhixitSnapshot.Flag longFlag(String name, long value) {
+        PhixitSnapshot.Flag f = new PhixitSnapshot.Flag();
+        f.name = name;
+        f.numericName = false;
+        f.type = PhixitSnapshot.TYPE_LONG;
+        f.longValue = value;
+        return f;
+    }
+
+    private static PhixitSnapshot.Flag boolFlag(String name, boolean value) {
+        PhixitSnapshot.Flag f = new PhixitSnapshot.Flag();
+        f.name = name;
+        f.numericName = false;
+        f.type = value ? PhixitSnapshot.TYPE_BOOL_TRUE : PhixitSnapshot.TYPE_BOOL_FALSE;
+        return f;
+    }
+
+    private static void copyValue(PhixitSnapshot.Flag dst, PhixitSnapshot.Flag src) {
+        dst.type = src.type;
+        dst.longValue = src.longValue;
+        dst.doubleBits = src.doubleBits;
+        dst.stringValue = src.stringValue;
+        dst.bytesValue = src.bytesValue;
+    }
+
+    /** Applies {@code edits} to every param_partition of {@code pkg}. Returns a log. */
+    private String phixitApply(String path, String filesDir, String pkg,
+                               java.util.List<PhixitSnapshot.Flag> edits) {
+        StringBuilder sb = new StringBuilder();
+        String db = "/data/data/com.google.android.gms/databases/phenotype.db";
+
+        StreamLogs r = runSuWithCmd(
+                path + "/sqlite3 -batch " + db + " " +
+                        "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
+                        "WHERE static_config_package_id IN (SELECT static_config_package_id " +
+                        "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
+        if (!r.getErrorStreamLog().isEmpty()) {
+            sb.append("  read ERR: ").append(r.getErrorStreamLog()).append("\n");
+        }
+        String out = r.getInputStreamLog();
+        if (out.isEmpty()) {
+            sb.append("  no partitions for ").append(pkg).append("\n");
+            return sb.toString();
+        }
+
+        StringBuilder script = new StringBuilder();
+        for (String line : out.split("\\r?\\n")) {
+            int bar = line.indexOf('|');
+            if (bar <= 0) continue;
+            String pid = line.substring(0, bar).trim();
+            String hex = line.substring(bar + 1).trim();
+            if (hex.isEmpty()) continue;
+            try {
+                byte[] dec = PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex));
+                java.util.List<PhixitSnapshot.Flag> flags = PhixitSnapshot.decode(dec);
+
+                for (PhixitSnapshot.Flag e : edits) {
+                    PhixitSnapshot.Flag found = null;
+                    for (PhixitSnapshot.Flag f : flags) {
+                        if (!f.numericName && e.name.equals(f.name)) { found = f; break; }
+                    }
+                    if (found != null) {
+                        copyValue(found, e);
+                    } else {
+                        PhixitSnapshot.Flag add = new PhixitSnapshot.Flag();
+                        add.name = e.name;
+                        add.numericName = false;
+                        copyValue(add, e);
+                        flags.add(add);
+                    }
+                }
+
+                byte[] reCompressed = PhixitSnapshot.deflateRaw(PhixitSnapshot.encode(flags));
+                script.append("UPDATE param_partitions SET flags_content=x'")
+                        .append(PhixitSnapshot.bytesToHex(reCompressed))
+                        .append("' WHERE param_partition_id=").append(pid).append(";\n");
+                sb.append("  partition ").append(pid).append(": ").append(flags.size())
+                        .append(" flags, wrote ").append(reCompressed.length).append("B\n");
+            } catch (Exception e) {
+                sb.append("  partition ").append(pid).append(": EXCEPTION ").append(e).append("\n");
+            }
+        }
+
+        int servingVersion = (int) (System.currentTimeMillis() / 1000L);
+        script.append("UPDATE last_fetch SET serving_version=").append(servingVersion)
+                .append(" WHERE type=1;\n");
+
+        // Write the script to a file (hex blobs are large) and run it via root sqlite3.
+        String sqlFile = filesDir + "/phixit_apply.sql";
+        try {
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(sqlFile);
+            fos.write(script.toString().getBytes("UTF-8"));
+            fos.close();
+        } catch (Exception e) {
+            sb.append("  write script ERR: ").append(e).append("\n");
+            return sb.toString();
+        }
+
+        StreamLogs w = runSuWithCmd(path + "/sqlite3 -batch " + db + " < " + sqlFile);
+        if (!w.getErrorStreamLog().isEmpty()) {
+            sb.append("  apply ERR: ").append(w.getErrorStreamLog()).append("\n");
+        } else {
+            sb.append("  applied (serving_version=").append(servingVersion).append(")\n");
+        }
+        runSuWithCmd("rm -f " + sqlFile);
+        return sb.toString();
+    }
+
+    /** Reads a single flag's current decoded value across all partitions of a package. */
+    private String phixitReadFlag(String path, String pkg, String name) {
+        String db = "/data/data/com.google.android.gms/databases/phenotype.db";
+        StreamLogs r = runSuWithCmd(
+                path + "/sqlite3 -batch " + db + " " +
+                        "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
+                        "WHERE static_config_package_id IN (SELECT static_config_package_id " +
+                        "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
+        String out = r.getInputStreamLog();
+        for (String line : out.split("\\r?\\n")) {
+            int bar = line.indexOf('|');
+            if (bar <= 0) continue;
+            String hex = line.substring(bar + 1).trim();
+            if (hex.isEmpty()) continue;
+            try {
+                java.util.List<PhixitSnapshot.Flag> flags =
+                        PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex)));
+                for (PhixitSnapshot.Flag f : flags) {
+                    if (!f.numericName && name.equals(f.name)) {
+                        return f.describe() + " [partition " + line.substring(0, bar).trim() + "]";
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return name + ": NOT FOUND after apply";
     }
 
     public static StreamLogs runSuWithCmd(String cmd) {

@@ -16,4 +16,9 @@
         app:showAsAction="never"
         android:title="@string/menu_aa_settings" />
 
+    <item
+        android:id="@+id/phixit_apply_test"
+        app:showAsAction="never"
+        android:title="PoC: Phixit apply test" />
+
 </menu>
