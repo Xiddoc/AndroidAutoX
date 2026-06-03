@@ -58,6 +58,43 @@ Build types include `debug`, `release`, plus `RC` and `daily` variants. The rele
 AndroidAutoX-<versionName>.apk
 ```
 
+### Toolchain in a fresh / cloud environment (READ THIS — common gotcha)
+
+This project pins **Gradle 6.1.1** + **Android Gradle Plugin 4.0.1**, which only
+run on **JDK 8–13**. Fresh containers (e.g. Claude Code on the web) often ship
+only a **modern JDK (17/21)** and **no Android SDK**, so a bare `./gradlew
+assembleDebug` fails with a Groovy/`ReflectionCache` /
+`Could not initialize class ...vmplugin.v7.Java7` error. Provision the toolchain
+once per container:
+
+```bash
+# 1. Install a compatible JDK (11) for the build itself
+sudo apt-get update -q && sudo apt-get install -y -q openjdk-11-jdk-headless
+
+# 2. Install the Android SDK (compileSdk 29). NOTE: the latest cmdline-tools
+#    require JDK 17+ to RUN, so run sdkmanager with the modern JDK (21), but
+#    build with JDK 11.
+export ANDROID_SDK_ROOT=$HOME/android-sdk
+mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+curl -s -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+unzip -q -o /tmp/cmdtools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
+mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+SDKMGR="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 yes | "$SDKMGR" --sdk_root="$ANDROID_SDK_ROOT" --licenses
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 "$SDKMGR" --sdk_root="$ANDROID_SDK_ROOT" \
+    "platform-tools" "platforms;android-29" "build-tools;29.0.3"
+
+# 3. Build with JDK 11, pointing Gradle at the SDK via env (no local.properties needed)
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export ANDROID_HOME=$ANDROID_SDK_ROOT
+./gradlew assembleDebug --no-daemon
+```
+
+The Gradle plugin reads `ANDROID_HOME`/`ANDROID_SDK_ROOT` from the environment,
+so you do **not** need to create `local.properties` just to build (and per the
+conventions below, don't). Gradle will auto-fetch the exact pinned
+`build-tools;29.0.2` on first build.
+
 ### Signing & local configuration
 
 Signing reads keystore details from `local.properties` (not committed):
