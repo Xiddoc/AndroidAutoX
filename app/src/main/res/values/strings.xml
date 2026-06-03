@@ -60,7 +60,15 @@ Android Auto 5.8 or superior is required.</string>
     <string name="re_enable_tweak_string">Re-enable\u0020</string>
     <string name="copy_log">Copy log</string>
     <string name="about">About</string>
-    <string name="revert_everything">Revert everything</string>
+    <string name="revert_everything">Reset all tweaks</string>
+    <string name="tab_tweaks">Tweaks</string>
+    <string name="tab_logs">Logs</string>
+    <string name="welcome_title">Welcome to AndroidAutoX</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="legend_applied">Applied</string>
+    <string name="legend_reboot">Reboot needed</string>
+    <string name="legend_not_applied">Not applied</string>
+    <string name="copy_logs_button">Copy logs</string>
     <string name="force_disable_tweak">Force Disable\u0020</string>
     <string name="reset_tweak">Reset\u0020</string>
     <string name="force_widescreen_warning">Force widescreen has been automatically disabled</string>
@@ -70,10 +78,10 @@ Android Auto 5.8 or superior is required.</string>
     <string name="warning_title">WARNING</string>
     <string name="unpatch">Unpatch\u0020</string>
     <string name="patch_app">Patch\u0020</string>
-    <string name="default_string">\u0020Default</string>zzz
+    <string name="default_string">\u0020Default</string>
     <string name="app_list_label">Apps List</string>
     <string name="translators_button">Translated by</string>
-    <string name="about_part_one"><![CDATA[AndroidAutoX<br><br>Source code is available on <a href=\"https://github.com/Xiddoc/AndroidAutoX\">GitHub</a>]]></string>
+    <string name="about_part_one"><![CDATA[AndroidAutoX<br><br>Made with &#10084; by <a href=\"https://github.com/Xiddoc\">Xiddoc</a><br><br>Source code is available on <a href=\"https://github.com/Xiddoc/AndroidAutoX\">GitHub</a>]]></string>
     <string name="custom_wallpapers">Wallpapers</string>
     <string name="tutorial_wallpapers">This tweak will activate the new built in wallpaper changer in Android Auto. Android Auto 5.8 or superior is required.\nWARNING: If you are a user of Wallpapers For Android Auto, you will need to update it to at least version 3.0, otherwise this tweak will break Wallpapers For Android Auto functionality.</string>
     <string name="tutorial_dark_mode">Starting from December 2020, Google reverted a behaviour that happened since Android 10. Previously, the light/dark mode on Android Auto followed the light/dark mode on the phone and vice versa. This meant that switching the phone to dark mode had effect on the car, or if the phone was in dark mode and the car had lights off it used to switch on the light theme on the phone.\n However, since this feature of \"independent\" dark mode was introduced, users with Aftermarket headunits have no way to switch to dark mode anymore without actually wiring the stereo to the car\'s lights.\n This tweak makes sure that night mode is again dependent from phone and switching light/dark mode on phone will have its effects on cars too.</string>
@@ -86,7 +94,7 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="added_app_action">"Added: "</string>
     <string name="removed_app_action">Removed\u0020</string>
     <string name="root_access_warning">Root access denied. Please allow root access.</string>
-    <string name="revert_everything_dialog">Do you want to revert everything? Please manually restart the app after doing so</string>
+    <string name="revert_everything_dialog">This will revert ALL applied Android Auto flag and Gearhead modifications back to their default values. Your tweak selections will be cleared. Please restart the app manually after this completes.</string>
     <string name="calendar_tweak">Set %1$s visible days in calendar</string>
     <string name="calendar_tweak_single">Set %1$s visible day in calendar</string>
     <string name="tutorial_calendar_tweak">This tweak will make so that calendar app into Android Auto can show more days than just one. Please note that even increasing the number of days, it\'s still not obviously possible to distinguish which day you are viewing the events of. Android Auto will just show how many events are set in one day and it won\'t show which day it is.</string>

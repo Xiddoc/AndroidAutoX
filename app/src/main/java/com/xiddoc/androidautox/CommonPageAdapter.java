@@ -12,10 +12,17 @@ import java.util.List;
 public class CommonPageAdapter extends PagerAdapter {
 
     private final List<Integer> pageIds = new ArrayList<>();
+    private final List<CharSequence> pageTitles = new ArrayList<>();
 
 
-    public void insertViewId(@IdRes int pageId) {
+    public void insertViewId(@IdRes int pageId, CharSequence title) {
         pageIds.add(pageId);
+        pageTitles.add(title);
+    }
+
+    @Override
+    public CharSequence getPageTitle(int position) {
+        return pageTitles.get(position);
     }
 
     @NonNull
