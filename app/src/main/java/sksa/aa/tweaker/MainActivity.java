@@ -17,7 +17,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.StrictMode;
 import android.support.annotation.NonNull;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.view.ViewPager;
@@ -41,8 +40,6 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import org.jpaste.exceptions.PasteException;
-import org.jpaste.pastebin.Pastebin;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -1568,46 +1565,17 @@ public class MainActivity extends AppCompatActivity {
         switch (item.getItemId()) {
             case R.id.copy:
 
-                final String title = "log";
-                StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
-                StrictMode.setThreadPolicy(policy);
-                final URL[] string = {null};
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
                     public void run() {
-                        try {
-                            final ClipboardManager clipboard = (ClipboardManager)
-                                    getSystemService(Context.CLIPBOARD_SERVICE);
-                            TextView textView = findViewById(R.id.logs);
-                            URL newstring = Pastebin.pastePaste(BuildConfig.PASTEBIN_API_KEY, String.valueOf(textView.getText()), title);
-                            Toast.makeText(getApplicationContext(), getString(R.string.copied_pastebin), Toast.LENGTH_LONG).show();
-                            ClipData clip = ClipData.newPlainText("logs", newstring.toString());
-                            clipboard.setPrimaryClip(clip);
-                        } catch (PasteException e) {
-                            e.printStackTrace();
-                            final ClipboardManager clipboard = (ClipboardManager)
-                                    getSystemService(Context.CLIPBOARD_SERVICE);
-                            TextView textView = findViewById(R.id.logs);
-                            Toast.makeText(getApplicationContext(), getString(R.string.log_copied), Toast.LENGTH_LONG).show();
-                            ClipData clip = ClipData.newPlainText("logs", textView.getText());
-                            clipboard.setPrimaryClip(clip);
-                        } catch (RuntimeException e) {
-                            e.printStackTrace();
-                            final ClipboardManager clipboard = (ClipboardManager)
-                                    getSystemService(Context.CLIPBOARD_SERVICE);
-
-                            Toast.makeText(getApplicationContext(), getString(R.string.log_copied), Toast.LENGTH_LONG).show();
-                            Toast.makeText(getApplicationContext(), getString(R.string.log_copied), Toast.LENGTH_LONG).show();
-                            TextView textView = findViewById(R.id.logs);
-
-                            ClipData clip = ClipData.newPlainText("logs", textView.getText());
-                            clipboard.setPrimaryClip(clip);
-                        }
+                        final ClipboardManager clipboard = (ClipboardManager)
+                                getSystemService(Context.CLIPBOARD_SERVICE);
+                        TextView textView = findViewById(R.id.logs);
+                        ClipData clip = ClipData.newPlainText("logs", textView.getText());
+                        clipboard.setPrimaryClip(clip);
+                        Toast.makeText(getApplicationContext(), getString(R.string.log_copied), Toast.LENGTH_LONG).show();
                     }
                 });
-
-
-
 
                 break;
 
