@@ -37,6 +37,16 @@ public class SplashActivity extends AppCompatActivity {
     Context context;
     String newVersionName;
 
+    // Shared state used by the proceed helper so both the proceed button and the
+    // "don't show again" button can reuse the exact same root-gated flow.
+    private Intent mainActivityIntent;
+    private NoRootDialog noRootDialog;
+
+    // Persisted flag (in the existing "MainActivity" prefs file). When true, future
+    // launches skip the disclaimer/countdown UX. Default false. NOTE: this key is
+    // deliberately NOT part of the tweak-default reset block in onCreate.
+    private static final String SKIP_STARTUP_WARNING_KEY = "skip_startup_warning";
+
     // Result of the asynchronous root request. null = not-yet/unknown, non-null = completed.
     private volatile StreamLogs isDeviceRooted;
 
@@ -52,11 +62,11 @@ public class SplashActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_splash);
 
-        final Intent intent = new Intent(this, MainActivity.class);
+        mainActivityIntent = new Intent(this, MainActivity.class);
 
-        final NoRootDialog noRootDialog = new NoRootDialog();
+        noRootDialog = new NoRootDialog();
 
-        SharedPreferences sharedPreferences = getSharedPreferences("MainActivity", MODE_PRIVATE);
+        final SharedPreferences sharedPreferences = getSharedPreferences("MainActivity", MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPreferences.edit();
         editor.putBoolean("aa_speed_hack", false);
         editor.putBoolean("aa_six_tap", false);
@@ -110,19 +120,54 @@ public class SplashActivity extends AppCompatActivity {
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        // Treat null (async not-yet-arrived) or non-"1" as not-rooted.
-                        StreamLogs rootResult = isDeviceRooted;
-                        if (rootResult != null && "1".equals(rootResult.getInputStreamLog())) {
-                            if (newVersionName != null) {
-                                intent.putExtra("NewVersionName", newVersionName);
-                            }
-                            startActivity(intent);
-                            finish();
-                        } else {
-                            noRootDialog.show(getSupportFragmentManager(), "NoRootDialog");
-                        }
+                        proceedIfRooted();
                     }
                 });
+
+        // Bottom "don't show this warning again" button. Starts disabled (set in XML)
+        // and runs its OWN 10s countdown, mirroring the proceed button's idiom.
+        final Button disableWarningButton = findViewById(R.id.disable_warning_button);
+        disableWarningButton.setEnabled(false);
+        new CountDownTimer(10000, 10) {
+            public void onTick(long millisUntilFinished) {
+                int secondsRemaining = (int) ( 1 + (millisUntilFinished/1000));
+                disableWarningButton.setText(getString(R.string.disable_startup_warning) + " (" + secondsRemaining + ")");
+            }
+
+            @Override
+            public void onFinish() {
+                disableWarningButton.setEnabled(true);
+                disableWarningButton.setText(R.string.disable_startup_warning);
+            }
+        }.start();
+
+        disableWarningButton.setOnClickListener(
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        // Persist the flag so future launches skip the disclaimer,
+                        // then continue exactly like the proceed button (root-gated).
+                        sharedPreferences.edit().putBoolean(SKIP_STARTUP_WARNING_KEY, true).commit();
+                        Toast.makeText(SplashActivity.this, R.string.startup_warning_disabled, Toast.LENGTH_SHORT).show();
+                        proceedIfRooted();
+                    }
+                });
+    }
+
+    // Shared root-gated proceed flow used by both bottom buttons.
+    // Treats null (async root result not-yet-arrived) or non-"1" as not-rooted,
+    // so it never NPEs and never blocks the main thread on su.
+    private void proceedIfRooted() {
+        StreamLogs rootResult = isDeviceRooted;
+        if (rootResult != null && "1".equals(rootResult.getInputStreamLog())) {
+            if (newVersionName != null) {
+                mainActivityIntent.putExtra("NewVersionName", newVersionName);
+            }
+            startActivity(mainActivityIntent);
+            finish();
+        } else {
+            noRootDialog.show(getSupportFragmentManager(), "NoRootDialog");
+        }
     }
 
 
