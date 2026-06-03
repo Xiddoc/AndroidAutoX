@@ -71,9 +71,6 @@ Android Auto 5.8 ou supérieur est requis.</string>
     <string name="default_string">\u0020Par défaut</string>
     <string name="app_list_label">Liste des applications</string>
     <string name="translators_button">Traducteurs</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER est développé et maintenu par Shmykelsa.<br><br>Le code source est disponible sur <a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[Si vous aimez vraiment mon travail, s\'il vous plaît envisagez un don.<br> Vous pouvez me faire un don via <a href=\"http://www.paypal.me/grizzo96\">PayPal</a> ou vous pouvez copier mon adresse Bitcoin en cliquant sur le bouton ci-dessous.<br><br>Même un petit montant sera apprécié :)]]></string>
-    <string name="copied_address_toast">Adresse BTC copiée dans le presse-papier</string>
     <string name="custom_wallpapers">Fonds d\'écran</string>
     <string name="tutorial_wallpapers">Ce tweak activera la nouvelle fonction permettant de changer les fonds d\'écran dans Android Auto. Android Auto 5.8 ou supérieur est requis.\nATTENTION : Si vous êtes un utilisateur de l\'application \'Wallpapers For Android Auto\', vous devrez la mettre à jour au moins à la version 3.0, sinon cette modification ne permettra pas de la faire fonctionner.</string>
     <string name="tutorial_dark_mode">À partir de décembre 2020, Google a rétabli un comportement qui était présent depuis Android 10. Auparavant, le mode jour/nuit sur Android Auto suivait le mode clair/sombre du téléphone et vice versa. Cela signifiait que le passage du téléphone en mode sombre affectait également la voiture, ou si le téléphone était en mode sombre et que la voiture avait ses feux éteints, il passait automatiquement en mode clair sur le téléphone.\n Toutefois, depuis que la fonction mode sombre \"indépendant\" a été introduite, les utilisateurs d\'autoradios de seconde monte n\'ont plus la possibilité de passer en mode sombre sans avoir à câbler l\'autoradio aux feux de la voiture.\n Ce changement garantit que le mode nuit dépend à nouveau du téléphone, et le passage du mode clair/sombre sur le téléphone aura également ses effets sur la voiture.</string>
@@ -109,7 +106,6 @@ AVERTISSEMENT : Ce tweak n\'a pas été testé de manière approfondie et pourra
     <string name="alpha_jump_tweak">nouveau design de bouton alphabétique</string>
     <string name="choose_accounts">Choisissez un compte</string>
     <string name="use_all">Tout utiliser (EXPÉRIMENTAL)</string>
-    <string name="copied_pastebin">Un lien vers le journal a été créé et copié dans le presse-papier</string>
     <string name="log_copied">Le journal a été copié</string>
     <string name="new_version_available">Nouvelle version disponible</string>
     <string name="go_to_new_version">Une nouvelle version de AA AIO TWEAKER (version %1$s) est disponible sur GitHub. Voulez-vous la télécharger maintenant ?</string>

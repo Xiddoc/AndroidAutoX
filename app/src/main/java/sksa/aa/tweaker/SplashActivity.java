@@ -37,8 +37,28 @@ public class SplashActivity extends AppCompatActivity {
     Context context;
     String newVersionName;
 
+    // Shared state used by the proceed helper so both the proceed button and the
+    // "don't show again" button can reuse the exact same root-gated flow.
+    private Intent mainActivityIntent;
+    private NoRootDialog noRootDialog;
+
+    // Persisted flag (in the existing "MainActivity" prefs file). When true, future
+    // launches skip the disclaimer/countdown UX. Default false. NOTE: this key is
+    // deliberately NOT part of the tweak-default reset block in onCreate.
+    private static final String SKIP_STARTUP_WARNING_KEY = "skip_startup_warning";
+
+    // When true, the disclaimer UX is bypassed and we auto-proceed (root-gated) as
+    // soon as the async root result arrives, instead of waiting for a button tap.
+    private boolean skipStartupWarning = false;
+
+    // Result of the asynchronous root request. null = not-yet/unknown, non-null = completed.
+    private volatile StreamLogs isDeviceRooted;
+
+    // Guards against kicking off the root request more than once (e.g. onResume re-entry).
+    private boolean rootRequestStarted = false;
+
     private static final String actualVersion = BuildConfig.VERSION_NAME;
-    private static final String BASE_URL = "https://api.github.com/repos/shmykelsa/AA-Tweaker/releases/latest";
+    private static final String BASE_URL = "https://api.github.com/repos/Xiddoc/AA-Tweaker/releases/latest";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,14 +66,11 @@ public class SplashActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_splash);
 
-        final Intent intent = new Intent(this, MainActivity.class);
+        mainActivityIntent = new Intent(this, MainActivity.class);
 
-        final NoRootDialog noRootDialog = new NoRootDialog();
-        final StreamLogs isDeviceRooted =  runSuWithCmd("echo 1");
+        noRootDialog = new NoRootDialog();
 
-        copyAssets();
-
-        SharedPreferences sharedPreferences = getSharedPreferences("MainActivity", MODE_PRIVATE);
+        final SharedPreferences sharedPreferences = getSharedPreferences("MainActivity", MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPreferences.edit();
         editor.putBoolean("aa_speed_hack", false);
         editor.putBoolean("aa_six_tap", false);
@@ -83,11 +100,26 @@ public class SplashActivity extends AppCompatActivity {
         editor.putBoolean("aa_vertical_bar", false);
         editor.commit();
 
+        // Read the persisted skip flag AFTER the tweak-default reset block above
+        // (which deliberately does not touch this key).
+        skipStartupWarning = sharedPreferences.getBoolean(SKIP_STARTUP_WARNING_KEY, false);
+
         requestLatest();
 
-
-
         final Button continueButton = findViewById(R.id.proceed_button);
+        final Button disableWarningButton = findViewById(R.id.disable_warning_button);
+
+        if (skipStartupWarning) {
+            // Future-launch fast path: hide the disclaimer UX entirely and let the
+            // async root result drive an auto-proceed (see requestRootAsync()). We do
+            // NOT start either countdown and we do NOT touch su on the main thread.
+            findViewById(R.id.warning_text).setVisibility(View.GONE);
+            findViewById(R.id.warning_content).setVisibility(View.GONE);
+            continueButton.setVisibility(View.GONE);
+            disableWarningButton.setVisibility(View.GONE);
+            return;
+        }
+
         continueButton.setEnabled(false);
         Log.v("sksa.aa.tweaker", "Engaging countdown");
         new CountDownTimer(5000, 10) {
@@ -107,19 +139,99 @@ public class SplashActivity extends AppCompatActivity {
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        if (isDeviceRooted.getInputStreamLog().equals("1")) {
-                            if (newVersionName != null) {
-                                intent.putExtra("NewVersionName", newVersionName);
-                            }
-                            startActivity(intent);
-                            finish();
-                        } else {
-                            noRootDialog.show(getSupportFragmentManager(), "NoRootDialog");
-                        }
+                        proceedIfRooted();
+                    }
+                });
+
+        // Bottom "don't show this warning again" button. Starts disabled (set in XML)
+        // and runs its OWN 10s countdown, mirroring the proceed button's idiom.
+        disableWarningButton.setEnabled(false);
+        new CountDownTimer(10000, 10) {
+            public void onTick(long millisUntilFinished) {
+                int secondsRemaining = (int) ( 1 + (millisUntilFinished/1000));
+                disableWarningButton.setText(getString(R.string.disable_startup_warning) + " (" + secondsRemaining + ")");
+            }
+
+            @Override
+            public void onFinish() {
+                disableWarningButton.setEnabled(true);
+                disableWarningButton.setText(R.string.disable_startup_warning);
+            }
+        }.start();
+
+        disableWarningButton.setOnClickListener(
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        // Persist the flag so future launches skip the disclaimer,
+                        // then continue exactly like the proceed button (root-gated).
+                        sharedPreferences.edit().putBoolean(SKIP_STARTUP_WARNING_KEY, true).commit();
+                        Toast.makeText(SplashActivity.this, R.string.startup_warning_disabled, Toast.LENGTH_SHORT).show();
+                        proceedIfRooted();
                     }
                 });
     }
 
+    // Shared root-gated proceed flow used by both bottom buttons.
+    // Treats null (async root result not-yet-arrived) or non-"1" as not-rooted,
+    // so it never NPEs and never blocks the main thread on su.
+    private void proceedIfRooted() {
+        StreamLogs rootResult = isDeviceRooted;
+        if (rootResult != null && "1".equals(rootResult.getInputStreamLog())) {
+            if (newVersionName != null) {
+                mainActivityIntent.putExtra("NewVersionName", newVersionName);
+            }
+            startActivity(mainActivityIntent);
+            finish();
+        } else {
+            noRootDialog.show(getSupportFragmentManager(), "NoRootDialog");
+        }
+    }
+
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Kick off root acquisition once the window is up so Magisk's grant dialog
+        // surfaces over the visible splash rather than before it is drawn.
+        requestRootAsync();
+    }
+
+    // Requests root off the main thread (matching MainActivity's new Thread() idiom) and then
+    // runs copyAssets(), which depends on root for its chmod. Avoids ANR by keeping
+    // su.waitFor() off the main thread. The 5s countdown gives this time to complete and the
+    // user time to tap "Grant". Runs at most once.
+    private void requestRootAsync() {
+        if (rootRequestStarted) {
+            return;
+        }
+        rootRequestStarted = true;
+
+        new Thread() {
+            @Override
+            public void run() {
+                // Explicit early su request so Magisk shows the prompt unmistakably.
+                Log.v("sksa.aa.tweaker", "Requesting root (su)");
+                isDeviceRooted = runSuWithCmd("echo 1");
+                Log.v("sksa.aa.tweaker", "Root request result: " + isDeviceRooted.getInputStreamLog());
+
+                copyAssets();
+
+                // Future-launch fast path: now that the async root result is in,
+                // auto-proceed (root-gated) on the UI thread instead of waiting for a tap.
+                if (skipStartupWarning) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (!isFinishing()) {
+                                proceedIfRooted();
+                            }
+                        }
+                    });
+                }
+            }
+        }.start();
+    }
 
     private void copyFile(InputStream in, OutputStream out) throws IOException {
         byte[] buffer = new byte[1024];

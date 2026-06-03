@@ -73,9 +73,6 @@ Do aplikácie Android Auto nie je možné pridať ľubovoľnú aplikáciu, ale j
     <string name="default_string">\u0020Prednastavené</string>
     <string name="app_list_label">Zoznam aplikácií</string>
     <string name="translators_button">Preložil</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER je vyvíjaný a spravovaný s p. Shmykelsa.<br><br>Zdrojový kód je dostupný na<a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[Ak skutočne mate radi moju prácu, prosím zvážte príspevok.<br>Môžete ma podporiť cez<a href=\"http://www.paypal.me/grizzo96\">PayPal</a>alebo môžete kopírovať moju Bitcoin adresu s tlačidlom nižšie.<br><br>Aj malé množstvo bude veľmi ocenené :)]]></string>
-    <string name="copied_address_toast">BTC adresa skopírovaná na nástenku</string>
     <string name="custom_wallpapers">Tapety</string>
     <string name="tutorial_wallpapers">Toto vylepšenie aktivuje novú zostavu v meniči tapiet v Android Auto. Android Auto 5.8 alebo novší je potrebný.\nUPOZORNENIE: Ak ste používateľom tapiet pre Android Auto, bude nutné ju aktualizovať aspoň na verziu 3.0, v opačnom prípade vylepšenie Tapiet pre Android Auto nebude funkčné.</string>
     <string name="tutorial_dark_mode">Od decembra 2020 Google vrátil správanie, ktoré bolo od Androidu 10. Predtým svetlý / tmavý režim v aplikácii Android Auto nasledoval svetlý / tmavý režim v telefóne a naopak. To znamenalo, že prepnutie telefónu do tmavého režimu malo vplyv na auto, alebo ak bol telefón v tmavom režime a auto malo vypnuté svetlá, používalo sa na zapnutie svetlej témy na telefóne.\n Odkedy však bola predstavená táto funkcia „nezávislého“ tmavého režimu, používatelia s jednotkami Aftermarket už nemajú možnosť prepnúť do tmavého režimu bez toho, aby skutočne zapojili signál jednotky do svetiel vozidla.\n Toto vylepšenie zaisťuje, že nočný režim opäť závisí od telefónu a prepínanie svetlého / tmavého režimu na telefóne bude mať vplyv aj na auto.</string>
@@ -111,7 +108,6 @@ UPOZORNENIE: Toto vylepšenie nebolo dôkladne testované a môže potenciálne 
     <string name="alpha_jump_tweak">nový abecedný skok</string>
     <string name="choose_accounts">Vybrať účty</string>
     <string name="use_all">Vybrať všetky (EXPERIMENTÁLNE)</string>
-    <string name="copied_pastebin">Bol vytvorený odkaz na protokol a skopírovaný do schránky</string>
     <string name="log_copied">Protokol bol skopírovaný</string>
     <string name="new_version_available">Dostupná nová verzia</string>
     <string name="go_to_new_version">Nová verzia AA AIO TWEAKER (verzia%1$s) je dostupná na GitHub. Chcete ju teraz stiahnuť?</string>

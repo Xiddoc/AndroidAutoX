@@ -1,9 +1,6 @@
 package sksa.aa.tweaker;
 
 import android.app.Dialog;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.os.Bundle;
 import android.support.v4.app.DialogFragment;
@@ -11,7 +8,6 @@ import android.support.v7.app.AlertDialog;
 import android.text.Html;
 import android.text.method.LinkMovementMethod;
 import android.widget.TextView;
-import android.widget.Toast;
 
 
 public class AboutDialog extends DialogFragment {
@@ -20,8 +16,7 @@ public class AboutDialog extends DialogFragment {
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
 
-        builder.setMessage(Html.fromHtml(getString(R.string.about_part_one) +
-                getString(R.string.about_part_two)));
+        builder.setMessage(Html.fromHtml(getString(R.string.about_part_one)));
         builder.setCancelable(true);
         builder.setPositiveButton(getString(android.R.string.ok), new DialogInterface.OnClickListener() {
             @Override
@@ -39,7 +34,6 @@ public class AboutDialog extends DialogFragment {
                         "Czech: Martin2412, LLZN, pesekpata<br>" +
                         "Slovenian: Brubblu<br>" +
                         "French: Nova.kin, Sperafico<br>" +
-                        "Italian: Shmykelsa<br>" +
                         "Brazilian Portuguese: Gsproenca<br>" +
                         "Vietnamese: Quang.chk1, votruongvu.hcm<br>" +
                         "German: Lassmiranda, cbrosius<br>" +
@@ -65,16 +59,6 @@ public class AboutDialog extends DialogFragment {
                 Alert1.show();
                 ((TextView) Alert1.findViewById(android.R.id.message)).setMovementMethod(LinkMovementMethod.getInstance());
 
-            }
-        });
-        builder.setNegativeButton("Bitcoin", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialogInterface, int i) {
-                ClipboardManager clipboard = (ClipboardManager) getActivity().getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clip = ClipData.newPlainText("Copied Text", "39bdKem8taTZvm2WeyH8wwDhYKzZ2PzhGn");
-                clipboard.setPrimaryClip(clip);
-                Toast mytoast = Toast.makeText(getContext(), getString(R.string.copied_address_toast), Toast.LENGTH_LONG);
-                mytoast.show();
             }
         });
         AlertDialog Alert = builder.create();

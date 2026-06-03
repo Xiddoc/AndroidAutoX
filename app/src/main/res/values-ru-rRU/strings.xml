@@ -72,9 +72,6 @@
     <string name="default_string">\u0020По умолчанию</string>
     <string name="app_list_label">Выбор приложений</string>
     <string name="translators_button">Авторы перевода</string>
-    <string name="about_part_one"><![CDATA[AIO TWEAKER разработан и поддерживается Shmykelsa.<br><br>Исходный код доступен на сайте <a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[Если вам нравится моя работа, пожалуйста, подумайте о том, чтобы угостить меня кофе.<br> Вы можете это  сделать через <a href=\"http://www.paypal.me/grizzo96\">PayPal</a> или через Bitcoin.Скопировать мой Bitcoin можно кнопкой ниже .<br><br>Даже небольшое пожертвование будет оценено. :)]]></string>
-    <string name="copied_address_toast">Адрес Bitcoin кошелька скопирован в буфер обмена</string>
     <string name="custom_wallpapers">Обои</string>
     <string name="tutorial_wallpapers">Этот твик активирует штатную функцию изменения обоев в Android Auto (версия 5.8 или новее обязательна).\n ВНИМАНИЕ: Если вы являетесь пользователем приложения Wallpapers For Android Auto, вам обязательно нужно будет обновить его до версии 3 или новее, иначе эта функция нарушит работу обоев в Android Auto.</string>
     <string name="tutorial_dark_mode">Начиная с декабря 2020 года, компания Google изменила некоторые настройки на Андроид 10 и выше при использовании ГУ с Android Auto. Раньше светлый/тёмный режим менялся только вместе с режимом на смартфоне. При изменении режима на смартфоне, он автоматически менялся и на ГУ. \n Однако, поскольку был введен  «независимый» темный режим, пользователи с не штатными ГУ больше не имеют возможности переключиться в темный режим без фактического подключения ГУ к головному свету автомобиля. \n Данная настройка позволяет вернуть переключение светлого/темного режима совместно с режимом на смартфоне.</string>
@@ -110,7 +107,6 @@
     <string name="alpha_jump_tweak">новый переход по алфавиту</string>
     <string name="choose_accounts">Выбрать аккаунт</string>
     <string name="use_all">Выбрать все (ЭКСПЕРИМЕНТ)</string>
-    <string name="copied_pastebin">Ссылка на лог была создана и скопирована в буфер обмена</string>
     <string name="log_copied">Лог скопирован</string>
     <string name="new_version_available">Доступна новая версия</string>
     <string name="go_to_new_version">Новая версия AA AIO TWEAKER (версия %1$s) доступна на GitHub. Вы хотите скачать ее сейчас?</string>

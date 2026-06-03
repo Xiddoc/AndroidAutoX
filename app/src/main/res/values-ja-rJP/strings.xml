@@ -70,9 +70,6 @@ Android Auto 5.8以降が必要です。</string>
     <string name="default_string">規定値に戻す:\u0020</string>
     <string name="app_list_label">アプリの一覧</string>
     <string name="translators_button">翻訳者</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKERはShmykelsaによって開発及びメンテナンスされています。<br><br>ソースコードは<a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a>で入手できます。<br><br>]]></string>
-    <string name="about_part_two"><![CDATA[このアプリが気に入ったら、寄付を検討してください。<br><a href=\"http://www.paypal.me/grizzo96\">PayPal</a>で寄付するか、下のボタンを押してビットコインアドレスをコピーしてください。<br><br>少額でも大歓迎です :)]]></string>
-    <string name="copied_address_toast">ビットコインアドレスをクリップボードにコピーしました</string>
     <string name="custom_wallpapers">壁紙</string>
     <string name="tutorial_wallpapers">この調整は、Android Autoに新しく組み込まれた壁紙チェンジャーを有効にします。Android Auto 5.8以降が必要です。\n警告: あなたがWallpapers For Android Autoの利用者であれば、少なくともバージョン3.0にアップデートする必要があります。そうしないと、この調整はWallpapers For Android Autoの機能を壊します。</string>
     <string name="tutorial_dark_mode">2020年12月から、GoogleはAndroid 10以降に起こった挙動を元に戻しました。以前は、Android Autoのライト/ダークモードがスマートフォンのライト/ダークモードに追従し、その逆もありました。つまり、スマホをダークモードに切り替えると車にも影響を与え、また、スマホがダークモードで車のライトがオフになっている場合は、スマホのライトモードをオンに切り替えていました。\nしかし、この「独立した」ダークモードの機能が導入され、アフターマーケットヘッドユニットを使用しているユーザーは、ステレオを車のライトに実際に配線しない限り、ダークモードに切り替える方法がなくなりました。\nこの調整は、ナイトモードが再びスマホに依存するようにし、スマホ上のライト/ダークモードを切り替えると、車にもその効果を与えるようにします。</string>
@@ -108,7 +105,6 @@ Android Auto 5.8以降が必要です。</string>
     <string name="alpha_jump_tweak">新しいアルファベットジャンプ</string>
     <string name="choose_accounts">アカウントを選択</string>
     <string name="use_all">すべて使用 (実験的)</string>
-    <string name="copied_pastebin">ログへのリンクが作成され、クリップボードにコピーしました</string>
     <string name="log_copied">ログをコピーしました</string>
     <string name="new_version_available">新しいバージョンが利用可能です</string>
     <string name="go_to_new_version">GitHubでAA AIO TWEAKER (バージョン %1$s) の新しいバージョンが利用可能です。今すぐダウンロードしますか？</string>

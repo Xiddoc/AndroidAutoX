@@ -15,6 +15,8 @@ If you are unsure of what a tweak does, long press on it and a tutorial will sho
 By using this software, you agree that YOU, and ONLY YOU, are solely responsible for any possible consequence that may result in altering safety features such as injury to yourself and/or others, property damage, loss of life.\n
 Under no circumstances is the author of this app responsible for its use</string>
     <string name="proceed">I understand</string>
+    <string name="disable_startup_warning">Don\'t show this warning again</string>
+    <string name="startup_warning_disabled">Startup warning disabled</string>
     <string name="navigation_at_start">Navigation at start</string>
     <string name="statb_opaque_string">Force Opaque Statusbar</string>
     <string name="battery_outline_string">battery saver outline</string>
@@ -71,9 +73,7 @@ Android Auto 5.8 or superior is required.</string>
     <string name="default_string">\u0020Default</string>zzz
     <string name="app_list_label">Apps List</string>
     <string name="translators_button">Translated by</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER is developed and maintained by Shmykelsa.<br><br>Source code is available on <a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[If you really like my work, please consider a donation.<br> You can donate me through <a href=\"http://www.paypal.me/grizzo96\">PayPal</a> or you can copy my Bitcoin address with the button down below.<br><br>Even a small amount will be much appreciated :)]]></string>
-    <string name="copied_address_toast">BTC Address copied to clipboard</string>
+    <string name="about_part_one"><![CDATA[AA AIO TWEAKER<br><br>Source code is available on <a href=\"https://github.com/Xiddoc/AA-Tweaker\">GitHub</a>]]></string>
     <string name="custom_wallpapers">Wallpapers</string>
     <string name="tutorial_wallpapers">This tweak will activate the new built in wallpaper changer in Android Auto. Android Auto 5.8 or superior is required.\nWARNING: If you are a user of Wallpapers For Android Auto, you will need to update it to at least version 3.0, otherwise this tweak will break Wallpapers For Android Auto functionality.</string>
     <string name="tutorial_dark_mode">Starting from December 2020, Google reverted a behaviour that happened since Android 10. Previously, the light/dark mode on Android Auto followed the light/dark mode on the phone and vice versa. This meant that switching the phone to dark mode had effect on the car, or if the phone was in dark mode and the car had lights off it used to switch on the light theme on the phone.\n However, since this feature of \"independent\" dark mode was introduced, users with Aftermarket headunits have no way to switch to dark mode anymore without actually wiring the stereo to the car\'s lights.\n This tweak makes sure that night mode is again dependent from phone and switching light/dark mode on phone will have its effects on cars too.</string>
@@ -104,12 +104,12 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="set_usb_bitrate">USB bitrate to</string>
     <string name="choose_value_first">Choose a value first</string>
     <string name="open_issue_button">Open Issue</string>
+    <string name="no_browser_found">No browser found to open the issue page</string>
     <string name="error_generic">The command was not successful. Please wait some minutes and try again. If problem is still ongoing, please open a issue on GitHub</string>
     <string name="tutorial_alphajump">This tweak will activate a new (and hidden) redesign that changes how lists can be browsed with letters. Instead of the A-Z button at the top, the button will appear on the scrollbar when there\'s no scroll happening and you won\'t be forced to go to top to browse with letters again.</string>
     <string name="alpha_jump_tweak">new alphabet jump</string>
     <string name="choose_accounts">Choose accounts</string>
     <string name="use_all">Use all (EXPERIMENTAL)</string>
-    <string name="copied_pastebin">A link to the log has been created and copied to clipboard</string>
     <string name="log_copied">Log has been copied</string>
     <string name="new_version_available">New Version available</string>
     <string name="go_to_new_version">A new version of AA AIO TWEAKER (version %1$s) is available on GitHub. Do you want to download it now?</string>

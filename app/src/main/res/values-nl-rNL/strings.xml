@@ -71,9 +71,6 @@ HET IS NIET MOGELIJK OM ANDROID AUTO MET EEN ANDERE, SPECIFIEKE APP TE STARTEN.<
     <string name="default_string">\u0020Standaard</string>
     <string name="app_list_label">Lijst met apps</string>
     <string name="translators_button">Vertaald door</string>
-    <string name="about_part_one"><![CDATA[AA AIO TWEAKER is ontwikkeld en onderhouden door Shmykelsa.<br><br>Broncode is beschikbaar op <a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[Als mijn werk je echt bevalt, overweeg dan een donatie.<br> U kunt aan mij doneren via <a href=\"http://www.paypal.me/grizzo96\">PayPal</a> of u kunt mijn Bitcoin adres kopiëren met de knop hieronder.<br><br>Ook een klein bedrag wordt zeer gewaardeerd :)]]></string>
-    <string name="copied_address_toast">BTC adres gekopieerd naar klembord</string>
     <string name="custom_wallpapers">Achtergronden</string>
     <string name="tutorial_wallpapers">Deze tweak zal de nieuwe ingebouwde wallpaper changer activeren in Android Auto. Android Auto versie 5.8 of hoger is vereist.\nWAARSCHUWING: Als je een gebruiker bent van Wallpapers voor Android Auto, moet je de versie bijwerken naar ten minste versie 3.0. Anders zal deze tweak Wallpapers voor Android onbruikbaar maken.</string>
     <string name="tutorial_dark_mode">Vanaf december 2020 heeft Google functionaliteit teruggedraaid dat sinds Android 10 gebeurde. Eerder volgde de licht/donkere modus op Android Auto op de licht/donkere modus op de telefoon en omgekeerd. Dit betekende dat het wisselen van de telefoon naar donkere modus van invloed was op de auto, of als de telefoon in donkere modus was en de auto had de lichten uit om het lichtthema op de telefoon aan te zetten.\n Omdat er een \"onafhankelijke\" donkere modus is geïntroduceerd, kunnen gebruikers met niet officiele headunits niet meer naar de donkere modus overschakelen zonder deze aan te sluiten op de lichten van de auto.\n Deze tweak zorgt ervoor dat de nachtmodus weer afhankelijk is van de telefoon. Als je lichte/donkere modus op de telefoon schakelt, heeft dit ook gevolgen voor de modus in de auto.</string>
@@ -109,7 +106,6 @@ WAARSCHUWING: Deze tweak is niet uitgebreid getest en kan Android Auto mogelijk 
     <string name="alpha_jump_tweak">nieuw alfabet sprong</string>
     <string name="choose_accounts">Kies account</string>
     <string name="use_all">Alles gebruiken (EXPERIMENTAL)</string>
-    <string name="copied_pastebin">Een link naar het logboek is aangemaakt en gekopieerd naar het klembord</string>
     <string name="log_copied">Het logboek is opgeslagen</string>
     <string name="new_version_available">Nieuwe versie beschikbaar</string>
     <string name="go_to_new_version">Er is een nieuwe versie van AA AIO TWEAKER (versie %1$s) beschikbaar op GitHub. Wilt u het nu downloaden?</string>

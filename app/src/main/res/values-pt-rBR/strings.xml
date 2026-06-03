@@ -73,9 +73,6 @@ Não é possível adicionar qualquer app ao Android Auto, mas é possível adici
     <string name="default_string">\u0020Padrão</string>
     <string name="app_list_label">Lista de aplicativos</string>
     <string name="translators_button">Traduzido por</string>
-    <string name="about_part_one"><![CDATA[A AA AIO TWEAKER é desenvolvida e mantida por Shmykelsa.<br><br>O código-fonte está disponível no <a href=\"https://github.com/shmykelsa/AA-Tweaker\">GitHub</a><br><br>]]></string>
-    <string name="about_part_two"><![CDATA[Se você gosta mesmo do meu trabalho, considere uma doação.<br> Você pode me doar através do <a href=\"http://www.paypal.me/grizzo96\">PayPal</a> ou você pode copiar meu endereço Bitcoin com o botão abaixo.<br><br>Mesmo uma pequena quantia será muito apreciada :)]]></string>
-    <string name="copied_address_toast">Endereço BTC copiado para a área de transferência</string>
     <string name="custom_wallpapers">Papeis de parede</string>
     <string name="tutorial_wallpapers">Este ajuste ativará o novo seletor de papel de parede construído no Android Auto. Android Auto 5.8 ou superior é necessário.\nAVISO: Se você é um usuário de papéis de parede para Android Auto, precisará atualizá-lo para pelo menos a versão 3., Caso contrário, este ajustes irá quebrar papéis de parede para a funcionalidade do Android Auto.</string>
     <string name="tutorial_dark_mode">A partir de dezembro de 2020, a Google reverteu um comportamento que aconteceu desde o Android 10. Anteriormente, o modo claro/escuro no Android Auto seguiu o modo claro / escuro no telefone e vice-versa. Isto significava que a opção do telefone para o modo escuro teve efeito no carro, ou se o telefone estava em modo escuro e o carro tinha luzes apagadas para ligar o tema claro no telefone.\n No entanto, desde que esse recurso de modo \"independente\" foi introduzido, usuários com cabeças de pós-mercado não têm maneira de alternar para o modo escuro mais sem fazer fiação do estéreo para as luzes do carro.\n Este ajustes certifica-se de que o modo noturno é de novo dependente do telefone e ativar o modo claro/escuro no telefone também terá seus efeitos nos carros também.</string>
@@ -111,7 +108,6 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="alpha_jump_tweak">new alphabet jump</string>
     <string name="choose_accounts">Choose accounts</string>
     <string name="use_all">Use all (EXPERIMENTAL)</string>
-    <string name="copied_pastebin">A link to the log has been created and copied to clipboard</string>
     <string name="log_copied">Log has been copied</string>
     <string name="new_version_available">New Version available</string>
     <string name="go_to_new_version">A new version of AA AIO TWEAKER (version %1$s) is available on GitHub. Do you want to download it now?</string>
