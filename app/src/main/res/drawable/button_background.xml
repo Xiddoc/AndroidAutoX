@@ -29,7 +29,7 @@
                 <shape android:shape="rectangle">
                     <corners android:radius="18dp" />
                     <stroke
-                        android:width="2dp"
+                        android:width="1dp"
                         android:color="@color/glow_blue_ring_outer" />
                 </shape>
             </item>
@@ -58,7 +58,7 @@
                 <shape android:shape="rectangle">
                     <corners android:radius="13dp" />
                     <stroke
-                        android:width="2dp"
+                        android:width="3dp"
                         android:color="@color/glow_blue_ring_inner" />
                 </shape>
             </item>

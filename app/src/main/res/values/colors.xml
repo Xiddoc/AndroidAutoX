@@ -46,9 +46,11 @@
     <!-- Three-step blue halo: stepped alpha 1A -> 55 -> AA -->
     <color name="glow_blue_ring_outer">#1A2196F3</color>
     <color name="glow_blue_ring_mid">#552196F3</color>
-    <color name="glow_blue_ring_inner">#AA2196F3</color>
+    <color name="glow_blue_ring_inner">#CC2196F3</color>
     <!-- Bright ACCENT-colored rim (replaces white/chrome highlight) -->
     <color name="glow_rim_bright">#CC42A5F5</color>
+    <!-- Softer rim for cards/dialog so buttons stay the loudest element -->
+    <color name="glow_rim_soft">#8042A5F5</color>
     <!-- Subtler 2-step halo for cards / dialog (same blue hue) -->
     <color name="glow_blue_ring_card_outer">#142196F3</color>
     <color name="glow_blue_ring_card_inner">#552196F3</color>
