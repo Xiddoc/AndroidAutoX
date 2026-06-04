@@ -7,7 +7,9 @@ import androidx.fragment.app.DialogFragment;
 import androidx.appcompat.app.AlertDialog;
 import android.text.Html;
 import android.text.method.LinkMovementMethod;
+import android.view.View;
 import android.widget.TextView;
+import android.widget.Toast;
 
 
 public class AboutDialog extends DialogFragment {
@@ -63,7 +65,25 @@ public class AboutDialog extends DialogFragment {
         });
         AlertDialog Alert = builder.create();
         Alert.show();
-        ((TextView)Alert.findViewById(android.R.id.message)).setMovementMethod(LinkMovementMethod.getInstance());
+        final TextView message = (TextView) Alert.findViewById(android.R.id.message);
+        message.setMovementMethod(LinkMovementMethod.getInstance());
+
+        // Hidden developer-mode toggle: tap the About text 7x (the familiar Android
+        // "tap build number" gesture). Reveals the dev/PoC menu actions.
+        final int[] taps = {0};
+        message.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (++taps[0] >= 7) {
+                    taps[0] = 0;
+                    boolean enabled = !MainActivity.isDevMode(getContext());
+                    MainActivity.setDevMode(getContext(), enabled);
+                    Toast.makeText(getContext(),
+                            enabled ? "Developer mode enabled" : "Developer mode disabled",
+                            Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
         return Alert;
     }
 

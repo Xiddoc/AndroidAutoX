@@ -15,9 +15,14 @@ AndroidAutoX is a native Android app that applies "tweaks" to Google's Android A
 
 - Language: Java
 - Build system: Gradle 8.7 with Android Gradle Plugin 8.5.2 (Gradle wrapper included); AndroidX
-- minSdk 31 (Android 12), targetSdk 34, compileSdk 34
-- No `libsu` — root commands are executed directly via `Runtime.getRuntime().exec("su")`
-- Ships a bundled `sqlite3` binary (in `res/raw`) that is copied to app data and executed at runtime
+- minSdk 31 (Android 12), targetSdk 34, compileSdk 34 (Java 17 source/target)
+- Root via **libsu** (`com.github.topjohnwu.libsu`): one persistent root shell for shell
+  commands (`MainActivity.runSuWithCmd`), plus a **`RootService`** (`PhixitRootService`) that
+  runs the platform `android.database.sqlite` API inside a root process to edit GMS's
+  databases directly. No bundled `sqlite3` binary, and DB SQL is parameterized rather than
+  built into shell strings.
+- Release builds are minified/shrunk with R8 (`minifyEnabled` + `shrinkResources`); keep rules
+  for libsu, the AIDL bridge, and reflection-based libs are in `app/proguard-rules.pro`.
 
 ## Repository layout
 
@@ -39,7 +44,11 @@ AndroidAutoX is a native Android app that applies "tweaks" to Google's Android A
 | `app/src/main/java/com/xiddoc/androidautox/Utils/` | `UtilsLibrary`, `Version`, `BottomDialog` helpers |
 | `app/src/main/res/layout/scrollview.xml` | Tweak buttons UI (the main tweak list) |
 | `app/src/main/res/layout/activity_splash.xml` | Splash / disclaimer layout |
-| `app/src/main/res/raw/sqlite3` | Bundled sqlite3 binary used at runtime |
+| `app/src/main/java/com/xiddoc/androidautox/AaxApp.java` | Application: configures the libsu root shell, inits `RootDb` |
+| `app/src/main/java/com/xiddoc/androidautox/PhixitRootService.java` | libsu `RootService`: opens GMS DBs as root via the platform SQLite API |
+| `app/src/main/java/com/xiddoc/androidautox/RootDb.java` | App-side handle that binds `PhixitRootService` and exposes `IPhixitRoot` |
+| `app/src/main/aidl/com/xiddoc/androidautox/IPhixitRoot.aidl` | Root SQLite bridge interface (read/write partitions, query, exec) |
+| `app/src/main/aidl/com/xiddoc/androidautox/Partition.aidl` + `Partition.java` | Parcelable {id, blob} crossing the binder |
 | `app/src/main/res/values/strings.xml` | English source strings (localization source of truth) |
 | `app/src/main/res/values-*/strings.xml` | ~33 translated locales (edited via PRs) |
 
@@ -109,18 +118,19 @@ A CI pipeline using GitHub Actions is being added. It builds and signs the app u
 ## How the app works at runtime
 
 1. **`SplashActivity`** launches first. It shows a safety-warning disclaimer; a 5-second `CountDownTimer` gates the "Proceed" / "I understand" button (`activity_splash.xml`).
-2. It checks for root with `MainActivity.runSuWithCmd("echo 1")`. If root is unavailable, `NoRootDialog` is shown.
-3. `copyAssets()` copies the bundled `R.raw.sqlite3` binary into the app data directory and `chmod`s it to be executable.
-4. **`MainActivity`** hosts the tweak buttons. Each tweak runs root commands via `MainActivity.runSuWithCmd(String cmd)`, which pipes commands into `Runtime.getRuntime().exec("su")`.
-5. Tweaks are applied by running the copied `sqlite3` against Android Auto's databases:
-   - Phenotype flags: `/data/data/com.google.android.gms/databases/phenotype.db`
+2. It acquires root via libsu (`MainActivity.hasRootAccess()` → `Shell.getShell().isRoot()`), which surfaces Magisk's grant prompt on first launch. If root is unavailable, `NoRootDialog` is shown. (A non-root fallback shell still echoes output, so root is judged by the shell's real root status, not command output.)
+3. It pre-binds `PhixitRootService` off the main thread (`RootDb.get()`) so later DB work is ready immediately.
+4. **`MainActivity`** hosts the tweak buttons. Shell commands (`am`, `pm`, `rm`, `chown`, `dumpsys`, `setenforce`, …) run via `MainActivity.runSuWithCmd(String cmd)` on libsu's persistent root shell.
+5. DB edits go through `RootDb`/`PhixitRootService`, which opens Android Auto's databases with the platform SQLite API **inside a root process**:
+   - Phenotype flags: `/data/data/com.google.android.gms/databases/phenotype.db` (edits the compressed `param_partitions.flags_content` blobs via `PhixitEngine`)
    - Gearhead car service settings: the gearhead `carservicedata.db`
+   - The engine drops SELinux to permissive (only if enforcing), force-stops GMS, edits in place, restores ownership/context, clears the phenotype cache, and restores SELinux.
 6. Failures surface via `NotSuccessfulDialog`; some tweaks prompt a reboot via `RebootDialog`.
 
 ## Adding a new tweak button
 
 1. In `app/src/main/res/layout/scrollview.xml`, add a `Button` (and its companion status `ImageView`) inside the appropriate section: `GENERAL`, `SCREEN SETUP`, `APPEARANCE`, `VIDEO QUALITY`, or `PRE-ACTIVATE`.
-2. In `MainActivity.java`, wire a click handler for the new button that runs the required root/`sqlite3` commands via `runSuWithCmd(...)`, and update the status `ImageView` to reflect applied state.
+2. In `MainActivity.java`, wire a click handler for the new button. Prefer the `PhixitTweaks`/`TweakRegistry` + `PhixitEngine` path (declare the flags, apply via `applyPhixitTweak…`); use `runSuWithCmd(...)` for non-DB shell actions and `RootDb` for any direct SQL. Update the status `ImageView` to reflect applied state.
 3. Add any user-facing text to `app/src/main/res/values/strings.xml` (English source) so it can be translated.
 
 ## Localization workflow

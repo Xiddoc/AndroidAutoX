@@ -61,6 +61,9 @@ Android Auto 5.8 or superior is required.</string>
     <string name="copy_log">Copy log</string>
     <string name="about">About</string>
     <string name="revert_everything">Reset all tweaks</string>
+    <string name="auto_reapply">Keep tweaks applied in background</string>
+    <string name="auto_reapply_on">Tweaks will be re-applied automatically if Android Auto reverts them</string>
+    <string name="auto_reapply_off">Automatic re-apply disabled</string>
     <string name="tab_tweaks">Tweaks</string>
     <string name="tab_logs">Logs</string>
     <string name="welcome_title">Welcome to AndroidAutoX</string>
@@ -77,7 +80,6 @@ Android Auto 5.8 or superior is required.</string>
     <string name="set_value">Set\u0020</string>
     <string name="reboot_to_apply">REBOOT TO APPLY</string>
     <string name="warning_title">WARNING</string>
-    <string name="unpatch">Unpatch\u0020</string>
     <string name="patch_app">Patch\u0020</string>
     <string name="default_string">\u0020Default</string>
     <string name="app_list_label">Apps List</string>

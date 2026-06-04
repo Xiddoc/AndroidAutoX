@@ -12,8 +12,26 @@
     app:showAsAction="never" />
 
     <item
+        android:id="@+id/auto_reapply"
+        android:checkable="true"
+        app:showAsAction="never"
+        android:title="@string/auto_reapply" />
+
+    <item
         android:id="@+id/aa_settings"
         app:showAsAction="never"
         android:title="@string/menu_aa_settings" />
+
+    <item
+        android:id="@+id/phixit_apply_test"
+        android:visible="false"
+        app:showAsAction="never"
+        android:title="Dev: Phixit apply test" />
+
+    <item
+        android:id="@+id/phixit_dump_all"
+        android:visible="false"
+        app:showAsAction="never"
+        android:title="Dev: Dump all flags to file" />
 
 </menu>

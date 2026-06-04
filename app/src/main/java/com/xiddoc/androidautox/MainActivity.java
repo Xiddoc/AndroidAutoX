@@ -203,6 +203,9 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_main);
 
+        // (Re)schedule the background re-apply job to match what's currently enabled.
+        ReapplyScheduler.sync(getApplicationContext());
+
         ImageView revertNotificationDuration = findViewById(R.id.revert_hun_throttling);
         ImageView revertMediaNotificationDuration = findViewById(R.id.revert_media_hun);
         ImageView revertWifiBitrate = findViewById(R.id.revert_bitrate_wifi);
@@ -300,14 +303,12 @@ public class MainActivity extends AppCompatActivity {
 
         TextView logs = initiateLogsText();
 
-        appendText(logs, runSuWithCmd(
-                path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                        "'SELECT * FROM FlagOverrides;'"
-        ).getStreamLogsWithLabels());
-        appendText(logs, runSuWithCmd(
-                path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                        "'SELECT * FROM sqlite_master WHERE type=\"trigger\";'"
-        ).getStreamLogsWithLabels());
+        // Dev-only: read-only diagnostic of the new "phixit" Phenotype snapshot. Hidden
+        // behind developer mode (enable by tapping the About text 7x) so it doesn't run /
+        // spam the log on every launch for normal users.
+        if (isDevMode(this)) {
+            phixitDiagnostic(logs);
+        }
 
 
         animationRun = false;
@@ -402,7 +403,7 @@ public class MainActivity extends AppCompatActivity {
 
 
         if (load("aa_patched_apps")) {
-            patchapps.setText(getString(R.string.unpatch) + getString(R.string.patch_custom_apps));
+            patchapps.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.patch_custom_apps));
             changeStatus(patchappstatus, 2, false);
         } else {
             patchapps.setText(getString(R.string.patch_app) + getString(R.string.patch_custom_apps));
@@ -798,13 +799,8 @@ public class MainActivity extends AppCompatActivity {
             messagesHunThrottling.setText(getString(R.string.reset_tweak) + getString(R.string.set_notification_duration_to) + getString(R.string.default_string));
             changeStatus(messagesHunStatus, 2, false);
             if (loadValue("messaging_hun_value") == 0) {
-                try {
-                    saveValue(Integer.parseInt(runSuWithCmd(
-                            path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                    "'SELECT DISTINCT intVal FROM Flags WHERE name=\"SystemUi__hun_default_heads_up_timeout_ms\";'").getInputStreamLog()), "messaging_hun_value");
-                } catch (RuntimeException e) {
-                    e.printStackTrace();
-                }
+                saveValue((int) readPhixitLong(FlagSpec.PKG_GEARHEAD,
+                        "SystemUi__hun_default_heads_up_timeout_ms", 0), "messaging_hun_value");
             }
             currentlySetHun.setText(getString(R.string.currently_set) + loadValue("messaging_hun_value"));
         } else {
@@ -886,13 +882,8 @@ public class MainActivity extends AppCompatActivity {
             mediathrottlingbutton.setText(getString(R.string.reset_tweak) + getString(R.string.media_notification_duration_to) + getString(R.string.default_string));
             changeStatus(mediaHunStatus, 2, false);
             if (loadValue("media_hun_value") == 0) {
-                try {
-                    saveValue(Integer.parseInt(runSuWithCmd(
-                            path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                    "'SELECT DISTINCT intVal FROM Flags WHERE name=\"SystemUi__media_hun_in_rail_widget_timeout_ms\";'").getInputStreamLog()), "media_hun_value");
-                } catch (RuntimeException e) {
-                    e.printStackTrace();
-                }
+                saveValue((int) readPhixitLong(FlagSpec.PKG_GEARHEAD,
+                        "SystemUi__media_hun_in_rail_widget_timeout_ms", 0), "media_hun_value");
             }
             currentlySetMediaHun.setText(getString(R.string.currently_set) + loadValue("media_hun_value"));
         } else {
@@ -1089,10 +1080,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onClick(View view) {
                         if (load("battery_saver_warning")) {
-                            revert("battery_saver_warning");
-                            batteryWarning.setText(getString(R.string.disable_tweak_string) + getString(R.string.battery_warning));
-                            changeStatus(batteryWarningStatus, 0, true);
-                            showRebootButton();
+                            revertBatteryWarning();
                         } else {
                             disableBatteryWarning();
                         }
@@ -1560,15 +1548,23 @@ public class MainActivity extends AppCompatActivity {
         new Thread() {
             @Override
             public void run() {
+                // Migrated tweaks: restore the captured baseline via the phixit engine.
+                if (PhixitTweaks.has(toRevert) && hasBaseline(toRevert)) {
+                    appendText(logs, "\n\n--  Reverting (phixit): " + toRevert + "  --");
+                    revertPhixitSpecs(logs, PhixitTweaks.specs(toRevert));
+                    save(false, toRevert);
+                    return;
+                }
+
                 String path = getApplicationInfo().dataDir;
 
                 save(false, toRevert);
 
                 appendText(logs, "\n\n-- Reverting the hack  --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS " + toRevert + "; DELETE FROM FlagOverrides;'\n"
-                ).getStreamLogsWithLabels());
+                RootDb.exec(PHENO_DB, java.util.Arrays.asList(
+                        "DROP TRIGGER IF EXISTS " + toRevert,
+                        "DELETE FROM FlagOverrides"));
+                appendText(logs, "\n\tdropped trigger " + toRevert + " and cleared FlagOverrides");
             }
 
 
@@ -1577,8 +1573,82 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    private boolean hasBaseline(String key) {
+        return new PhixitEngine(this, null).hasBaseline(key);
+    }
+
+    /**
+     * Generic apply for a registry tweak: applies its flags via the phixit
+     * engine, persists the toggle, and updates the button/status on success.
+     */
+    private void applyPhixitTweak(final String key, final ImageView statusView,
+                                  final TextView button, final String reEnableLabel) {
+        applyPhixitTweakSpecs(key, PhixitTweaks.specs(key), statusView, button, reEnableLabel);
+    }
+
+    /** As {@link #applyPhixitTweak} but with an explicit spec list (dynamic-value tweaks). */
+    private void applyPhixitTweakSpecs(final String key, final java.util.List<FlagSpec> specs,
+                                       final ImageView statusView, final TextView button,
+                                       final String reEnableLabel) {
+        final TextView logs = initiateLogsText();
+        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
+                getString(R.string.tweak_loading), true);
+        new Thread() {
+            @Override
+            public void run() {
+                appendText(logs, "\n\n--  Applying (phixit): " + key + "  --");
+                final boolean ok = applyPhixitSpecs(logs, specs, true);
+                if (ok) save(true, key);
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        dialog.dismiss();
+                        if (ok) {
+                            if (statusView != null) changeStatus(statusView, 1, true);
+                            showRebootButton();
+                            if (button != null && reEnableLabel != null) {
+                                button.setText(getString(R.string.re_enable_tweak_string) + reEnableLabel);
+                            }
+                        } else {
+                            DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
+                            Bundle bundle = new Bundle();
+                            bundle.putString("tweak", key);
+                            bundle.putString("log", logs.getText().toString());
+                            notSuccessfulDialog.setArguments(bundle);
+                            notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
+                        }
+                    }
+                });
+            }
+        }.start();
+    }
+
+    /** Developer mode flag (stored in the shared app prefs). Gates the dev/PoC menu
+     *  actions and the startup diagnostic so they stay out of sight for normal users. */
+    static final String DEV_MODE_KEY = "dev_mode_enabled";
+
+    public static boolean isDevMode(Context ctx) {
+        return ctx.getSharedPreferences(PhixitEngine.PREFS, Context.MODE_PRIVATE)
+                .getBoolean(DEV_MODE_KEY, false);
+    }
+
+    public static void setDevMode(Context ctx, boolean enabled) {
+        ctx.getSharedPreferences(PhixitEngine.PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(DEV_MODE_KEY, enabled).apply();
+    }
+
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
+        MenuItem auto = menu.findItem(R.id.auto_reapply);
+        if (auto != null) {
+            auto.setChecked(ReapplyScheduler.isAutoReapplyEnabled(getApplicationContext()));
+        }
+        // Dev/PoC actions are hidden unless developer mode is on.
+        boolean dev = isDevMode(getApplicationContext());
+        MenuItem applyTest = menu.findItem(R.id.phixit_apply_test);
+        if (applyTest != null) applyTest.setVisible(dev);
+        MenuItem dumpAll = menu.findItem(R.id.phixit_dump_all);
+        if (dumpAll != null) dumpAll.setVisible(dev);
         return super.onPrepareOptionsMenu(menu);
     }
 
@@ -1615,9 +1685,27 @@ public class MainActivity extends AppCompatActivity {
                 androidx.appcompat.app.AlertDialog Alert1 = builder.create();
                 Alert1.show();
                 break;
+            case R.id.auto_reapply:
+                boolean newState = !item.isChecked();
+                item.setChecked(newState);
+                ReapplyScheduler.setAutoReapplyEnabled(getApplicationContext(), newState);
+                Toast.makeText(getApplicationContext(),
+                        getString(newState ? R.string.auto_reapply_on : R.string.auto_reapply_off),
+                        Toast.LENGTH_SHORT).show();
+                break;
+
             case R.id.aa_settings:
                 String packageName = "com.google.android.projection.gearhead";
                 openApp(getApplicationContext(), packageName);
+                break;
+
+            case R.id.phixit_apply_test:
+                phixitApplyTest((TextView) findViewById(R.id.logs));
+                break;
+
+            case R.id.phixit_dump_all:
+                dumpAllFlags((TextView) findViewById(R.id.logs));
+                break;
 
             default:
                 return super.onOptionsItemSelected(item);
@@ -1631,6 +1719,8 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences.Editor editor = sharedPreferences.edit();
         editor.putBoolean(key, isChecked);
         editor.apply();
+        // Keep the background re-apply job in sync with what's enabled.
+        ReapplyScheduler.sync(getApplicationContext());
     }
 
     public void saveValue(final int value, String key) throws RuntimeException {
@@ -1680,131 +1770,43 @@ public class MainActivity extends AppCompatActivity {
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
 
-
-        SharedPreferences appsListPref = getApplicationContext().getSharedPreferences("appsListPref", 0);
-        Map<String, ?> allEntries = appsListPref.getAll();
-        logs.append("--  Apps which will be added to whitelist: --\n");
-        String whiteListString = "";
-        for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
-            logs.append("\t\t- " + entry.getValue() + " (" + entry.getKey() + ")\n");
-            whiteListString += "," + entry.getKey();
-
-            String pathResult = runSuWithCmd("pm path " + entry.getKey()).getInputStreamLogWithLabel();
-            String actualPath = pathResult.substring(pathResult.lastIndexOf(":") + 1);
-
-            appendText(logs , runSuWithCmd("mv " + actualPath + " /data/local/tmp/tmpapk" + entry.getKey() + ".apk").getStreamLogsWithLabels());
-            appendText(logs , runSuWithCmd("pm uninstall " + entry.getKey()).getStreamLogsWithLabels());
-            appendText(logs, runSuWithCmd("pm install -t -i \"com.android.vending\" -r" + " /data/local/tmp/tmpapk" + entry.getKey() + ".apk" ).getStreamLogsWithLabels());
-
-
-        }
-
-        whiteListString = whiteListString.replaceFirst(",", "");
-        final String whiteListStringFinal = whiteListString;
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-
-        finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, stringVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"app_white_list\", \"\",\"");
-            finalCommand.append(whiteListStringFinal);
-            finalCommand.append("\",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, stringVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"car_connect_broadcast_whitelist\", \"\",\"");
-        finalCommand.append(whiteListStringFinal);
-        finalCommand.append("\",0);");
-        finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, stringVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__allowed_package_list\",  \"\" ,\"\",0);");
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, stringVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__blocked_packages_by_installer\", \"\" ,\"\",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__should_bypass_validation\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__play_install_api\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__swallow_play_api_exception\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__swallow_play_api_exception_return_value\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"should_bypass_validation\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarProjectionValidator__filter_disabled_packages_in_ispackageallowed_method\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"UnknownSources__allow_full_screen_apps\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("DELETE FROM Flags WHERE name=\"app_black_list\";");
-        finalCommand.append("DELETE FROM Flags WHERE name=\"app_white_list\";");
-        finalCommand.append(System.getProperty("line.separator"));
-
-
-
-
+        // The app uninstall/reinstall loop (re-signing the APKs through pm so they pass
+        // installer-source validation) lives ONLY here -- it must never run on the headless
+        // re-apply path. The flag overrides themselves are produced by
+        // TweakRegistry.patchedAppsSpecs() and applied via the phixit engine below.
         new Thread() {
             @Override
             public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
+                SharedPreferences appsListPref =
+                        getApplicationContext().getSharedPreferences("appsListPref", 0);
+                Map<String, ?> allEntries = appsListPref.getAll();
+                appendText(logs, "--  Apps which will be added to whitelist: --\n");
+                for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
+                    appendText(logs, "\t\t- " + entry.getValue() + " (" + entry.getKey() + ")\n");
 
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_patched_apps;\n DROP TRIGGER IF EXISTS after_delete;\n" +
-                                "DROP TRIGGER IF EXISTS aa_patched_apps_fix;" +
-                                finalCommand + "'").getStreamLogsWithLabels());
+                    String pathResult = runSuWithCmd("pm path " + entry.getKey()).getInputStreamLogWithLabel();
+                    String actualPath = pathResult.substring(pathResult.lastIndexOf(":") + 1);
 
-                try {
-                    this.sleep(5000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    appendText(logs , runSuWithCmd("mv " + actualPath + " /data/local/tmp/tmpapk" + entry.getKey() + ".apk").getStreamLogsWithLabels());
+                    appendText(logs , runSuWithCmd("pm uninstall " + entry.getKey()).getStreamLogsWithLabels());
+                    appendText(logs, runSuWithCmd("pm install -t -i \"com.android.vending\" -r" + " /data/local/tmp/tmpapk" + entry.getKey() + ".apk" ).getStreamLogsWithLabels());
                 }
 
-                if (suitableMethodFound) {
+                appendText(logs, "\n\n--  restoring Google Play Services   --");
+                appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
 
-
-                    appendText(logs, runSuWithCmd(
-                            path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                    "'CREATE TRIGGER aa_patched_apps AFTER DELETE\n" +
-                                    "On FlagOverrides\n" +
-                                    "BEGIN\n" + finalCommand + "END;'\n"
-                    ).getStreamLogsWithLabels());
-                    if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_patched_apps\";'").getInputStreamLog().length() <= 4) {
-                        suitableMethodFound = false;
-                    } else {
-                        appendText(logs, "\n--  end SQL method   --");
-                        save(true, "aa_patched_apps");
-                        new Handler(Looper.getMainLooper()).post(new Runnable() {
-                            @Override
-                            public void run() {
-                                changeStatus(patchappstatus, 1, true);
-                                showRebootButton();
-                                patchapps.setText(getString(R.string.unpatch) + getString(R.string.patch_custom_apps));
-                            }
-                        });
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        dialog.dismiss();
+                        // Apply the whitelist + validation-bypass flags through the phixit
+                        // engine: captures baselines, persists the toggle, updates the UI.
+                        applyPhixitTweakSpecs("aa_patched_apps",
+                                TweakRegistry.patchedAppsSpecs(getApplicationContext()),
+                                patchappstatus, patchapps,
+                                getString(R.string.patch_custom_apps));
                     }
-                }
-                dialog.dismiss();
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "custom_apps");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
+                });
             }
         }.start();
     }
@@ -1821,1281 +1823,121 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
 
 
     public void messageAutoRead() {
-        final TextView logs = initiateLogsText();
-
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Messaging__voice_messages_read_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Messaging__direct_reply_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Messaging__autoplay_messages_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_message_autoread;\n" + finalCommand + "'").getStreamLogsWithLabels());
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_message_autoread AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_message_autoread\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_message_autoread");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(messageAutoReadStatus, 1, true);
-                            showRebootButton();
-                            messageAutoReadTweak.setText(getString(R.string.disable_tweak_string) + getString(R.string.message_auto_read));
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_message_autoread");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
+        applyPhixitTweak("aa_message_autoread", messageAutoReadStatus, null, null);
     }
 
     public void patchforspeed(int usercount) {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarSensorParameters__max_parked_speed_gps_sensor\",\"\" ,999,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarSensorParameters__max_parked_speed_wheel_sensor\",\"\" ,999,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"VisualPreview__unchained\",\"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"VisualPreview__chained\",\"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"VisualPreview__unchained_experiment_id\",\"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, extensionVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"GearSnacks__parked_gears\",\"\" ,\"999\",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-
-                if (suitableMethodFound) {
-
-
-                    appendText(logs, "\n\n--  run SQL method   --");
-                    appendText(logs, runSuWithCmd(
-                            path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                    "'DROP TRIGGER IF EXISTS aa_speed_hack;\n" + finalCommand + "'").getStreamLogsWithLabels());
-
-                    appendText(logs, runSuWithCmd(
-                            path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                    "'CREATE TRIGGER aa_speed_hack AFTER DELETE\n" +
-                                    "On FlagOverrides\n" +
-                                    "BEGIN\n" + finalCommand + "END;'\n"
-                    ).getStreamLogsWithLabels());
-                    if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_speed_hack\";'").getInputStreamLog().length() <= 4) {
-                        suitableMethodFound = false;
-                    } else {
-                        appendText(logs, "\n--  end SQL method   --");
-                        save(true, "aa_speed_hack");
-                        new Handler(Looper.getMainLooper()).post(new Runnable() {
-                            @Override
-                            public void run() {
-                                changeStatus(noSpeedRestrictionsStatus, 1, true);
-                                showRebootButton();
-                                nospeed.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.unlimited_scrolling_when_driving));
-                            }
-                        });
-                    }
-                }
-                dialog.dismiss();
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_speed_hack");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
+        applyPhixitTweak("aa_speed_hack", noSpeedRestrictionsStatus, nospeed, getString(R.string.unlimited_scrolling_when_driving));
     }
 
     public void multiDisplay() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"MultiDisplay__enabled\",\"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"MultiDisplay__clustersim_enabled\",\"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"MultiDisplay__gal_munger_enabled\",\"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"MultiDisplay__cluster_launcher_enabled\",\"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"MultiDisplay__cluster_launcher_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"MultiDisplay__aux_display_default_configuration\",\"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS multi_display;" + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER multi_display AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"multi_display\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "multi_display");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(mdstatus, 1, true);
-                            showRebootButton();
-                            mdbutton.setText(getString(R.string.disable_tweak_string) + getString(R.string.multi_display_string));
-                        }
-                    });
-                }
-
-
-                dialog.dismiss();
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "multi_display");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
+        applyPhixitTweak("multi_display", mdstatus, null, null);
     }
 
     public void patchfortouchlimit() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ContentBrowse__drawer_default_allowed_taps_touchpad\",\"\" ,999,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ContentBrowse__enable_speed_bump_projected\",\"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ContentBrowse__keyboard_force_disabled\",\"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Dialer__speedbump_enabled\",\"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Mesquite__speedbump_enabled\",\"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ContentBrowse__speedbump_force_enabled\",\"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"McFly__speedbump_enabled\",\"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__projected_speedbump_enabled\",\"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Watevra__speedbump_enabled\",\"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Watevra__speedbump_map_interactivity_events_enabled\",\"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Watevra__speedbump_non_scroll_events_enabled\",\"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ContentBrowse__sixtap_force_enabled\",\"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ContentBrowse__permits_chart\",\"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ContentBrowse__use_updated_list_view_kill_switch\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"TouchpadUiNavigation__multimove_penalty_mm\",\"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Watevra__speedbump_max_list_size\",\"\" ,400,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Watevra__max_list_size\",\"\" ,400,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Watevra__speedbump_max_grid_list_size\",\"\" ,300,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Watevra__max_grid_list_size\",\"\" ,300,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Watevra__speedbump_map_interactivity_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__max_list_size_with_speedbump\",\"\" ,300,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__add_default_screen_size_value_kill_switch\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__allow_long_text_while_parked_kill_switch\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__allow_secondary_actions_in_half_lists\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__cluster_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__list_template_fab_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__grid_template_fab_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__tab_template_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__task_limit_restrictions_allows_overflow\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppQualityTester__developer_setting_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Assistant__transcription_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__app_driven_refresh_enabled\",\"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__app_driven_refresh_enabled_for_undefined_category\",\"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__allow_secondary_actions_in_half_lists\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-
-
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-                appendText(logs, "\n\n-- Run SQL Commands  --");
-                {
-
-
-                    appendText(logs, "\n\n--  run SQL method   --");
-                    appendText(logs, runSuWithCmd(
-                            path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'DROP TRIGGER IF EXISTS aa_six_tap;\n" + finalCommand + "DELETE FROM Flags WHERE name LIKE \"%speedbump%\";'"
-                    ).getStreamLogsWithLabels());
-
-                    appendText(logs, runSuWithCmd(
-                            path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                    "'CREATE TRIGGER aa_six_tap AFTER DELETE\n" +
-                                    "On FlagOverrides\n" +
-                                    "BEGIN\n" + finalCommand + "END;'\n"
-                    ).getStreamLogsWithLabels());
-                    if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_six_tap\";'").getInputStreamLog().length() <= 4) {
-                        suitableMethodFound = false;
-                    } else {
-                        appendText(logs, "\n--  end SQL method   --");
-                        save(true, "aa_six_tap");
-                        new Handler(Looper.getMainLooper()).post(new Runnable() {
-                            @Override
-                            public void run() {
-                                changeStatus(taplimitstatus, 1, true);
-                                showRebootButton();
-                                taplimitat.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.disable_speed_limitations));
-                            }
-                        });
-                    }
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_six_tap");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
+        applyPhixitTweak("aa_six_tap", taplimitstatus, taplimitat, getString(R.string.disable_speed_limitations));
     }
 
     public void coolwalkdaynightpatch() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\", 0,\"Coolwalk__day_night_theme_enabled\", \"\" ,1,0);");
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\", 0,\"Coolwalk__enable_palette_swap_by_broadcast\", \"\" ,1,0);");
-
-        finalCommand.append(System.getProperty("line.separator"));
-
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS coolwalk_daynight_tweak;\n"
-                                + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER coolwalk_daynight_tweak AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"coolwalk_daynight_tweak\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "coolwalk_daynight_tweak");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(navstatus, 1, true);
-                            showRebootButton();
-                            coolwalkDayNightTweak.setText(getString(R.string.disable_tweak_string) + getString(R.string.coolwalk_daynight_tweak));
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "coolwalk_daynight_tweak");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
-
-
+        applyPhixitTweak("coolwalk_daynight_tweak", navstatus, null, null);
     }
 
 
 
+
+    /** Flags toggled by the "battery saver warning" tweak (phixit schema). */
+    private static java.util.List<FlagSpec> batteryWarningSpecs() {
+        java.util.List<FlagSpec> l = new java.util.ArrayList<FlagSpec>();
+        l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "BatterySaver__warning_enabled", false));
+        return l;
+    }
 
     public void disableBatteryWarning() {
         final TextView logs = initiateLogsText();
-
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"BatterySaver__warning_enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
 
         new Thread() {
             @Override
             public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
+                appendText(logs, "\n\n--  Applying (phixit): battery saver warning  --");
+                final boolean ok = applyPhixitSpecs(logs, batteryWarningSpecs(), true);
+                if (ok) save(true, "battery_saver_warning");
 
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS battery_saver_warning;\n" +
-                                finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER battery_saver_warning AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"battery_saver_warning\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "battery_saver_warning");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        dialog.dismiss();
+                        if (ok) {
                             changeStatus(batteryWarningStatus, 1, true);
                             showRebootButton();
                             batteryWarning.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.battery_warning));
+                        } else {
+                            DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
+                            Bundle bundle = new Bundle();
+                            bundle.putString("tweak", "battery_saver_warning");
+                            bundle.putString("log", logs.getText().toString());
+                            notSuccessfulDialog.setArguments(bundle);
+                            notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
                         }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "battery_saver_warning");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
+                    }
+                });
             }
         }.start();
-
-
     }
 
-    public void battOutline() {
+    /** Reverts the battery saver warning tweak by restoring the captured baseline. */
+    public void revertBatteryWarning() {
         final TextView logs = initiateLogsText();
-
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"BatterySaver__icon_outline_enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
 
         new Thread() {
             @Override
             public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_battery_outline;\n\n"
-                                + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_battery_outline AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_battery_outline\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_battery_outline");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(batteryOutlineStatus, 1, true);
-                            showRebootButton();
-                            batteryoutline.setText(getString(R.string.disable_tweak_string) + getString(R.string.battery_outline_string));
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_battery_outline");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
+                appendText(logs, "\n\n--  Reverting (phixit): battery saver warning  --");
+                revertPhixitSpecs(logs, batteryWarningSpecs());
+                save(false, "battery_saver_warning");
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        dialog.dismiss();
+                        changeStatus(batteryWarningStatus, 0, true);
+                        showRebootButton();
+                        batteryWarning.setText(getString(R.string.disable_tweak_string) + getString(R.string.battery_warning));
+                    }
+                });
             }
         }.start();
+    }
 
-
+    public void battOutline() {
+        applyPhixitTweak("aa_battery_outline", batteryOutlineStatus, null, null);
     }
 
 
     public void activateCoolwalk() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Assistant__coolwalk_suggestions_grpc_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__media_rec_card_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__opt_in _default\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__rail_dock_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__rail_dock_four_app_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__rail_widget_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__allow_focus_input\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__assistant_media_rec_shortcut_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__assistant_suggestions_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__canonical_vertical_rail_default\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__choose_assistant_suggestion_over_app_suggestion\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__coolwalk_playback_gradient_scrim_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__favorites_button_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__streamed_media_recommendations_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__foreground_search_fab_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__a4c_suggestions_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__rotary_proximity_navigation\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.p   rojection.gearhead\",  0,\"Coolwalk__semi_wide_vertical_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__short_canonical_vertical_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__three_actions_hun_ui_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__indicate_severe_thermal_status\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__focus_check_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__fix_status_bar_highlight_ghosting_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__use_widescreen_crossfade\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__dashboard_placement_customization_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__media_notification_high_priority_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__launcher_settings_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Weather__enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Weather__icon_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Weather__preinstalled_frx_toggle_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Boardwalk__news_browser_available\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"SystemUi__car_ui_entry_use_configuration_context_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"SystemUi__media_switcher_page_while_started_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"SystemUi__projection_notification_hun_sbn_converter_hack_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"SystemUi__rail_assistant_media_rec_enabled_on_focus_screens\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"SystemUi__wallpaper_backdrop_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"AppListUi__use_updated_calendar_ui\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__is_toggle_allowed_in_map_and_pane_templates_kill_switch\",\"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__messaging_aap_host_logic_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__tab_template_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CompanionDeviceManager__integration_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__allow_all_inputs_kill_switch\",\"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__favorites_button_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__show_album_art_for_suggestion\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__show_settings_button_in_browse_view\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, extensionVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__tint_resource_uris\",\"\" ,\"\",0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarAppLibrary__radio_buttons_ui_changes_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__improve_startup\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__custom_action_assert_connection_kill_switch\",\"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__rail_widget_user_education_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__navigation_signal_to_assistant_enabled\",\"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-                if (load ("aa_activate_coolwalk")) {
-                    coolwalkTweak.setText(getString(R.string.enable_tweak_string) + getString(R.string.coolwalk_tweak));
-                    changeStatus(coolwalkTweakStatus, 0, true);
-                }
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_activate_coolwalk;\n DROP TRIGGER IF EXISTS aa_deactivate_coolwalk;\n" +
-                                finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_activate_coolwalk AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_activate_coolwalk\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_activate_coolwalk");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(coolwalkTweakStatus, 1, true);
-                            showRebootButton();
-                            coolwalkTweak.setText(getString(R.string.disable_tweak_string) + getString(R.string.coolwalk_tweak));
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-                appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_activate_coolwalk");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
-
+        applyPhixitTweak("aa_activate_coolwalk", coolwalkTweakStatus, null, null);
     }
 
     public void deactivateCoolwalk() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Assistant__coolwalk_suggestions_grpc_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__fishfood_nag_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__media_rec_card_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__opt_in _default\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__rail_dock_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__rail_dock_four_app_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__rail_widget_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__allow_focus_input\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__assistant_media_rec_shortcut_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__assistant_suggestions_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__canonical_vertical_rail_default\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__canonical_vertical_rail_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__choose_assistant_suggestion_over_app_suggestion\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__coolwalk_playback_gradient_scrim_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__favorites_button_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__streamed_media_recommendations_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__a4c_suggestions_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__rotary_proximity_navigation\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__semi_wide_vertical_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__short_canonical_vertical_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__three_actions_hun_ui_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__indicate_severe_thermal_status\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__use_widescreen_crossfade\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__dashboard_placement_customization_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__media_notification_high_priority_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__add_boardwalk_theme_attrs_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Coolwalk__choreograph_start_composition_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"Coolwalk__rail_hotseat_check_app_available_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-
-
-
-
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_deactivate_coolwalk;\nDROP TRIGGER IF EXISTS aa_activate_coolwalk;\n" +
-                                finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_deactivate_coolwalk AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_deactivate_coolwalk\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_deactivate_coolwalk");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(nocoolwalkTweakStatus, 1, true);
-                            showRebootButton();
-                            nocoolwalkTweak.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.coolwalk_tweak));
-                        }
-                    });
-                }
-
-                appendText(logs, "\n\n--  restoring Google Play Services   --");
-                appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-
-
-                appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_deactivate_coolwalk");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
-
+        applyPhixitTweak("aa_deactivate_coolwalk", nocoolwalkTweakStatus, nocoolwalkTweak, getString(R.string.coolwalk_tweak));
     }
 
     public void activateMaterialYou() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"SystemUi__material_you_settings_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_material_you;\n" +
-                                finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_material_you AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_material_you\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_material_you");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(materialYouTweakStatus, 1, true);
-                            showRebootButton();
-                            materialYouButton.setText(getString(R.string.disable_tweak_string) + getString(R.string.materialyou_tweak));
-                        }
-                    });
-                }
-
-                appendText(logs, "\n\n--  restoring Google Play Services   --");
-                appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-
-
-                appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_material_you");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
-
+        applyPhixitTweak("aa_material_you", materialYouTweakStatus, null, null);
     }
 
     public void activateAssistantTips() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"LauncherShortcuts__assistant_shortcut_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"LauncherApps__clean_up_cujs_kill_switch\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_activate_assistant_tips;\n"
-                                + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_activate_assistant_tips AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_activate_assistant_tips\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_activate_assistant_tips");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(assistantTipsTweakStatus, 1, true);
-                            showRebootButton();
-                            assistantTipsButton.setText(getString(R.string.disable_tweak_string) + getString(R.string.assistant_tips));
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-                appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_activate_assistant_tips");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
-
+        applyPhixitTweak("aa_activate_assistant_tips", assistantTipsTweakStatus, null, null);
     }
 
     public void activatesmsdecline() {
-
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Messaging__decline_call_message_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Messaging__template_ui_enabled\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_activate_declinesms;\n"
-                                + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_activate_declinesms AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_activate_declinesms\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_activate_declinesms");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(declineSmsTweakStatus, 1, true);
-                            showRebootButton();
-                            declineSmsTweak.setText(getString(R.string.disable_tweak_string) + getString(R.string.decline_message_tweak));
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-                appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_activate_declinesms");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
-
+        applyPhixitTweak("aa_activate_declinesms", declineSmsTweakStatus, null, null);
     }
 
     public void newSeekbar() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Media__tappable_progress_bar_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_new_seekbar;\n"
-                                + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_new_seekbar AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_new_seekbar\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_new_seekbar");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(newSeekbarTweakStatus, 1, true);
-                            showRebootButton();
-                            newSeekbarTweakButton.setText(getString(R.string.disable_tweak_string) + getString(R.string.tappable_progress));
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-                appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_new_sekbar");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
-
+        applyPhixitTweak("aa_new_seekbar", newSeekbarTweakStatus, null, null);
     }
 
     @NonNull
@@ -3109,827 +1951,44 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
 
 
     public void forceNoBt() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"BluetoothPairing__car_bluetooth_service_disable\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"BluetoothPairing__car_bluetooth_service_skip_pairing\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"BluetoothPairing__car_bluetooth_service_disable\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"BluetoothPairing__connect_bluetooth_timeout\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS bluetooth_pairing_off;\n" +
-                                finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER bluetooth_pairing_off AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"bluetooth_pairing_off\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "bluetooth_pairing_off");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(btstatus, 1, true);
-                            showRebootButton();
-                            bluetoothoff.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.bluetooth_auto_connect));
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "bluetooth_pairing_off");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
-
+        applyPhixitTweak("bluetooth_pairing_off", btstatus, bluetoothoff, getString(R.string.bluetooth_auto_connect));
     }
 
     public void disableTelemetry() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"CarEventLoggerRefactorFeature__convert_car_setup_analytics_telemetry\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"CarServiceTelemetry__enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"CarServiceTelemetry__is_wifi_kbps_logging_enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"CarServiceTelemetry__log_battery_temperature\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, intVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"CarServiceTelemetry__wifi_latency_log_frequency_ms\", \"\" ,99999999,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, intVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"ConnectivityLogging__heartbeat_interval_ms\", \"\" ,99999999,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"TelemetryDriveIdFeature__enable_log_event_validation\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"TelemetryDriveIdFeature__enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"UsbStatusLoggingFeature__monitor_usb_ping_telemetry_enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"TelemetryDriveIdForGearheadFeature__enable_frx_setup_logging_via_gearhead\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, intVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"AudioStatsLoggingFeature__audio_stats_logging_period_milliseconds\", \"\" ,99999999,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"FrameworkMediaStatsLoggingFeature__is_media_stats_queue_time_logging_enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ConnectivityLogging__num_background_threads\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ConnectivityLogging__include_extra_events\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ConnectivityLogging__enable_heartbeat\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"WifiChannelLogging__enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ConnectivityLogging__session_info_dump_size\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"BluetoothMetadataLogger__enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"CarEventLoggerRefactorFeature__convert_car_analytics_telemetry\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Bugfix__sensitive_permissions_extra_logging\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ConnectivityLogging__log_bluetooth_rssi\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ConnectivityLogging__save_log_when_usb_starts\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ConnectivityLogging__skip_retroactive_usb_logging\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"InternetConnectivityLogging__enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Telemetry__local_logging\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"WirelessProjectionInGearhead__wireless_wifi_additional_start_logging\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Dialer__r_telemetry_enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AssistantSilenceDiagnostics__enabled\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"TelemetryDriveIdForGearheadFeature__enable_continuous_telemetry_binding\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"TelemetryDriveIdForGearheadFeature__enable_telemetry_impl_conversion\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ConnectivityLogging__long_session_timeout_ms\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ConnectivityLogging__short_session_timeout_ms\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"ConnectivityLogging__session_timeout_ms\", \"\" ,1000,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolval, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"PhenotypeCache__load_snapshot\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolval, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"PhenotypeCache__save_snapshot\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolval, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"PhenotypeCache__use_snapshot\", \"\" ,0,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolval, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Performance__log_to_telemetry\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolval, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"Performance__primes_network_metrics_enabled_kill_switch\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"ConnectivityLogging__use_realtime_if_invalid\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"Performance__primes_logging_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"Telemetry__westworld_logging_enabled_kill_switch\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",0,\"enable_blueooth_fsm_telemetry\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",0,\"Performance__use_optimized_car_activities\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",0,\"Messaging__assistant_notification_data_sharing_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",0,\"CarProjectionValidator__measure_latency_enabled\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",0,\"PhenotypeProcessStableFlags__first_read_latency\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",0,\"PhenotypeProcessStableFlags__legacy_flag_infrastructure_enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n-- Run SQL Commands  --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS kill_telemetry;" +
-                                "DELETE FROM Flags WHERE name LIKE \"%telemetry%\" AND packageName=\"com.google.android.projection.gearhead\";\n" +
-                                "DELETE FROM Flags WHERE name LIKE \"%telemetry%\" AND packageName=\"com.google.android.gms.car\";" +
-                                finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER kill_telemetry AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"kill_telemetry\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "kill_telemetry");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(telemetryStatus, 1, true);
-                            showRebootButton();
-                            disableTelemetryButton.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.telemetry_string));
-                        }
-                    });
-                }
-
-                dialog.dismiss();
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "kill_telemetry");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
-
+        applyPhixitTweak("kill_telemetry", telemetryStatus, disableTelemetryButton, getString(R.string.telemetry_string));
     }
 
     public void uxprototypeTweak(URL URL) {
-        final TextView logs = initiateLogsText();
-
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"UxPrototype__enabled\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType,  name, user, stringVal, committed) VALUES (\"com.google.android.projection.gearhead\",0,\"UxPrototype__url\", \"\" ,\""+ URL +"\",0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-
-
-        new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n-- Run SQL Commands  --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS uxprototype_tweak;\n" +
-                                finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER uxprototype_tweak AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"uxprototype_tweak\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "uxprototype_tweak");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(uxprototypeTweakStatus, 1, true);
-                            showRebootButton();
-                            disableTelemetryButton.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.uxprototype_tweak));
-                        }
-                    });
-                }
-
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-                appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "uxprototype_tweak");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        }.start();
-
+        applyPhixitTweak("uxprototype_tweak", uxprototypeTweakStatus, disableTelemetryButton, getString(R.string.uxprototype_tweak));
     }
 
     public void setHunDuration(View view, final int value) {
-        final TextView logs = initiateLogsText();
-
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"SystemUi__hun_default_heads_up_timeout_ms\", \"\"," + value + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-        runOnUiThread(new Thread() {
-            @Override
-            public void run() {
-
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n-- Run SQL Commands  --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_hun_ms;\n" + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_hun_ms AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_hun_ms\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_hun_ms");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(messagesHunStatus, 1, true);
-                            showRebootButton();
-                            saveValue(value, "messaging_hun_value");
-                            currentlySetHun.setText(getString(R.string.currently_set) + value);
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_hun_ms");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        });
-
+        saveValue(value, "messaging_hun_value");
+        applyPhixitTweakSpecs("aa_hun_ms", TweakRegistry.hunSpecs(value), messagesHunStatus, null, null);
     }
 
     public void setMediaHunDuration(View view, final int value) {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"SystemUi__media_hun_in_rail_widget_timeout_ms\", \"\"," + value + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-
-        runOnUiThread(new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_media_hun;\n" + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_media_hun AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_media_hun\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_media_hun");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(mediaHunStatus, 1, true);
-                            showRebootButton();
-                            saveValue(value, "media_hun_value");
-                            currentlySetMediaHun.setText(getString(R.string.currently_set) + value);
-                        }
-                    });
-                }
-
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_media_hun");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        });
-        dialog.dismiss();
+        saveValue(value, "media_hun_value");
+        applyPhixitTweakSpecs("aa_media_hun", TweakRegistry.mediaHunSpecs(value), mediaHunStatus, null, null);
     }
 
     public void setUSBbitrate(final double value) {
-        final TextView logs = initiateLogsText();
-
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_1080p_usb\", \"\"," + String.format("%.0f", 16000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_1080p_usb_hevc\", \"\"," + String.format("%.0f", 3000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_480p_usb\", \"\"," + String.format("%.0f", 8000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_480p_usb_hevc\", \"\"," + String.format("%.0f", 1000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_720p_usb\", \"\"," + String.format("%.0f", 12000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_720p_usb_hevc\", \"\"," + String.format("%.0f", 2000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-        runOnUiThread(new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-
-                appendText(logs, "\n\n-- Run SQL Commands  --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_bitrate_usb;\n DELETE FROM Flags WHERE name LIKE \"VideoEncoderParamsFeature%\";" +
-                                finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_bitrate_usb AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_bitrate_usb\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_bitrate_usb");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(usbBitrateStatus, 1, true);
-                            showRebootButton();
-                            saveFloat((float) value, "usb_bitrate_value");
-                            currentlySetUSBSeekbar.setText(getString(R.string.currently_set) + value);
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_bitrate_usb");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        });
-
+        saveFloat((float) value, "usb_bitrate_value");
+        applyPhixitTweakSpecs("aa_bitrate_usb", TweakRegistry.usbBitrateSpecs(value), usbBitrateStatus, null, null);
     }
 
     public void setWiFiBitrate(final double value) {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_1080p_wireless\", \"\"," + String.format("%.0f", 16000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_1080p_wireless_hevc\", \"\"," + String.format("%.0f", 3000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_480p_wireless\", \"\"," + String.format("%.0f", 8000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_480p_wireless_hevc\", \"\"," + String.format("%.0f", 1000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_720p_wireless\", \"\"," + String.format("%.0f", 12000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_720p_wireless_hevc\", \"\"," + String.format("%.0f", 2000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-        runOnUiThread(new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_bitrate_wireless;\n DELETE FROM Flags WHERE name LIKE \"VideoEncoderParamsFeature%\";\n" + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_bitrate_wireless AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_bitrate_wireless\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_bitrate_wireless");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(wifiBitrateStatus, 1, true);
-                            showRebootButton();
-                            saveFloat((float) value, "wifi_bitrate_value");
-                            currentlySetWiFiSeekbar.setText(getString(R.string.currently_set) + value);
-                        }
-                    });
-
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_bitrate_wireless");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        });
-
+        saveFloat((float) value, "wifi_bitrate_value");
+        applyPhixitTweakSpecs("aa_bitrate_wireless", TweakRegistry.wifiBitrateSpecs(value), wifiBitrateStatus, null, null);
     }
 
     private void inertialScrollTweak() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"SystemUi__inertial_scrolling_enabled\", \"\",1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-        runOnUiThread(new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_inertial_scroll;\n"  + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_inertial_scroll AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-
-
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_inertial_scroll\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_inertial_scroll");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(intertialScrollStatus, 1, true);
-                            showRebootButton();
-                            intertialScrollButton.setText(getString(R.string.disable_tweak_string) + getString(R.string.inertial_scroll_tweak));
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_inertial_scroll");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        });
-
+        applyPhixitTweak("aa_inertial_scroll", intertialScrollStatus, intertialScrollButton, getString(R.string.inertial_scroll_tweak));
     }
 
 
     private void verticalBarTweak() {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"SystemUi__horizontal_rail_canonical_breakpoint_dp\", \"\",40,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-
-        runOnUiThread(new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_vertical_bar;\n"  + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_vertical_bar AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-
-
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_vertical_bar\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_vertical_bar");
-                    verticalBarTweakButton.setText(getString(R.string.disable_tweak_string) + getString(R.string.vertical_bar_tweak));
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(verticalBarStatus, 1, true);
-                            showRebootButton();
-                        }
-                    });
-                }
-
-                appendText(logs, "\n\n--  restoring Google Play Services   --");
-                appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-
-
-                appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_vertical_bar");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        });
-
+        applyPhixitTweak("aa_vertical_bar", verticalBarStatus, verticalBarTweakButton, getString(R.string.vertical_bar_tweak));
     }
 
     public void forceWideScreen(View view, final int value) {
@@ -3986,8 +2045,11 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
 
 
                 appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'DROP TRIGGER IF EXISTS force_ws;\n DROP TRIGGER IF EXISTS force_no_ws;\n" + finalCommand + "'").getStreamLogsWithLabels());
+                java.util.List<String> setupStmts = new java.util.ArrayList<String>();
+                setupStmts.add("DROP TRIGGER IF EXISTS force_ws");
+                setupStmts.add("DROP TRIGGER IF EXISTS force_no_ws");
+                setupStmts.addAll(splitSql(finalCommand.toString()));
+                RootDb.exec(PHENO_DB, setupStmts);
 
                 switch (value) {
                     case 470: {
@@ -4003,13 +2065,11 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                         break;
                     }
                 }
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER " + decideWhat + " AFTER DELETE\n" +
+                RootDb.exec(PHENO_DB,
+                        "CREATE TRIGGER " + decideWhat + " AFTER DELETE\n" +
                                 "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"" + decideWhat + "\";'").getInputStreamLog().length() <= 4) {
+                                "BEGIN\n" + finalCommand + "END");
+                if (RootDb.query(PHENO_DB, "SELECT name FROM sqlite_master WHERE type='trigger' AND name='" + decideWhat + "'").trim().length() <= 4) {
                     suitableMethodFound = false;
                 } else {
                     appendText(logs, "\n--  end SQL method   --");
@@ -4077,47 +2137,503 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
     }
 
 
-    public static StreamLogs runSuWithCmd(String cmd) {
-        DataOutputStream outputStream = null;
-        InputStream inputStream = null;
-        InputStream errorStream = null;
+    /**
+     * PoC step 1: read-only diagnostic for the new "phixit" Phenotype schema.
+     *
+     * <p>Reads {@code param_partitions.flags_content} for the Android Auto config
+     * packages, decompresses + decodes it with {@link PhixitSnapshot}, runs a
+     * bit-exact round-trip self-test of the codec (decode -> encode must reproduce
+     * the original decompressed bytes), and reports flag counts, naming scheme
+     * (string vs numeric), and whether known AndroidAutoX target flags are present.
+     * It performs NO writes to the GMS database.
+     */
+    private void phixitDiagnostic(final TextView logs) {
+        final String path = getApplicationInfo().dataDir;
+        final String db = "/data/data/com.google.android.gms/databases/phenotype.db";
+        final String[] pkgs = {
+                "com.google.android.projection.gearhead",
+                "com.google.android.gms.car"
+        };
+        final String[] targets = {
+                "AppQualityTester__developer_setting_enabled",
+                "ContentBrowse__sixtap_force_enabled",
+                "ContentBrowse__drawer_default_allowed_taps_touchpad",
+                "Watevra__max_list_size",
+                "BatterySaver__warning_enabled",
+                "MultiDisplay__enabled"
+        };
 
-        StreamLogs streamLogs = new StreamLogs();
-        streamLogs.setOutputStreamLog(cmd);
+        new Thread() {
+            @Override
+            public void run() {
+                StringBuilder sb = new StringBuilder();
+                sb.append("\n==== PHIXIT PoC DIAGNOSTIC (read-only) ====\n");
 
-        try {
-            Process su = Runtime.getRuntime().exec("su");
-            outputStream = new DataOutputStream(su.getOutputStream());
-            inputStream = su.getInputStream();
-            errorStream = su.getErrorStream();
-            outputStream.writeBytes(cmd + "\n");
-            outputStream.flush();
+                for (String pkg : pkgs) {
+                    sb.append("\n-- package: ").append(pkg).append(" --\n");
 
-            outputStream.writeBytes("exit\n");
-            outputStream.flush();
+                    String out = RootDb.query(db,
+                            "SELECT param_partition_id, hex(flags_content) " +
+                                    "FROM param_partitions WHERE static_config_package_id IN " +
+                                    "(SELECT static_config_package_id FROM static_config_packages " +
+                                    "WHERE name='" + pkg + "')");
 
-            try {
-                su.waitFor();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+                    if (out.isEmpty()) {
+                        sb.append("  (no partitions matched by static_config_packages.name)\n");
+                        String names = RootDb.query(db,
+                                "SELECT static_config_package_id || '=' || name " +
+                                        "FROM static_config_packages WHERE name LIKE '%gearhead%' " +
+                                        "OR name LIKE '%projection%' OR name LIKE '%gms.car%'");
+                        sb.append("  candidate static_config_packages:\n");
+                        sb.append("    ").append(names.replace("\n", "\n    ")).append("\n");
+                        continue;
+                    }
+
+                    java.util.List<PhixitSnapshot.Flag> all = new java.util.ArrayList<PhixitSnapshot.Flag>();
+                    for (String line : out.split("\\r?\\n")) {
+                        int bar = line.indexOf('|');
+                        if (bar <= 0) continue;
+                        String pid = line.substring(0, bar).trim();
+                        String hex = line.substring(bar + 1).trim();
+                        if (hex.isEmpty()) {
+                            sb.append("  partition ").append(pid).append(": empty blob\n");
+                            continue;
+                        }
+                        try {
+                            byte[] comp = PhixitSnapshot.hexToBytes(hex);
+                            byte[] dec = PhixitSnapshot.inflateRaw(comp);
+                            java.util.List<PhixitSnapshot.Flag> flags = PhixitSnapshot.decode(dec);
+                            byte[] re = PhixitSnapshot.encode(flags);
+                            boolean ok = java.util.Arrays.equals(dec, re);
+
+                            int strNamed = 0, numNamed = 0;
+                            for (PhixitSnapshot.Flag f : flags) {
+                                if (f.numericName) numNamed++; else strNamed++;
+                            }
+
+                            sb.append("  partition ").append(pid)
+                                    .append(": comp=").append(comp.length)
+                                    .append("B decomp=").append(dec.length)
+                                    .append("B flags=").append(flags.size())
+                                    .append(" (string=").append(strNamed)
+                                    .append(", numeric=").append(numNamed).append(")")
+                                    .append("  round-trip=").append(ok ? "PASS" : "FAIL")
+                                    .append("\n");
+                            if (!ok) {
+                                sb.append("    !! re-encoded ").append(re.length)
+                                        .append("B != original ").append(dec.length).append("B\n");
+                            }
+
+                            int shown = 0;
+                            for (PhixitSnapshot.Flag f : flags) {
+                                if (f.numericName) continue;
+                                sb.append("      ").append(f.describe()).append("\n");
+                                if (++shown >= 10) break;
+                            }
+                            all.addAll(flags);
+                        } catch (Exception e) {
+                            sb.append("  partition ").append(pid)
+                                    .append(": DECODE EXCEPTION ").append(e).append("\n");
+                        }
+                    }
+
+                    sb.append("  -- target flag lookup --\n");
+                    for (String t : targets) {
+                        PhixitSnapshot.Flag found = null;
+                        for (PhixitSnapshot.Flag f : all) {
+                            if (!f.numericName && t.equals(f.name)) { found = f; break; }
+                        }
+                        sb.append("    ").append(t).append(": ")
+                                .append(found == null ? "NOT PRESENT" : found.describe())
+                                .append("\n");
+                    }
+                }
+
+                sb.append("==== END PoC DIAGNOSTIC ====\n");
+                appendText(logs, sb.toString());
             }
-            streamLogs.setInputStreamLog(readFully(inputStream));
-            streamLogs.setErrorStreamLog(readFully(errorStream));
-        } catch (IOException e) {
-            e.printStackTrace();
+        }.start();
+    }
+
+    /**
+     * PoC step 2: WRITE path for the new "phixit" Phenotype schema.
+     *
+     * <p>Applies a couple of overrides to the Android Auto (gearhead) snapshot to
+     * prove the mechanism end-to-end: one flag that already exists (edited in
+     * place) and one that does not (appended). It edits the flag across ALL of
+     * the package's param_partitions, bumps last_fetch.serving_version, clears
+     * the phenotype file cache, and restarts GMS, then re-reads to confirm the
+     * value survived the restart.
+     *
+     * <p>WARNING: this writes to the live GMS database. It is gated behind an
+     * explicit menu action.
+     */
+    private void phixitApplyTest(final TextView logs) {
+        final String path = getApplicationInfo().dataDir;
+        final String filesDir = getFilesDir().getAbsolutePath();
+        final String pkg = "com.google.android.projection.gearhead";
+
+        new Thread() {
+            @Override
+            public void run() {
+                StringBuilder sb = new StringBuilder();
+                sb.append("\n==== PHIXIT PoC APPLY (writes to GMS DB) ====\n");
+
+                // Test edits: edit an existing long, append an absent bool.
+                java.util.List<PhixitSnapshot.Flag> edits = new java.util.ArrayList<PhixitSnapshot.Flag>();
+                edits.add(longFlag("ContentBrowse__drawer_default_allowed_taps_touchpad", 999));
+                edits.add(boolFlag("AppQualityTester__developer_setting_enabled", true));
+
+                String policy = runSuWithCmd("getenforce").getInputStreamLog();
+                runSuWithCmd("setenforce 0");
+                runSuWithCmd("am force-stop com.google.android.gms");
+
+                sb.append(phixitApply(path, filesDir, pkg, edits));
+
+                // Drop GMS's cached phenotype so it re-reads our edited snapshot from
+                // the DB, then force-stop so it restarts fresh on next access.
+                runSuWithCmd("rm -rf /data/data/com.google.android.gms/files/phenotype");
+                runSuWithCmd("am force-stop com.google.android.gms");
+                if (!policy.equals("Permissive")) {
+                    runSuWithCmd("setenforce 1");
+                }
+
+                // Verify: re-read and report the edited flags' current values.
+                sb.append("  -- verify after restart --\n");
+                for (PhixitSnapshot.Flag e : edits) {
+                    sb.append("    ").append(phixitReadFlag(path, pkg, e.name)).append("\n");
+                }
+
+                sb.append("==== END PoC APPLY ====\n");
+                appendText(logs, sb.toString());
+            }
+        }.start();
+    }
+
+    private static PhixitSnapshot.Flag longFlag(String name, long value) {
+        PhixitSnapshot.Flag f = new PhixitSnapshot.Flag();
+        f.name = name;
+        f.numericName = false;
+        f.type = PhixitSnapshot.TYPE_LONG;
+        f.longValue = value;
+        return f;
+    }
+
+    private static PhixitSnapshot.Flag boolFlag(String name, boolean value) {
+        PhixitSnapshot.Flag f = new PhixitSnapshot.Flag();
+        f.name = name;
+        f.numericName = false;
+        f.type = value ? PhixitSnapshot.TYPE_BOOL_TRUE : PhixitSnapshot.TYPE_BOOL_FALSE;
+        return f;
+    }
+
+    private static void copyValue(PhixitSnapshot.Flag dst, PhixitSnapshot.Flag src) {
+        dst.type = src.type;
+        dst.longValue = src.longValue;
+        dst.doubleBits = src.doubleBits;
+        dst.stringValue = src.stringValue;
+        dst.bytesValue = src.bytesValue;
+    }
+
+    /** Applies {@code edits} to every param_partition of {@code pkg}. Returns a log. */
+    private String phixitApply(String path, String filesDir, String pkg,
+                               java.util.List<PhixitSnapshot.Flag> edits) {
+        StringBuilder sb = new StringBuilder();
+
+        java.util.List<Partition> raw;
+        try {
+            raw = RootDb.readPartitions(pkg);
+        } catch (Exception e) {
+            sb.append("  read ERR: ").append(e).append("\n");
+            return sb.toString();
+        }
+        if (raw.isEmpty()) {
+            sb.append("  no partitions for ").append(pkg).append("\n");
+            return sb.toString();
         }
 
+        java.util.List<Partition> toWrite = new java.util.ArrayList<Partition>();
+        for (Partition p : raw) {
+            if (p.blob == null || p.blob.length == 0) continue;
+            try {
+                byte[] dec = PhixitSnapshot.inflateRaw(p.blob);
+                java.util.List<PhixitSnapshot.Flag> flags = PhixitSnapshot.decode(dec);
+
+                for (PhixitSnapshot.Flag e : edits) {
+                    PhixitSnapshot.Flag found = null;
+                    for (PhixitSnapshot.Flag f : flags) {
+                        if (!f.numericName && e.name.equals(f.name)) { found = f; break; }
+                    }
+                    if (found != null) {
+                        copyValue(found, e);
+                    } else {
+                        PhixitSnapshot.Flag add = new PhixitSnapshot.Flag();
+                        add.name = e.name;
+                        add.numericName = false;
+                        copyValue(add, e);
+                        flags.add(add);
+                    }
+                }
+
+                byte[] reCompressed = PhixitSnapshot.deflateRaw(PhixitSnapshot.encode(flags));
+                toWrite.add(new Partition(p.id, reCompressed));
+                sb.append("  partition ").append(p.id).append(": ").append(flags.size())
+                        .append(" flags, wrote ").append(reCompressed.length).append("B\n");
+            } catch (Exception e) {
+                sb.append("  partition ").append(p.id).append(": EXCEPTION ").append(e).append("\n");
+            }
+        }
+
+        int servingVersion = (int) (System.currentTimeMillis() / 1000L);
+        try {
+            RootDb.writePartitions(toWrite, servingVersion);
+            sb.append("  applied (serving_version=").append(servingVersion).append(")\n");
+        } catch (Exception e) {
+            sb.append("  apply ERR: ").append(e).append("\n");
+        }
+        return sb.toString();
+    }
+
+    /** Reads a single flag's current decoded value across all partitions of a package. */
+    private String phixitReadFlag(String path, String pkg, String name) {
+        java.util.List<Partition> raw;
+        try {
+            raw = RootDb.readPartitions(pkg);
+        } catch (Exception e) {
+            return name + ": read ERR " + e;
+        }
+        for (Partition p : raw) {
+            if (p.blob == null || p.blob.length == 0) continue;
+            try {
+                java.util.List<PhixitSnapshot.Flag> flags =
+                        PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob));
+                for (PhixitSnapshot.Flag f : flags) {
+                    if (!f.numericName && name.equals(f.name)) {
+                        return f.describe() + " [partition " + p.id + "]";
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return name + ": NOT FOUND after apply";
+    }
+
+    // =====================================================================
+    // Phixit engine: apply/revert flag overrides on the new Phenotype schema
+    // by editing param_partitions.flags_content directly. This replaces the
+    // legacy FlagOverrides/Flags SQL, which no longer exists on recent GMS.
+    // =====================================================================
+
+    public static final String PHENO_DB =
+            "/data/data/com.google.android.gms/databases/phenotype.db";
+
+    /**
+     * Decodes every gearhead + car flag from the snapshot and writes them
+     * (name = value) to a file, copied to /sdcard/Download for easy sharing.
+     */
+    private void dumpAllFlags(final TextView logs) {
+        final String path = getApplicationInfo().dataDir;
+        final String filesDir = getFilesDir().getAbsolutePath();
+        new Thread() {
+            @Override
+            public void run() {
+                StringBuilder file = new StringBuilder();
+                String[] pkgs = {FlagSpec.PKG_GEARHEAD, FlagSpec.PKG_CAR};
+                int total = 0;
+                for (String pkg : pkgs) {
+                    java.util.TreeMap<String, String> map = new java.util.TreeMap<String, String>();
+                    java.util.List<Partition> raw;
+                    try {
+                        raw = RootDb.readPartitions(pkg);
+                    } catch (Exception ex) {
+                        raw = java.util.Collections.emptyList();
+                    }
+                    for (Partition p : raw) {
+                        if (p.blob == null || p.blob.length == 0) continue;
+                        try {
+                            for (PhixitSnapshot.Flag f :
+                                    PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob))) {
+                                if (!f.numericName) map.put(f.name, f.describe());
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    file.append("# ").append(pkg).append(" (").append(map.size()).append(" flags)\n");
+                    for (java.util.Map.Entry<String, String> e : map.entrySet()) {
+                        file.append(e.getValue()).append("\n");
+                    }
+                    file.append("\n");
+                    total += map.size();
+                }
+                String outFile = filesDir + "/all_flags.txt";
+                try {
+                    java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile);
+                    fos.write(file.toString().getBytes("UTF-8"));
+                    fos.close();
+                } catch (Exception e) {
+                    appendText(logs, "\n  dump write ERR: " + e + "\n");
+                }
+                runSuWithCmd("cp " + outFile + " /sdcard/Download/androidautox_flags.txt && chmod 644 /sdcard/Download/androidautox_flags.txt");
+                appendText(logs, "\n\n==== DUMPED " + total +
+                        " flags to /sdcard/Download/androidautox_flags.txt ====\n");
+            }
+        }.start();
+    }
+
+    /**
+     * Applies {@code specs} to every param_partition of each referenced package,
+     * bumps last_fetch.serving_version, clears the phenotype file cache and
+     * restarts GMS. When {@code captureBaseline} is true, the original value of
+     * each flag (or "absent") is saved first so {@link #revertPhixitSpecs} can
+     * restore it. Returns true on success.
+     */
+    private boolean applyPhixitSpecs(final TextView logs, java.util.List<FlagSpec> specs,
+                                     boolean captureBaseline) {
+        StringBuilder sb = new StringBuilder();
+        boolean ok = new PhixitEngine(this, sb).applySpecs(specs, captureBaseline);
+        appendText(logs, sb.toString());
+        return ok;
+    }
+
+    /** Restores each spec's flag to the baseline captured at apply time. */
+    private boolean revertPhixitSpecs(TextView logs, java.util.List<FlagSpec> applied) {
+        StringBuilder sb = new StringBuilder();
+        boolean ok = new PhixitEngine(this, sb).revertSpecs(applied);
+        appendText(logs, sb.toString());
+        return ok;
+    }
+
+    private void applySpecToList(java.util.List<PhixitSnapshot.Flag> flags, FlagSpec s) {
+        int idx = -1;
+        for (int i = 0; i < flags.size(); i++) {
+            PhixitSnapshot.Flag f = flags.get(i);
+            if (!f.numericName && s.name.equals(f.name)) { idx = i; break; }
+        }
+        if (s.remove) {
+            if (idx >= 0) flags.remove(idx);
+            return;
+        }
+        if (idx >= 0) {
+            copyValue(flags.get(idx), s.flag);
+        } else {
+            PhixitSnapshot.Flag add = new PhixitSnapshot.Flag();
+            add.name = s.name;
+            add.numericName = false;
+            copyValue(add, s.flag);
+            flags.add(add);
+        }
+    }
+
+    private String baselineKey(String pkg, String name) {
+        return "phixit_base|" + pkg + "|" + name;
+    }
+
+    /** Reads a long-valued flag's current value from the snapshot, or {@code def}. */
+    private long readPhixitLong(String pkg, String name, long def) {
+        return new PhixitEngine(this, null).readLong(pkg, name, def);
+    }
+
+    private void captureBaselineIfAbsent(String pkg, String name,
+                                         java.util.List<java.util.List<PhixitSnapshot.Flag>> parts) {
+        SharedPreferences sp = getPreferences(Context.MODE_PRIVATE);
+        String key = baselineKey(pkg, name);
+        if (sp.contains(key)) return;
+        PhixitSnapshot.Flag cur = null;
+        for (java.util.List<PhixitSnapshot.Flag> p : parts) {
+            for (PhixitSnapshot.Flag f : p) {
+                if (!f.numericName && name.equals(f.name)) { cur = f; break; }
+            }
+            if (cur != null) break;
+        }
+        sp.edit().putString(key, serializeBaseline(cur)).apply();
+    }
+
+    private String serializeBaseline(PhixitSnapshot.Flag f) {
+        if (f == null) return "A";
+        switch (f.type) {
+            case PhixitSnapshot.TYPE_BOOL_FALSE: return "B0";
+            case PhixitSnapshot.TYPE_BOOL_TRUE:  return "B1";
+            case PhixitSnapshot.TYPE_LONG:       return "L" + f.longValue;
+            case PhixitSnapshot.TYPE_DOUBLE:     return "D" + f.doubleBits;
+            case PhixitSnapshot.TYPE_STRING:
+                try {
+                    return "S" + android.util.Base64.encodeToString(
+                            f.stringValue.getBytes("UTF-8"), android.util.Base64.NO_WRAP);
+                } catch (Exception e) { return "S"; }
+            case PhixitSnapshot.TYPE_BYTES:
+                return "X" + PhixitSnapshot.bytesToHex(f.bytesValue);
+            default: return "A";
+        }
+    }
+
+    private FlagSpec deserializeBaseline(String pkg, String name, String b) {
+        char tag = b.charAt(0);
+        String body = b.substring(1);
+        switch (tag) {
+            case 'B': return FlagSpec.bool(pkg, name, body.equals("1"));
+            case 'L': return FlagSpec.lng(pkg, name, Long.parseLong(body));
+            case 'D': return FlagSpec.dbl(pkg, name, Double.longBitsToDouble(Long.parseLong(body)));
+            case 'S':
+                try {
+                    return FlagSpec.str(pkg, name,
+                            new String(android.util.Base64.decode(body, android.util.Base64.NO_WRAP), "UTF-8"));
+                } catch (Exception e) { return FlagSpec.str(pkg, name, ""); }
+            case 'X': return FlagSpec.bytes(pkg, name, PhixitSnapshot.hexToBytes(body));
+            default:  return FlagSpec.remove(pkg, name);
+        }
+    }
+
+    /**
+     * Runs a shell command as root via libsu's persistent root shell and returns its
+     * output in the same {@link StreamLogs} shape the rest of the app expects. Replaces
+     * the old per-call {@code Runtime.exec("su")} (which spawned a fresh su every time
+     * and had no timeout). DB work no longer goes through here -- it uses
+     * {@link RootDb}/{@link PhixitRootService} -- but file/process/SELinux commands
+     * (am, pm, rm, chown, dumpsys, setenforce, ...) still do.
+     */
+    public static StreamLogs runSuWithCmd(String cmd) {
+        StreamLogs streamLogs = new StreamLogs();
+        streamLogs.setOutputStreamLog(cmd);
+        try {
+            com.topjohnwu.superuser.Shell.Result result =
+                    com.topjohnwu.superuser.Shell.cmd(cmd).exec();
+            streamLogs.setInputStreamLog(joinLines(result.getOut()));
+            streamLogs.setErrorStreamLog(joinLines(result.getErr()));
+        } catch (Throwable t) {
+            streamLogs.setErrorStreamLog(String.valueOf(t));
+        }
         return streamLogs;
     }
 
-    public static String readFully(InputStream is) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        byte[] buffer = new byte[1024];
-        int length = 0;
-        while ((length = is.read(buffer)) != -1) {
-            baos.write(buffer, 0, length);
+    /** True if root access has actually been granted (a non-root libsu shell would
+     *  still happily echo "1", so callers must check this rather than command output). */
+    public static boolean hasRootAccess() {
+        try {
+            return com.topjohnwu.superuser.Shell.getShell().isRoot();
+        } catch (Throwable t) {
+            return false;
         }
-        return baos.toString("UTF-8");
+    }
+
+    private static String joinLines(java.util.List<String> lines) {
+        if (lines == null || lines.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) sb.append('\n');
+            sb.append(lines.get(i));
+        }
+        return sb.toString();
+    }
+
+    /** Splits a simple {@code ;}-terminated SQL script into individual statements.
+     *  Only used for legacy scripts whose statements (INSERTs) contain no inner ';'. */
+    private static java.util.List<String> splitSql(String script) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        for (String s : script.split(";")) {
+            String t = s.trim();
+            if (!t.isEmpty()) out.add(t);
+        }
+        return out;
     }
 
 
@@ -4135,55 +2651,54 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.loading), true);
 
-        runOnUiThread(new Runnable() {
+        new Thread() {
             @Override
             public void run() {
-                String get_names = runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND tbl_name=\"FlagOverrides\";" +
-                                "SELECT name FROM sqlite_master WHERE type=\"trigger\" AND tbl_name=\"Flags\";" +
-
-                                "SELECT name FROM sqlite_master WHERE type=\"trigger\" AND tbl_name=\"Flags\" AND name=\"after_delete\";" +
-                                "SELECT name FROM sqlite_master WHERE type=\"trigger\" AND tbl_name=\"Flags\" AND name=\"aa_patched_apps\";'").getInputStreamLog();
-                String[] lines = get_names.split(System.getProperty("line.separator"));
-                for (int i = 0; i < lines.length; i++) {
-                    save(true, lines[i]);
+                // Which legacy trigger-based tweaks are currently installed (so their
+                // toggles show as enabled). Triggers on FlagOverrides/Flags cover the
+                // previous per-name checks (after_delete, aa_patched_apps) as a subset.
+                String get_names = RootDb.query(PHENO_DB,
+                        "SELECT name FROM sqlite_master WHERE type='trigger' " +
+                                "AND tbl_name IN ('FlagOverrides','Flags')");
+                for (String name : get_names.split("\\r?\\n")) {
+                    if (!name.trim().isEmpty()) save(true, name.trim());
                 }
-                dialog.dismiss();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        dialog.dismiss();
+                    }
+                });
             }
-        });
+        }.start();
 
     }
 
     public void getAndRemoveOptionsSelected() {
         final TextView log = findViewById(R.id.logs);
-        final String[] allTriggerString = {new String()};
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "", getString(R.string.loading), true);
         new Thread() {
             @Override
             public void run() {
 
-                String path = appDirectory;
-                allTriggerString[0] = path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'";
-                String get_names = runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND tbl_name=\"Flags\";'").getInputStreamLog();
+                String get_names = RootDb.query(PHENO_DB,
+                        "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='Flags'");
                 appendText(log, get_names);
-                String[] lines = get_names.split(System.getProperty("line.separator"));
-                final StringBuilder finalCommand = new StringBuilder();
-                appendText(log, runSuWithCmd(path + "/sqlite3 /data/data/com.google.android.gms/databases/phenotype.db " + "'DROP TABLE FlagOverrides;'").getOutputStreamLog());
-                appendText(log, runSuWithCmd(path + "/sqlite3 /data/data/com.google.android.gms/databases/phenotype.db " + "'DELETE FROM Flags WHERE name=\"com.google.android.projection.gearhead\";'").getOutputStreamLog());
-                appendText(log, runSuWithCmd(path + "/sqlite3 /data/data/com.google.android.gms/databases/phenotype.db " + "'DELETE FROM Flags WHERE name=\"com.google.android.gms.car\";'").getOutputStreamLog());
+                String[] lines = get_names.split("\\r?\\n");
 
-                for (int i = 0; i < lines.length; i++) {
-                    finalCommand.append("DROP TRIGGER IF EXISTS " + lines[i] + ";");
-                    finalCommand.append("\n");
+                java.util.List<String> stmts = new java.util.ArrayList<String>();
+                stmts.add("DROP TABLE FlagOverrides");
+                stmts.add("DELETE FROM Flags WHERE name='com.google.android.projection.gearhead'");
+                stmts.add("DELETE FROM Flags WHERE name='com.google.android.gms.car'");
+                for (String name : lines) {
+                    if (!name.trim().isEmpty()) stmts.add("DROP TRIGGER IF EXISTS " + name.trim());
                 }
-
-                for (int i = 0; i < lines.length; i++) {
-                    appendText(log, runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'" + finalCommand + "'").getOutputStreamLog());
-                }
-                appendText(log, runSuWithCmd(path + "/sqlite3 /data/data/com.google.android.gms/databases/phenotype.db " + "'CREATE TABLE FlagOverrides (packageName TEXT NOT NULL, user TEXT NOT NULL, name TEXT NOT NULL, flagType INTEGER NOT NULL, intVal INTEGER, boolVal INTEGER, floatVal REAL, stringVal TEXT, extensionVal BLOB, committed, PRIMARY KEY(packageName, user, name, committed));'").getOutputStreamLog());
+                stmts.add("CREATE TABLE FlagOverrides (packageName TEXT NOT NULL, user TEXT NOT NULL, " +
+                        "name TEXT NOT NULL, flagType INTEGER NOT NULL, intVal INTEGER, boolVal INTEGER, " +
+                        "floatVal REAL, stringVal TEXT, extensionVal BLOB, committed, " +
+                        "PRIMARY KEY(packageName, user, name, committed))");
+                RootDb.exec(PHENO_DB, stmts);
+                appendText(log, "\n\tcleared FlagOverrides/Flags and dropped triggers");
                 dialog.dismiss();
             }
 

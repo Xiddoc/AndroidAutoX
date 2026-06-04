@@ -28,6 +28,7 @@ import java.util.Objects;
 import com.xiddoc.androidautox.MainActivity;
 import com.xiddoc.androidautox.NotSuccessfulDialog;
 import com.xiddoc.androidautox.R;
+import com.xiddoc.androidautox.RootDb;
 import com.xiddoc.androidautox.Utils.RecyclerItemClickListener;
 
 import static com.xiddoc.androidautox.MainActivity.runSuWithCmd;
@@ -59,31 +60,6 @@ public class CarRemover extends AppCompatActivity {
         final Map<String, String> idsToBeRemoved = null;
         final int[] selected = {0};
 
-        String getCars = runSuWithCmd(
-                path + "/sqlite3 /data/data/com.google.android.projection.gearhead/databases/carservicedata.db " +
-                        "'SELECT manufacturer,model FROM allowedcars;'").getInputStreamLog();
-
-
-        for (String str : getCars.split(Objects.requireNonNull(System.getProperty("line.separator")))) {
-                allCars.add(new CarInfo(str, false));
-        }
-
-
-
-        String getIds = runSuWithCmd(
-                path + "/sqlite3 /data/data/com.google.android.projection.gearhead/databases/carservicedata.db " +
-                        "'SELECT vehicleidclient FROM allowedcars;'").getInputStreamLog();
-
-        Log.v("IDTROVATI", getIds);
-
-        int i = -1;
-
-        for (String str2 : getIds.split(Objects.requireNonNull(System.getProperty("line.separator")))) {
-            i++;
-                allCars.get(i).setId(str2);
-                Log.v("IDMESSO", allCars.get(i).getId());
-        }
-
         rvAdapter = new CarAdapter(allCars);
 
         Toolbar myToolbar = findViewById(R.id.toolbar);
@@ -102,36 +78,29 @@ public class CarRemover extends AppCompatActivity {
 
                 final ProgressDialog dialog = ProgressDialog.show(CarRemover.this, "",
                         getString(R.string.tweak_loading), true);
-                final StringBuilder finalCommand = new StringBuilder();
 
+                final java.util.List<String> deletes = new java.util.ArrayList<String>();
                 Map<String, ?> allEntries = accountsPrefs.getAll();
-
                 for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
-                        finalCommand.append("DELETE FROM allowedcars WHERE vehicleidclient=\"");
-                        finalCommand.append(entry.getKey());
-                        finalCommand.append("\";");
-                        finalCommand.append(System.getProperty("line.separator"));
+                    deletes.add("DELETE FROM allowedcars WHERE vehicleidclient='" + entry.getKey() + "'");
                 }
 
-                Log.v("Comando finale", String.valueOf(finalCommand));
-
-                runOnUiThread(new Thread() {
+                new Thread() {
                     @Override
                     public void run() {
-                        String path = getApplicationInfo().dataDir;
-
-                        Log.v("CarRemover", runSuWithCmd(
-                                path + "/sqlite3 /data/data/com.google.android.projection.gearhead/databases/carservicedata.db " + "'" +
-                                        finalCommand + "'"
-                        ).getStreamLogsWithLabels());
-
-                        Toast.makeText(CarRemover.this, getString(R.string.removed_app_action), Toast.LENGTH_LONG);
-
-                        dialog.dismiss();
-                        finish();
-
+                        RootDb.exec("/data/data/com.google.android.projection.gearhead/databases/carservicedata.db",
+                                deletes);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(CarRemover.this, getString(R.string.removed_app_action),
+                                        Toast.LENGTH_LONG).show();
+                                dialog.dismiss();
+                                finish();
+                            }
+                        });
                     }
-                });
+                }.start();
 
             }
         });
@@ -173,7 +142,30 @@ public class CarRemover extends AppCompatActivity {
 
         recyclerView.setAdapter(rvAdapter);
 
-
+        // Load the paired-car list off the main thread, then populate the adapter.
+        new Thread() {
+            @Override
+            public void run() {
+                final String carDb =
+                        "/data/data/com.google.android.projection.gearhead/databases/carservicedata.db";
+                final String[] carRows =
+                        RootDb.query(carDb, "SELECT manufacturer,model FROM allowedcars").split("\\r?\\n");
+                final String[] idRows =
+                        RootDb.query(carDb, "SELECT vehicleidclient FROM allowedcars").split("\\r?\\n");
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        for (String str : carRows) {
+                            if (!str.trim().isEmpty()) allCars.add(new CarInfo(str, false));
+                        }
+                        for (int i = 0; i < idRows.length && i < allCars.size(); i++) {
+                            allCars.get(i).setId(idRows[i]);
+                        }
+                        rvAdapter.notifyDataSetChanged();
+                    }
+                });
+            }
+        }.start();
     }
 
 
