@@ -155,13 +155,15 @@ dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'androidx.cardview:cardview:1.0.0'
     testImplementation 'junit:junit:4.13.2'
-    // Unit-test infrastructure: off-device tests via Robolectric (simulated
-    // Android runtime + resources), Mockito for stubbing, androidx.test core for
-    // ApplicationProvider/Context. Robolectric SDK is pinned in
-    // src/test/resources/robolectric.properties.
+    // Unit-test infrastructure: off-device JVM tests via Robolectric (simulated
+    // Android runtime + resources, supports compileSdk 34; SDK pinned in
+    // src/test/resources/robolectric.properties), Mockito for stubbing, and
+    // androidx.test core/ext for ApplicationProvider/Context, ActivityScenario,
+    // and the AndroidJUnit4 runner used by the unit tests under src/test.
     testImplementation 'org.robolectric:robolectric:4.12.2'
     testImplementation 'org.mockito:mockito-core:5.11.0'
     testImplementation 'androidx.test:core:1.5.0'
+    testImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test:runner:1.5.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     // Sourced from JitPack: the original com.romandanylyk:pageindicatorview /

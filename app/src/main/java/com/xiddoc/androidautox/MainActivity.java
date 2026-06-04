@@ -29,7 +29,6 @@ import androidx.viewpager.widget.ViewPager;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
-import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -302,7 +301,14 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-        TextView logs = initiateLogsText();
+        // Configure the logs TextView once: enable text selection so the user
+        // can long-press to copy log output.  Vertical scrolling is handled by
+        // the parent ScrollView (logs_scroll); horizontal scrolling is handled
+        // by the nested HorizontalScrollView (logs_hscroll).  We call this once
+        // here so it does NOT run on every button tap (repeated calls to
+        // setTextIsSelectable can reset focus state).
+        configureLogsView();
+        TextView logs = getLogsView();
 
         // Dev-only: read-only diagnostic of the new "phixit" Phenotype snapshot. Hidden
         // behind developer mode (enable by tapping the About text 7x) so it doesn't run /
@@ -1543,7 +1549,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void revert(final String toRevert) {
 
-        final TextView logs = initiateLogsText();
+        final TextView logs = getLogsView();
 
 
         new Thread() {
@@ -1591,7 +1597,7 @@ public class MainActivity extends AppCompatActivity {
     private void applyPhixitTweakSpecs(final String key, final java.util.List<FlagSpec> specs,
                                        final ImageView statusView, final TextView button,
                                        final String reEnableLabel) {
-        final TextView logs = initiateLogsText();
+        final TextView logs = getLogsView();
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
         new Thread() {
@@ -1766,7 +1772,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
 
-        final TextView logs = initiateLogsText();
+        final TextView logs = getLogsView();
 
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
@@ -1854,7 +1860,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void disableBatteryWarning() {
-        final TextView logs = initiateLogsText();
+        final TextView logs = getLogsView();
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
 
@@ -1889,7 +1895,7 @@ public class MainActivity extends AppCompatActivity {
 
     /** Reverts the battery saver warning tweak by restoring the captured baseline. */
     public void revertBatteryWarning() {
-        final TextView logs = initiateLogsText();
+        final TextView logs = getLogsView();
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
 
@@ -1941,12 +1947,32 @@ public class MainActivity extends AppCompatActivity {
         applyPhixitTweak("aa_new_seekbar", newSeekbarTweakStatus, null, null);
     }
 
+    /**
+     * Configures the logs {@link android.widget.TextView} for text selection.
+     * Call this ONCE from {@code onCreate} — NOT on every button tap.
+     *
+     * <p>Selectability is configured here in code rather than in XML so that
+     * this method can be directly exercised by unit tests without parsing XML.
+     * Horizontal scrolling is provided by the wrapping {@code HorizontalScrollView}
+     * (logs_hscroll), so {@code ScrollingMovementMethod} is intentionally NOT set
+     * here — it would replace the {@code ArrowKeyMovementMethod} that Android
+     * installs when selection is enabled, breaking long-press selection.
+     *
+     * <p>Package-private so that {@code LogsTextSelectableTest} can call it
+     * directly on an inflated view.
+     */
+    void configureLogsView() {
+        final TextView logs = getLogsView();
+        logs.setTextIsSelectable(true);
+    }
+
+    /**
+     * Returns the logs {@link android.widget.TextView}. Pure lookup — no side effects.
+     * Call {@link #configureLogsView()} once from {@code onCreate} to set it up.
+     */
     @NonNull
-    private TextView initiateLogsText() {
-        final TextView logs = findViewById(R.id.logs);
-        logs.setHorizontallyScrolling(true);
-        logs.setMovementMethod(new ScrollingMovementMethod());
-        return logs;
+    TextView getLogsView() {
+        return (TextView) findViewById(R.id.logs);
     }
 
 
@@ -1993,7 +2019,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void forceWideScreen(View view, final int value) {
-        final TextView logs = initiateLogsText();
+        final TextView logs = getLogsView();
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
         final StringBuilder finalCommand = new StringBuilder();

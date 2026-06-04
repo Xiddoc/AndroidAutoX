@@ -141,6 +141,11 @@ A CI pipeline using GitHub Actions is being added. It builds and signs the app u
    - The engine drops SELinux to permissive (only if enforcing), force-stops GMS, edits in place, restores ownership/context, clears the phenotype cache, and restores SELinux.
 6. Failures surface via `NotSuccessfulDialog`; some tweaks prompt a reboot via `RebootDialog`.
 
+> Why the reboot? See `docs/reboot-to-apply-analysis.md` for an independent peer review of whether a
+> full reboot is actually required (consensus: it's a conservative "always-works" fallback, not a
+> platform mandate — the real requirement is committing the override and restarting the consuming
+> processes / projection session).
+
 ## Adding a new tweak button
 
 1. In `app/src/main/res/layout/scrollview.xml`, add a `Button` (and its companion status `ImageView`) inside the appropriate section: `GENERAL`, `SCREEN SETUP`, `APPEARANCE`, `VIDEO QUALITY`, or `PRE-ACTIVATE`.
