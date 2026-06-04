@@ -129,13 +129,17 @@ public class MainActivity extends AppCompatActivity {
     private Button declineSmsTweak;
     private Button uxprototypeButton;
     private Button materialYouButton;
-    private boolean animationRun;
-    // True once a tweak has been applied and the reboot FAB has been revealed.
-    // Drives RebootFabVisibility so the FAB stays hidden on the Logs page.
-    private boolean rebootRevealed;
-    // Index of the page the user is currently viewing, kept in sync from the
-    // ViewPager's onPageSelected callback.
-    private int currentPage;
+    // Owns the reboot FAB's views + visibility state and is the single place that
+    // applies the RebootFabVisibility policy (VISIBLE/GONE + entrance animation +
+    // glow). Both the page-change listener and showRebootButton() delegate to it.
+    // UI-thread-confined (mutated only via runOnUiThread).
+    private RebootFabController rebootFabController;
+    // Reboot-pending state restored from a previous activity instance (e.g. after
+    // rotation), read in onCreate when constructing the controller. Set by
+    // onRestoreInstanceState; defaults false on a fresh launch.
+    private boolean restoredRebootRevealed;
+    // Key under which the reboot-pending flag is persisted across recreate.
+    private static final String STATE_REBOOT_REVEALED = "reboot_revealed";
     // Index of the Logs page in the ViewPager; set where the pages are inserted
     // so it can't silently drift out of sync with the adapter order.
     private int logsPageIndex;
@@ -154,9 +158,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        // Persist whether a reboot is pending so the FAB survives a recreate.
+        // currentPage is intentionally not persisted: the ViewPager restores its
+        // own position and re-seeds the controller via getCurrentItem() in onCreate.
+        if (rebootFabController != null) {
+            outState.putBoolean(STATE_REBOOT_REVEALED, rebootFabController.isRebootRevealed());
+        }
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
 
         super.onCreate(savedInstanceState);
+
+        // Recover a reboot that was pending before this activity was recreated
+        // (e.g. on rotation) so the FAB can be re-shown on the Tweaks page.
+        if (savedInstanceState != null) {
+            restoredRebootRevealed = savedInstanceState.getBoolean(STATE_REBOOT_REVEALED, false);
+        }
 
 
         Bundle extras = new Bundle()    ;
@@ -229,21 +250,6 @@ public class MainActivity extends AppCompatActivity {
 
         com.google.android.material.tabs.TabLayout tabLayout = findViewById(R.id.tab_layout);
         tabLayout.setupWithViewPager(viewPager);
-
-        // The reboot FAB floats over the whole activity; on the Logs page it would
-        // overlap the Copy Logs button. Toggle its visibility on page change using
-        // the shared RebootFabVisibility policy.
-        viewPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
-            @Override
-            public void onPageSelected(int position) {
-                currentPage = position;
-                if (rebootContainer != null) {
-                    rebootContainer.setVisibility(
-                            RebootFabVisibility.shouldShow(position, logsPageIndex, rebootRevealed)
-                                    ? View.VISIBLE : View.GONE);
-                }
-            }
-        });
 
         Toolbar myToolbar = findViewById(R.id.toolbar);
         setSupportActionBar(myToolbar);
@@ -319,6 +325,47 @@ public class MainActivity extends AppCompatActivity {
         configureGlowLayer(rebootGlow, 10f * density, 1.0f);
         applyAzureGlow(rebootButton);
 
+        // Build the FAB controller now that its views exist. It owns the
+        // VISIBLE/GONE + entrance-animation + glow apply path; the entrance
+        // animation and glow are injected as Runnables so the controller stays
+        // free of the animation framework (and unit-testable). Initialise its
+        // page state from the pager's current item so a restored Logs page is
+        // honoured immediately (addOnPageChangeListener does NOT fire for the
+        // initial/restored page).
+        final View rebootFabRoot = RebootFabController.resolveFabRoot(rebootContainer, rebootButton);
+        rebootFabController = new RebootFabController(
+                rebootFabRoot,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        rebootFabRoot.startAnimation(
+                                AnimationUtils.loadAnimation(getApplicationContext(), R.anim.reboot_button_anim));
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        startGlowBreathing(rebootGlowOuter);
+                    }
+                },
+                logsPageIndex,
+                viewPager.getCurrentItem());
+
+        // Restore a reboot that was pending before an activity recreate (e.g.
+        // rotation), then reconcile FAB visibility against the restored page.
+        rebootFabController.restoreRevealed(restoredRebootRevealed);
+
+        // The reboot FAB floats over the whole activity; on the Logs page it would
+        // overlap the Copy Logs button. Register the page-change listener here —
+        // after the FAB views exist — so the controller is never touched before
+        // it is wired. It owns the shared RebootFabVisibility policy.
+        viewPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
+            @Override
+            public void onPageSelected(int position) {
+                rebootFabController.onPageChanged(position);
+            }
+        });
+
         // Ambient AI backdrop: keep the aurora blobs slowly drifting/breathing
         // the whole time the screen is open.
         startAurora();
@@ -341,8 +388,6 @@ public class MainActivity extends AppCompatActivity {
             phixitDiagnostic(logs);
         }
 
-
-        animationRun = false;
 
 /*        nospeed = findViewById(R.id.nospeed);
         noSpeedRestrictionsStatus = findViewById(R.id.speedhackstatus);
@@ -2759,43 +2804,19 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
     }
 
     public void showRebootButton() {
-        runOnUiThread(new Thread() {
+        // Delegate the whole reveal — VISIBLE/GONE, entrance animation and glow —
+        // to the controller, which owns the shared RebootFabVisibility policy and
+        // guarantees the entrance animation + glow run exactly once, the first
+        // time the FAB actually becomes visible (immediately on the Tweaks page,
+        // or deferred until the user returns from the Logs page).
+        runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                final Animation anim = AnimationUtils.loadAnimation(getApplicationContext(), R.anim.reboot_button_anim);
-
-                // A reboot is now pending; remember it so page changes can
-                // re-show the FAB on the Tweaks page later.
-                rebootRevealed = true;
-
-                if (!animationRun) {
-                    // Reveal the FAB + both glow layers together (they share the
-                    // reboot_container) and only then start the breathing pulse,
-                    // so the entrance animation and the alpha animator don't fight.
-                    //
-                    // Edge case: if the FAB is revealed while the user is on the
-                    // Logs page, keep it GONE so it doesn't overlap Copy Logs; it
-                    // will appear when they return to the Tweaks page. Use the
-                    // shared RebootFabVisibility policy so the logic stays single-
-                    // sourced.
-                    boolean show = RebootFabVisibility.shouldShow(currentPage, logsPageIndex, true);
-                    if (rebootContainer != null) {
-                        if (show) {
-                            rebootContainer.setVisibility(View.VISIBLE);
-                            rebootContainer.startAnimation(anim);
-                        } else {
-                            rebootContainer.setVisibility(View.GONE);
-                        }
-                    } else if (show) {
-                        rebootButton.setVisibility(View.VISIBLE);
-                        rebootButton.startAnimation(anim);
-                    }
-                    startGlowBreathing(rebootGlowOuter);
-                    animationRun = true;
+                if (rebootFabController != null) {
+                    rebootFabController.reveal();
                 }
             }
         });
-
     }
 
     /**
