@@ -5,6 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:theme="@style/AppTheme"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     tools:context=".MainActivity">
 
     <androidx.appcompat.widget.Toolbar
@@ -113,50 +115,52 @@
 
     </androidx.viewpager.widget.ViewPager>
 
-    <!-- FAB glow halo: two real blurred layers (configured in MainActivity) —
-         a wide soft outer bloom and a bright tight inner rim — stacked behind
-         the FAB and revealed together with it. Negative margins bleed each
-         layer past the FAB body so the blur reads as a glow, not a thin ring. -->
-    <View
-        android:id="@+id/reboot_glow_outer"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_margin="-40dp"
-        android:background="@drawable/fab_glow_outer"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="@id/reboot_button"
-        app:layout_constraintBottom_toBottomOf="@id/reboot_button"
-        app:layout_constraintStart_toStartOf="@id/reboot_button"
-        app:layout_constraintEnd_toEndOf="@id/reboot_button" />
-
-    <View
-        android:id="@+id/reboot_glow"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_margin="-18dp"
-        android:background="@drawable/fab_glow"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="@id/reboot_button"
-        app:layout_constraintBottom_toBottomOf="@id/reboot_button"
-        app:layout_constraintStart_toStartOf="@id/reboot_button"
-        app:layout_constraintEnd_toEndOf="@id/reboot_button" />
-
-    <Button
-        android:id="@+id/reboot_button"
+    <!-- FAB + its glow halo. Wrapped in a non-clipping FrameLayout because
+         FrameLayout honours negative margins (ConstraintLayout clamps them to 0),
+         so the two blurred glow layers actually grow PAST the FAB body and have
+         room to bloom. match_parent + negative margin makes each glow view larger
+         than the FAB; the inset drawables then leave transparent margin inside
+         for the RenderEffect blur to spread into. Revealed together on apply. -->
+    <FrameLayout
+        android:id="@+id/reboot_container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="15dp"
-        android:background="@drawable/fab_background"
-        android:elevation="6dp"
-        android:clickable="true"
-        android:drawableStart="@drawable/ic_baseline_settings_backup_restore_24"
-        android:drawablePadding="5dp"
-        android:focusable="true"
-        android:text="@string/reboot_to_apply"
-        android:textColor="@android:color/white"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <View
+            android:id="@+id/reboot_glow_outer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:layout_margin="-44dp"
+            android:background="@drawable/fab_glow_outer" />
+
+        <View
+            android:id="@+id/reboot_glow"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:layout_margin="-18dp"
+            android:background="@drawable/fab_glow" />
+
+        <Button
+            android:id="@+id/reboot_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/fab_background"
+            android:elevation="6dp"
+            android:clickable="true"
+            android:drawableStart="@drawable/ic_baseline_settings_backup_restore_24"
+            android:drawablePadding="5dp"
+            android:focusable="true"
+            android:text="@string/reboot_to_apply"
+            android:textColor="@android:color/white" />
+    </FrameLayout>
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>

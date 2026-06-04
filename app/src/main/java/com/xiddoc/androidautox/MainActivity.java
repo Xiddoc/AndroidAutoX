@@ -99,6 +99,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView currentlySetUSBSeekbar;
     private TextView currentlySetWiFiSeekbar;
     private Button rebootButton;
+    private View rebootContainer;
     private View rebootGlow;
     private View rebootGlowOuter;
     private Button nospeed;
@@ -279,15 +280,15 @@ public class MainActivity extends AppCompatActivity {
         rebootButton = findViewById(R.id.reboot_button);
 
         // Phase 2 depth pass: a real two-layer RenderEffect glow behind the FAB —
-        // a wide soft bloom plus a bright tight neon rim (API 31+). The pucks are
-        // inset inside their views so the blur blooms outward instead of being
-        // clipped at the view edge. Blur radius stays within each layer's inset.
+        // a wide soft bloom plus a bright tight neon rim (API 31+). The glow views
+        // live in a non-clipping FrameLayout (reboot_container) so they can grow
+        // past the FAB; their inset-puck drawables give the blur room to bloom.
         float density = getResources().getDisplayMetrics().density;
+        rebootContainer = findViewById(R.id.reboot_container);
         rebootGlowOuter = findViewById(R.id.reboot_glow_outer);
-        configureGlowLayer(rebootGlowOuter, 30f * density, 0.65f);
+        configureGlowLayer(rebootGlowOuter, 30f * density, 0.6f);
         rebootGlow = findViewById(R.id.reboot_glow);
         configureGlowLayer(rebootGlow, 10f * density, 1.0f);
-        startGlowBreathing(rebootGlowOuter);
         applyAzureGlow(rebootButton);
 
 
@@ -4193,16 +4194,17 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 final Animation anim = AnimationUtils.loadAnimation(getApplicationContext(), R.anim.reboot_button_anim);
 
                 if (!animationRun) {
-                    rebootButton.setVisibility(View.VISIBLE);
-                    rebootButton.startAnimation(anim);
-                    if (rebootGlowOuter != null) {
-                        rebootGlowOuter.setVisibility(View.VISIBLE);
-                        rebootGlowOuter.startAnimation(anim);
+                    // Reveal the FAB + both glow layers together (they share the
+                    // reboot_container) and only then start the breathing pulse,
+                    // so the entrance animation and the alpha animator don't fight.
+                    if (rebootContainer != null) {
+                        rebootContainer.setVisibility(View.VISIBLE);
+                        rebootContainer.startAnimation(anim);
+                    } else {
+                        rebootButton.setVisibility(View.VISIBLE);
+                        rebootButton.startAnimation(anim);
                     }
-                    if (rebootGlow != null) {
-                        rebootGlow.setVisibility(View.VISIBLE);
-                        rebootGlow.startAnimation(anim);
-                    }
+                    startGlowBreathing(rebootGlowOuter);
                     animationRun = true;
                 }
             }
