@@ -23,6 +23,36 @@ public class PhixitRootService extends RootService {
 
     static final String TAG = "AndroidAutoX";
 
+    static {
+        // See neutralizeWalSettingsLookup(): do it as early as the class loads in the
+        // root process, before any database is opened.
+        neutralizeWalSettingsLookup();
+    }
+
+    private static volatile boolean walFlagsReady;
+
+    /**
+     * The libsu root process is not a registered app in ActivityManager, so SQLite's lazy
+     * read of {@code Settings.Global.sqlite_compatibility_wal_flags} during
+     * {@code SQLiteDatabase.openDatabase} -- a ContentResolver query to the {@code settings}
+     * provider -- fails with {@code SecurityException: Unable to find app for caller}.
+     * Pre-initializing {@code SQLiteCompatibilityWalFlags} with null flags marks it
+     * initialized so it never queries the provider. (Hidden-API reflection is allowed here:
+     * the root process is started via app_process, not a restricted zygote app.)
+     */
+    private static void neutralizeWalSettingsLookup() {
+        if (walFlagsReady) return;
+        try {
+            Class<?> c = Class.forName("android.database.sqlite.SQLiteCompatibilityWalFlags");
+            java.lang.reflect.Method init = c.getDeclaredMethod("init", String.class);
+            init.setAccessible(true);
+            init.invoke(null, (String) null);
+        } catch (Throwable t) {
+            Log.w(TAG, "Could not pre-init SQLiteCompatibilityWalFlags", t);
+        }
+        walFlagsReady = true;
+    }
+
     @Override
     public IBinder onBind(Intent intent) {
         return new Impl();
@@ -31,6 +61,7 @@ public class PhixitRootService extends RootService {
     /** Opens read-write with a rollback journal (not WAL) so GMS never finds a
      *  root-owned {@code -wal}/{@code -shm} it cannot read after we restart it. */
     private static SQLiteDatabase openRW(String dbPath) {
+        neutralizeWalSettingsLookup();
         SQLiteDatabase db = SQLiteDatabase.openDatabase(
                 dbPath, null, SQLiteDatabase.OPEN_READWRITE);
         try {
