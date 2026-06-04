@@ -35,4 +35,29 @@ public class RebootFabVisibilityTest {
     public void hiddenOnLogsPageWhenNotRevealed() {
         assertFalse(RebootFabVisibility.shouldShow(LOGS_PAGE_INDEX, LOGS_PAGE_INDEX, false));
     }
+
+    // The following pin the "ONLY the Logs page hides" semantics so a future
+    // `<` vs `!=` regression (e.g. hiding every page at-or-after Logs) is caught.
+
+    @Test
+    public void shownOnPageAfterLogsWhenRevealed() {
+        // Page index 2 is past the Logs page (index 1); it must still show.
+        assertTrue(RebootFabVisibility.shouldShow(2, LOGS_PAGE_INDEX, true));
+    }
+
+    @Test
+    public void shownOnNonZeroNonLogsPageWhenRevealed() {
+        // A non-zero page that isn't the Logs page stays shown. With logsPageIndex
+        // at 2, page 3 must show even though it is greater than the Logs index.
+        assertTrue(RebootFabVisibility.shouldShow(3, 2, true));
+    }
+
+    @Test
+    public void hiddenOnlyOnTheLogsPageIndex() {
+        // Only the exact Logs index hides; neighbours on both sides show.
+        int logs = 2;
+        assertTrue(RebootFabVisibility.shouldShow(1, logs, true));
+        assertFalse(RebootFabVisibility.shouldShow(2, logs, true));
+        assertTrue(RebootFabVisibility.shouldShow(3, logs, true));
+    }
 }
