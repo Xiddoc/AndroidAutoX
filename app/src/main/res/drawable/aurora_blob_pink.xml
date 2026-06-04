@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ambient "aurora" blob (see aurora_blob_blue). Pink lobe. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <gradient
+        android:type="radial"
+        android:gradientRadius="200dp"
+        android:centerX="0.5"
+        android:centerY="0.5"
+        android:startColor="#5FD96570"
+        android:endColor="#00D96570" />
+</shape>

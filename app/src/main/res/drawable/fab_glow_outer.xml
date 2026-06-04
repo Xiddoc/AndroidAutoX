@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Outer, wide soft bloom of the FAB glow. The puck is INSET well inside its
+     (much larger) view, leaving a wide transparent margin so the heavy runtime
+     RenderEffect blur can spread into a soft halo well past the FAB edges. A
+     horizontal linear gradient (blue -> purple -> pink) gives the multi-hue
+     Gemini look: once blurred, different sides of the halo glow different
+     colours (sweep gradients average to mud under a heavy blur). -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="40dp"
+    android:insetTop="40dp"
+    android:insetRight="40dp"
+    android:insetBottom="40dp">
+    <shape android:shape="rectangle">
+        <corners android:radius="22dp" />
+        <gradient
+            android:type="linear"
+            android:angle="0"
+            android:startColor="@color/gemini_blue"
+            android:centerColor="@color/gemini_purple"
+            android:endColor="@color/gemini_pink" />
+    </shape>
+</inset>

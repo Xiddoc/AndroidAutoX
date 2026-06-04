@@ -2,6 +2,9 @@ package com.xiddoc.androidautox;
 
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.ClipData;
@@ -29,7 +32,6 @@ import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.Animation;
@@ -98,7 +100,9 @@ public class MainActivity extends AppCompatActivity {
     private TextView currentlySetUSBSeekbar;
     private TextView currentlySetWiFiSeekbar;
     private Button rebootButton;
+    private View rebootContainer;
     private View rebootGlow;
+    private View rebootGlowOuter;
     private Button nospeed;
     private Button taplimitat;
     private Button coolwalkDayNightTweak;
@@ -276,17 +280,21 @@ public class MainActivity extends AppCompatActivity {
 
         rebootButton = findViewById(R.id.reboot_button);
 
-        // Phase 2 depth pass: real RenderEffect blur halo behind the FAB plus
-        // azure-tinted elevation shadows on the raised surfaces (API 31+).
+        // Phase 2 depth pass: a real two-layer RenderEffect glow behind the FAB —
+        // a wide soft bloom plus a bright tight neon rim (API 31+). The glow views
+        // live in a non-clipping FrameLayout (reboot_container) so they can grow
+        // past the FAB; their inset-puck drawables give the blur room to bloom.
+        float density = getResources().getDisplayMetrics().density;
+        rebootContainer = findViewById(R.id.reboot_container);
+        rebootGlowOuter = findViewById(R.id.reboot_glow_outer);
+        configureGlowLayer(rebootGlowOuter, 30f * density, 0.6f);
         rebootGlow = findViewById(R.id.reboot_glow);
-        if (rebootGlow != null) {
-            float blur = 12f * getResources().getDisplayMetrics().density;
-            rebootGlow.setRenderEffect(
-                    RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.DECAL));
-            rebootGlow.setAlpha(0.6f);
-        }
+        configureGlowLayer(rebootGlow, 10f * density, 1.0f);
         applyAzureGlow(rebootButton);
-        applyDepthGlow();
+
+        // Ambient AI backdrop: keep the aurora blobs slowly drifting/breathing
+        // the whole time the screen is open.
+        startAurora();
 
 
 
@@ -4191,17 +4199,71 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 final Animation anim = AnimationUtils.loadAnimation(getApplicationContext(), R.anim.reboot_button_anim);
 
                 if (!animationRun) {
-                    rebootButton.setVisibility(View.VISIBLE);
-                    rebootButton.startAnimation(anim);
-                    if (rebootGlow != null) {
-                        rebootGlow.setVisibility(View.VISIBLE);
-                        rebootGlow.startAnimation(anim);
+                    // Reveal the FAB + both glow layers together (they share the
+                    // reboot_container) and only then start the breathing pulse,
+                    // so the entrance animation and the alpha animator don't fight.
+                    if (rebootContainer != null) {
+                        rebootContainer.setVisibility(View.VISIBLE);
+                        rebootContainer.startAnimation(anim);
+                    } else {
+                        rebootButton.setVisibility(View.VISIBLE);
+                        rebootButton.startAnimation(anim);
                     }
+                    startGlowBreathing(rebootGlowOuter);
                     animationRun = true;
                 }
             }
         });
 
+    }
+
+    /**
+     * Turn a solid-colour puck into a real glow layer by blurring it at the
+     * given radius (px) and dialing its intensity via alpha. Used for the FAB's
+     * stacked outer-bloom / inner-rim halo.
+     */
+    private void configureGlowLayer(View v, float blurPx, float alpha) {
+        if (v == null) return;
+        v.setRenderEffect(RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.DECAL));
+        v.setAlpha(alpha);
+    }
+
+    /** Slowly drift, scale and soften the ambient aurora blobs for a dynamic AI feel. */
+    private void startAurora() {
+        float d = getResources().getDisplayMetrics().density;
+        animateBlob(findViewById(R.id.aurora_blob1), 9000, 34f * d, 28f * d, 1.15f);
+        animateBlob(findViewById(R.id.aurora_blob2), 13000, -40f * d, 24f * d, 1.25f);
+        animateBlob(findViewById(R.id.aurora_blob3), 16000, 26f * d, -32f * d, 1.2f);
+    }
+
+    private void animateBlob(View v, long duration, float dx, float dy, float maxScale) {
+        if (v == null) return;
+        float blur = 40f * getResources().getDisplayMetrics().density;
+        v.setRenderEffect(RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.DECAL));
+        ObjectAnimator tx = ObjectAnimator.ofFloat(v, View.TRANSLATION_X, 0f, dx);
+        ObjectAnimator ty = ObjectAnimator.ofFloat(v, View.TRANSLATION_Y, 0f, dy);
+        ObjectAnimator sx = ObjectAnimator.ofFloat(v, View.SCALE_X, 1f, maxScale);
+        ObjectAnimator sy = ObjectAnimator.ofFloat(v, View.SCALE_Y, 1f, maxScale);
+        for (ObjectAnimator a : new ObjectAnimator[]{tx, ty, sx, sy}) {
+            a.setDuration(duration);
+            a.setRepeatCount(ValueAnimator.INFINITE);
+            a.setRepeatMode(ValueAnimator.REVERSE);
+            a.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        }
+        AnimatorSet set = new AnimatorSet();
+        set.playTogether(tx, ty, sx, sy);
+        set.start();
+    }
+
+    /** Slow alpha pulse so the outer bloom gently "breathes" like Gemini's orb. */
+    private void startGlowBreathing(View v) {
+        if (v == null) return;
+        ObjectAnimator pulse = ObjectAnimator.ofFloat(v, View.ALPHA, 0.45f, 0.85f);
+        pulse.setDuration(2200);
+        pulse.setRepeatMode(ValueAnimator.REVERSE);
+        pulse.setRepeatCount(ValueAnimator.INFINITE);
+        pulse.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        pulse.start();
     }
 
     /**
@@ -4213,26 +4275,6 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         int azure = ContextCompat.getColor(this, R.color.accent_blue);
         v.setOutlineSpotShadowColor(azure);
         v.setOutlineAmbientShadowColor(azure);
-    }
-
-    /** Apply the azure glow to the info card and every tweak button. */
-    private void applyDepthGlow() {
-        applyAzureGlow(findViewById(R.id.info_card));
-        View buttonsArea = findViewById(R.id.buttons_area);
-        if (buttonsArea instanceof ViewGroup) {
-            tintButtonShadows((ViewGroup) buttonsArea);
-        }
-    }
-
-    private void tintButtonShadows(ViewGroup group) {
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            if (child instanceof Button) {
-                applyAzureGlow(child);
-            } else if (child instanceof ViewGroup) {
-                tintButtonShadows((ViewGroup) child);
-            }
-        }
     }
 
     public static void openApp(Context context, String packageName) {
