@@ -56,4 +56,24 @@ public class RootGateTest {
         org.junit.Assert.assertNotEquals(
                 RootGate.decide((Boolean) null), RootGate.decide(Boolean.FALSE));
     }
+
+    // --- the two overloads must agree on every state ----------------------
+
+    // The nullable-Boolean overload is sugar over the two-boolean primitive; they must
+    // never disagree for any of the three caller states.
+    @Test
+    public void overloadsAgreeOnEveryState() {
+        assertEquals(RootGate.decide(false, false), RootGate.decide((Boolean) null));
+        assertEquals(RootGate.decide(true, true), RootGate.decide(Boolean.TRUE));
+        assertEquals(RootGate.decide(true, false), RootGate.decide(Boolean.FALSE));
+    }
+
+    // Every two-boolean input maps to exactly one decision (full truth table).
+    @Test
+    public void fullTruthTable() {
+        assertEquals(RootGate.Decision.WAIT, RootGate.decide(false, false));
+        assertEquals(RootGate.Decision.WAIT, RootGate.decide(false, true));
+        assertEquals(RootGate.Decision.SHOW_RETRY, RootGate.decide(true, false));
+        assertEquals(RootGate.Decision.PROCEED, RootGate.decide(true, true));
+    }
 }
