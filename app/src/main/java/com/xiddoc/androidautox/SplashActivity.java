@@ -51,11 +51,55 @@ public class SplashActivity extends AppCompatActivity {
     // soon as the async root result arrives, instead of waiting for a button tap.
     private boolean skipStartupWarning = false;
 
-    // Result of the asynchronous root request. null = not-yet/unknown, non-null = completed.
-    private volatile StreamLogs isDeviceRooted;
+    // Tri-state result of the asynchronous root request, read across threads:
+    //   null  = request not finished yet (pending)
+    //   TRUE  = root granted
+    //   FALSE = root denied / unavailable
+    volatile Boolean isDeviceRooted; // package-private for unit tests (RootRequester injection)
 
-    // Guards against kicking off the root request more than once (e.g. onResume re-entry).
-    private boolean rootRequestStarted = false;
+    // Single-flight guard: true while a root request thread is running so taps / onResume
+    // re-entries don't spawn duplicate, uncancellable background threads.
+    volatile boolean rootRequestInFlight = false; // package-private: unit tests await it settling
+
+    // Set in onDestroy so background threads know to drop their result instead of posting
+    // work (e.g. startActivity / showing a dialog) onto a finishing/destroyed activity.
+    private volatile boolean destroyed = false;
+
+    // True once the user has expressed intent to proceed (tapped Proceed / "Request again",
+    // or the skip-warning fast path is active). Until then a freshly-arrived root result is
+    // just cached -- we must NOT auto-navigate past the disclaimer the user hasn't accepted.
+    private boolean userRequestedProceed = false;
+
+    // The libsu boundary, behind an interface so unit tests can stub it without a device.
+    // Defaults to the real MainActivity/RootDb implementation.
+    interface RootRequester {
+        /** Optionally re-issues su (re-prompting Magisk) and reports whether root was granted. */
+        boolean acquireRoot(boolean forceReprompt);
+        /** Pre-binds the root SQLite service once root is confirmed. */
+        void onRootGranted();
+    }
+
+    // package-private + non-final so unit tests can inject a stub before onResume.
+    RootRequester rootRequester = new RootRequester() {
+        @Override
+        public boolean acquireRoot(boolean forceReprompt) {
+            if (forceReprompt) {
+                // Close the cached libsu shell so the next acquisition builds a fresh one
+                // and genuinely re-runs su (see MainActivity.resetRootShell()).
+                MainActivity.resetRootShell();
+            }
+            return MainActivity.hasRootAccess();
+        }
+
+        @Override
+        public void onRootGranted() {
+            try {
+                RootDb.get();
+            } catch (Throwable t) {
+                Log.e("com.xiddoc.androidautox", "Failed to bind root service", t);
+            }
+        }
+    };
 
     private static final String actualVersion = BuildConfig.VERSION_NAME;
     private static final String BASE_URL = "https://api.github.com/repos/Xiddoc/AndroidAutoX/releases/latest";
@@ -104,7 +148,13 @@ public class SplashActivity extends AppCompatActivity {
         // (which deliberately does not touch this key).
         skipStartupWarning = sharedPreferences.getBoolean(SKIP_STARTUP_WARNING_KEY, false);
 
-        requestLatest();
+        // The update check is best-effort; never let a transport/network setup problem
+        // (e.g. a missing HTTP stack under unit tests) take down the splash screen.
+        try {
+            requestLatest();
+        } catch (Throwable t) {
+            Log.w("com.xiddoc.androidautox", "Update check unavailable", t);
+        }
 
         final Button continueButton = findViewById(R.id.proceed_button);
         final Button disableWarningButton = findViewById(R.id.disable_warning_button);
@@ -173,19 +223,49 @@ public class SplashActivity extends AppCompatActivity {
     }
 
     // Shared root-gated proceed flow used by both bottom buttons.
-    // Treats null (async root result not-yet-arrived) or non-"1" as not-rooted,
-    // so it never NPEs and never blocks the main thread on su.
-    private void proceedIfRooted() {
-        StreamLogs rootResult = isDeviceRooted;
-        if (rootResult != null && "1".equals(rootResult.getInputStreamLog())) {
-            if (newVersionName != null) {
-                mainActivityIntent.putExtra("NewVersionName", newVersionName);
-            }
-            startActivity(mainActivityIntent);
-            finish();
-        } else {
-            noRootDialog.show(getSupportFragmentManager(), "NoRootDialog");
+    //
+    // Uses the pure RootGate decision logic so the three states are handled
+    // distinctly and we never falsely report "no root" while the async request is
+    // still pending:
+    //   PROCEED    -> enter the app
+    //   WAIT       -> the async root request hasn't finished; show a loading state.
+    //                 We do NOT spawn a polling thread here: the request thread itself
+    //                 posts back to the UI thread (see onRootResultArrived) and re-runs
+    //                 this method as soon as the result is known (event-driven).
+    //   SHOW_RETRY -> request finished without root; offer a retry path
+    // Never NPEs and never blocks the main thread on su.
+    void proceedIfRooted() {
+        // Record intent so a later async result can auto-advance this same flow.
+        userRequestedProceed = true;
+        switch (RootGate.decide(isDeviceRooted)) {
+            case PROCEED:
+                if (newVersionName != null) {
+                    mainActivityIntent.putExtra("NewVersionName", newVersionName);
+                }
+                startActivity(mainActivityIntent);
+                finish();
+                break;
+            case WAIT:
+                // Async root request still in flight: don't dead-end to NoRootDialog.
+                // Show a brief loading toast; onRootResultArrived() will re-enter this
+                // method once the request completes.
+                Toast.makeText(this, R.string.requesting_root, Toast.LENGTH_SHORT).show();
+                break;
+            case SHOW_RETRY:
+            default:
+                noRootDialog.show(getSupportFragmentManager(), "NoRootDialog");
+                break;
         }
+    }
+
+    // Re-triggers root acquisition. Called by NoRootDialog's "Request again" action so a
+    // denied/unavailable result is not a dead end. Clears the previous result, then kicks
+    // off a fresh request that first closes the cached libsu shell so su is genuinely
+    // re-issued (re-prompting Magisk) instead of reusing the warm/denied shell.
+    void retryRootRequest() {
+        isDeviceRooted = null;
+        Toast.makeText(this, R.string.requesting_root, Toast.LENGTH_SHORT).show();
+        requestRootAsync(true);
     }
 
 
@@ -194,58 +274,77 @@ public class SplashActivity extends AppCompatActivity {
         super.onResume();
         // Kick off root acquisition once the window is up so Magisk's grant dialog
         // surfaces over the visible splash rather than before it is drawn.
-        requestRootAsync();
+        requestRootAsync(false);
     }
 
-    // Requests root off the main thread (matching MainActivity's new Thread() idiom) and then
-    // pre-binds the root SQLite service. Keeps the blocking root acquisition off the main
-    // thread to avoid an ANR. The 5s countdown gives this time to complete and the user time
-    // to tap "Grant". Runs at most once.
-    private void requestRootAsync() {
-        if (rootRequestStarted) {
+    @Override
+    protected void onDestroy() {
+        // Tell any in-flight request thread to drop its result rather than posting work
+        // (startActivity / dialog) onto a destroyed activity.
+        destroyed = true;
+        super.onDestroy();
+    }
+
+    // Requests root off the main thread (avoids an ANR — acquisition blocks on the Magisk
+    // prompt). When the result lands it posts back to the UI thread to re-evaluate via
+    // RootGate (event-driven; no busy-poll). At most one request runs at a time.
+    //
+    // @param forceReprompt when true, close the cached libsu shell first so a fresh su is
+    //                      issued (used by the "Request again" retry); the initial onResume
+    //                      request passes false.
+    private void requestRootAsync(final boolean forceReprompt) {
+        // Single-flight: a request is already running, let it finish and post its result.
+        if (rootRequestInFlight) {
             return;
         }
-        rootRequestStarted = true;
+        rootRequestInFlight = true;
 
         new Thread() {
             @Override
             public void run() {
-                // Acquire root via libsu; this is what surfaces Magisk's grant prompt on
-                // first launch. Crucially we check the SHELL's real root status -- a
-                // non-root fallback shell would still echo "1", so command output can't be
-                // trusted as a root signal.
-                Log.v("com.xiddoc.androidautox", "Requesting root (su)");
-                boolean rooted = MainActivity.hasRootAccess();
-                StreamLogs result = new StreamLogs();
-                result.setInputStreamLog(rooted ? "1" : "0");
-                isDeviceRooted = result;
+                // Acquire root via libsu; this is what surfaces Magisk's grant prompt.
+                // We check the SHELL's real root status -- a non-root fallback shell would
+                // still echo "1", so command output can't be trusted as a root signal.
+                Log.v("com.xiddoc.androidautox", "Requesting root (su), forceReprompt=" + forceReprompt);
+                boolean rooted = rootRequester.acquireRoot(forceReprompt);
                 Log.v("com.xiddoc.androidautox", "Root request result: rooted=" + rooted);
 
                 // Pre-bind the root SQLite service now (off the main thread) so later DB
                 // work -- including UI screens that read on the main thread -- finds it
-                // already connected. Replaces copying the old bundled sqlite3 binary.
+                // already connected.
                 if (rooted) {
-                    try {
-                        RootDb.get();
-                    } catch (Throwable t) {
-                        Log.e("com.xiddoc.androidautox", "Failed to bind root service", t);
-                    }
+                    rootRequester.onRootGranted();
                 }
 
-                // Future-launch fast path: now that the async root result is in,
-                // auto-proceed (root-gated) on the UI thread instead of waiting for a tap.
-                if (skipStartupWarning) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (!isFinishing()) {
-                                proceedIfRooted();
-                            }
+                final Boolean result = rooted ? Boolean.TRUE : Boolean.FALSE;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        rootRequestInFlight = false;
+                        // Drop stale results if the activity went away while we worked.
+                        if (destroyed || isFinishing()) {
+                            return;
                         }
-                    });
-                }
+                        isDeviceRooted = result;
+                        onRootResultArrived();
+                    }
+                });
             }
         }.start();
+    }
+
+    // Called on the UI thread once an async root request has stored its result. Re-runs
+    // the proceed gate. For the future-launch fast path (skipStartupWarning) this auto-
+    // proceeds; otherwise it advances any user who is already waiting (WAIT toast) or who
+    // just tapped "Request again". A user still on the disclaimer simply has a fresh
+    // result ready for when they tap Proceed.
+    private void onRootResultArrived() {
+        // skipStartupWarning is a standing intent to proceed; otherwise only advance once
+        // the user has actually tapped Proceed / "Request again". Until then we just keep
+        // the result cached so we don't auto-skip the disclaimer the user hasn't accepted.
+        if (skipStartupWarning || userRequestedProceed) {
+            proceedIfRooted();
+        }
     }
 
     public String requestLatest() {
