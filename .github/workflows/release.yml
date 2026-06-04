@@ -56,24 +56,16 @@ jobs:
           echo "version_name=$next" >> "$GITHUB_OUTPUT"
           echo "tag=v$next" >> "$GITHUB_OUTPUT"
 
-      - name: Set up JDK 11
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '11'
+          java-version: '17'
 
       - name: Set up Android SDK
-        # Pin command-line tools to 9.0 — newer cmdline-tools (11.0+) require
-        # JDK 17, but Gradle 6.1.1 / AGP 4.0.1 need JDK 11, so the SDK tooling
-        # and Gradle must share JDK 11.
         uses: android-actions/setup-android@v3
         with:
-          # 9477386 == command-line tools 9.0, the last release that runs on
-          # JDK 11 (11.0+ require JDK 17). Value is the build number, not "9.0".
-          cmdline-tools-version: '9477386'
-          packages: 'platform-tools platforms;android-29 build-tools;29.0.3'
-        env:
-          SKIP_JDK_VERSION_CHECK: 'true'
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
       - name: Cache Gradle
         uses: actions/cache@v4
