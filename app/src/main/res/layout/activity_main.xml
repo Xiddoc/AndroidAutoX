@@ -114,14 +114,27 @@
 
     </androidx.viewpager.widget.ViewPager>
 
-    <!-- Blurred azure puck sitting just behind the FAB; MainActivity applies a
-         RenderEffect blur to it at runtime for a real glow halo. Negative margins
-         bleed it slightly past the FAB body. Revealed together with the FAB. -->
+    <!-- FAB glow halo: two real blurred layers (configured in MainActivity) —
+         a wide soft outer bloom and a bright tight inner rim — stacked behind
+         the FAB and revealed together with it. Negative margins bleed each
+         layer past the FAB body so the blur reads as a glow, not a thin ring. -->
+    <View
+        android:id="@+id/reboot_glow_outer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_margin="-32dp"
+        android:background="@drawable/fab_glow_outer"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="@id/reboot_button"
+        app:layout_constraintBottom_toBottomOf="@id/reboot_button"
+        app:layout_constraintStart_toStartOf="@id/reboot_button"
+        app:layout_constraintEnd_toEndOf="@id/reboot_button" />
+
     <View
         android:id="@+id/reboot_glow"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_margin="-10dp"
+        android:layout_margin="-14dp"
         android:background="@drawable/fab_glow"
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="@id/reboot_button"

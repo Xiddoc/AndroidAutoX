@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Solid azure puck used purely as the source for the FAB's RenderEffect blur
-     halo (see MainActivity#onCreate). Rounded to roughly match the FAB body so
-     the blurred bloom reads as a soft glow hugging the button. -->
+<!-- Inner, bright rim of the FAB glow: a luminous azure puck blurred tightly at
+     runtime so it reads as a bright neon ring hugging the button body. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <corners android:radius="20dp" />
-    <solid android:color="@color/accent_blue" />
+    <solid android:color="@color/accent_blue_top" />
 </shape>

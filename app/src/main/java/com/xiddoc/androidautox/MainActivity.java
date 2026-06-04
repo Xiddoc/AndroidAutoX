@@ -99,6 +99,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView currentlySetWiFiSeekbar;
     private Button rebootButton;
     private View rebootGlow;
+    private View rebootGlowOuter;
     private Button nospeed;
     private Button taplimitat;
     private Button coolwalkDayNightTweak;
@@ -276,15 +277,14 @@ public class MainActivity extends AppCompatActivity {
 
         rebootButton = findViewById(R.id.reboot_button);
 
-        // Phase 2 depth pass: real RenderEffect blur halo behind the FAB plus
-        // azure-tinted elevation shadows on the raised surfaces (API 31+).
+        // Phase 2 depth pass: a real two-layer RenderEffect glow behind the FAB
+        // (wide soft bloom + bright tight rim) plus azure-tinted elevation
+        // shadows on the raised surfaces (API 31+).
+        float density = getResources().getDisplayMetrics().density;
+        rebootGlowOuter = findViewById(R.id.reboot_glow_outer);
+        configureGlowLayer(rebootGlowOuter, 24f * density, 0.55f);
         rebootGlow = findViewById(R.id.reboot_glow);
-        if (rebootGlow != null) {
-            float blur = 12f * getResources().getDisplayMetrics().density;
-            rebootGlow.setRenderEffect(
-                    RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.DECAL));
-            rebootGlow.setAlpha(0.6f);
-        }
+        configureGlowLayer(rebootGlow, 9f * density, 0.95f);
         applyAzureGlow(rebootButton);
         applyDepthGlow();
 
@@ -4193,6 +4193,10 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 if (!animationRun) {
                     rebootButton.setVisibility(View.VISIBLE);
                     rebootButton.startAnimation(anim);
+                    if (rebootGlowOuter != null) {
+                        rebootGlowOuter.setVisibility(View.VISIBLE);
+                        rebootGlowOuter.startAnimation(anim);
+                    }
                     if (rebootGlow != null) {
                         rebootGlow.setVisibility(View.VISIBLE);
                         rebootGlow.startAnimation(anim);
@@ -4202,6 +4206,17 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
             }
         });
 
+    }
+
+    /**
+     * Turn a solid-colour puck into a real glow layer by blurring it at the
+     * given radius (px) and dialing its intensity via alpha. Used for the FAB's
+     * stacked outer-bloom / inner-rim halo.
+     */
+    private void configureGlowLayer(View v, float blurPx, float alpha) {
+        if (v == null) return;
+        v.setRenderEffect(RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.DECAL));
+        v.setAlpha(alpha);
     }
 
     /**

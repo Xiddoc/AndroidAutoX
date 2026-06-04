@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Outer, wide soft bloom of the FAB glow: a larger azure puck blurred heavily
+     at runtime so it spreads a soft halo well past the button edges. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="28dp" />
+    <solid android:color="@color/accent_blue" />
+</shape>
