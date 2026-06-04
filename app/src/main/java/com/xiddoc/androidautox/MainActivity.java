@@ -130,6 +130,15 @@ public class MainActivity extends AppCompatActivity {
     private Button uxprototypeButton;
     private Button materialYouButton;
     private boolean animationRun;
+    // True once a tweak has been applied and the reboot FAB has been revealed.
+    // Drives RebootFabVisibility so the FAB stays hidden on the Logs page.
+    private boolean rebootRevealed;
+    // Index of the page the user is currently viewing, kept in sync from the
+    // ViewPager's onPageSelected callback.
+    private int currentPage;
+    // Index of the Logs page in the ViewPager; set where the pages are inserted
+    // so it can't silently drift out of sync with the adapter order.
+    private int logsPageIndex;
     private boolean  urlprototype;
 
 
@@ -214,11 +223,27 @@ public class MainActivity extends AppCompatActivity {
         ViewPager viewPager = findViewById(R.id.viewpager);
         CommonPageAdapter adapter = new CommonPageAdapter();
         adapter.insertViewId(R.id.page_one, getString(R.string.tab_tweaks));
-        adapter.insertViewId(R.id.page_two, getString(R.string.tab_logs));
+        // Derive the Logs page index from insertion order so it can't drift.
+        logsPageIndex = adapter.insertViewId(R.id.page_two, getString(R.string.tab_logs));
         viewPager.setAdapter(adapter);
 
         com.google.android.material.tabs.TabLayout tabLayout = findViewById(R.id.tab_layout);
         tabLayout.setupWithViewPager(viewPager);
+
+        // The reboot FAB floats over the whole activity; on the Logs page it would
+        // overlap the Copy Logs button. Toggle its visibility on page change using
+        // the shared RebootFabVisibility policy.
+        viewPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
+            @Override
+            public void onPageSelected(int position) {
+                currentPage = position;
+                if (rebootContainer != null) {
+                    rebootContainer.setVisibility(
+                            RebootFabVisibility.shouldShow(position, logsPageIndex, rebootRevealed)
+                                    ? View.VISIBLE : View.GONE);
+                }
+            }
+        });
 
         Toolbar myToolbar = findViewById(R.id.toolbar);
         setSupportActionBar(myToolbar);
@@ -2739,14 +2764,29 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
             public void run() {
                 final Animation anim = AnimationUtils.loadAnimation(getApplicationContext(), R.anim.reboot_button_anim);
 
+                // A reboot is now pending; remember it so page changes can
+                // re-show the FAB on the Tweaks page later.
+                rebootRevealed = true;
+
                 if (!animationRun) {
                     // Reveal the FAB + both glow layers together (they share the
                     // reboot_container) and only then start the breathing pulse,
                     // so the entrance animation and the alpha animator don't fight.
+                    //
+                    // Edge case: if the FAB is revealed while the user is on the
+                    // Logs page, keep it GONE so it doesn't overlap Copy Logs; it
+                    // will appear when they return to the Tweaks page. Use the
+                    // shared RebootFabVisibility policy so the logic stays single-
+                    // sourced.
+                    boolean show = RebootFabVisibility.shouldShow(currentPage, logsPageIndex, true);
                     if (rebootContainer != null) {
-                        rebootContainer.setVisibility(View.VISIBLE);
-                        rebootContainer.startAnimation(anim);
-                    } else {
+                        if (show) {
+                            rebootContainer.setVisibility(View.VISIBLE);
+                            rebootContainer.startAnimation(anim);
+                        } else {
+                            rebootContainer.setVisibility(View.GONE);
+                        }
+                    } else if (show) {
                         rebootButton.setVisibility(View.VISIBLE);
                         rebootButton.startAnimation(anim);
                     }
