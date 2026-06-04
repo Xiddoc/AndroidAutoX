@@ -61,6 +61,9 @@ Android Auto 5.8 or superior is required.</string>
     <string name="copy_log">Copy log</string>
     <string name="about">About</string>
     <string name="revert_everything">Reset all tweaks</string>
+    <string name="auto_reapply">Keep tweaks applied in background</string>
+    <string name="auto_reapply_on">Tweaks will be re-applied automatically if Android Auto reverts them</string>
+    <string name="auto_reapply_off">Automatic re-apply disabled</string>
     <string name="tab_tweaks">Tweaks</string>
     <string name="tab_logs">Logs</string>
     <string name="welcome_title">Welcome to AndroidAutoX</string>

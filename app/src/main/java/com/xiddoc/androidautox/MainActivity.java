@@ -203,6 +203,9 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_main);
 
+        // (Re)schedule the background re-apply job to match what's currently enabled.
+        ReapplyScheduler.sync(getApplicationContext());
+
         ImageView revertNotificationDuration = findViewById(R.id.revert_hun_throttling);
         ImageView revertMediaNotificationDuration = findViewById(R.id.revert_media_hun);
         ImageView revertWifiBitrate = findViewById(R.id.revert_bitrate_wifi);
@@ -1569,13 +1572,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean hasBaseline(String key) {
-        java.util.List<FlagSpec> specs = PhixitTweaks.specs(key);
-        if (specs == null) return false;
-        SharedPreferences sp = getPreferences(Context.MODE_PRIVATE);
-        for (FlagSpec s : specs) {
-            if (sp.contains(baselineKey(s.pkg, s.name))) return true;
-        }
-        return false;
+        return new PhixitEngine(this, null).hasBaseline(key);
     }
 
     /**
@@ -1626,6 +1623,10 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
+        MenuItem auto = menu.findItem(R.id.auto_reapply);
+        if (auto != null) {
+            auto.setChecked(ReapplyScheduler.isAutoReapplyEnabled(getApplicationContext()));
+        }
         return super.onPrepareOptionsMenu(menu);
     }
 
@@ -1662,6 +1663,15 @@ public class MainActivity extends AppCompatActivity {
                 androidx.appcompat.app.AlertDialog Alert1 = builder.create();
                 Alert1.show();
                 break;
+            case R.id.auto_reapply:
+                boolean newState = !item.isChecked();
+                item.setChecked(newState);
+                ReapplyScheduler.setAutoReapplyEnabled(getApplicationContext(), newState);
+                Toast.makeText(getApplicationContext(),
+                        getString(newState ? R.string.auto_reapply_on : R.string.auto_reapply_off),
+                        Toast.LENGTH_SHORT).show();
+                break;
+
             case R.id.aa_settings:
                 String packageName = "com.google.android.projection.gearhead";
                 openApp(getApplicationContext(), packageName);
@@ -1687,6 +1697,8 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences.Editor editor = sharedPreferences.edit();
         editor.putBoolean(key, isChecked);
         editor.apply();
+        // Keep the background re-apply job in sync with what's enabled.
+        ReapplyScheduler.sync(getApplicationContext());
     }
 
     public void saveValue(final int value, String key) throws RuntimeException {
@@ -2017,37 +2029,23 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
     }
 
     public void setHunDuration(View view, final int value) {
-        java.util.List<FlagSpec> specs = new java.util.ArrayList<FlagSpec>();
-        specs.add(FlagSpec.lng(FlagSpec.PKG_GEARHEAD, "SystemUi__hun_default_heads_up_timeout_ms", value));
-        applyPhixitTweakSpecs("aa_hun_ms", specs, messagesHunStatus, null, null);
+        saveValue(value, "messaging_hun_value");
+        applyPhixitTweakSpecs("aa_hun_ms", TweakRegistry.hunSpecs(value), messagesHunStatus, null, null);
     }
 
     public void setMediaHunDuration(View view, final int value) {
-        java.util.List<FlagSpec> specs = new java.util.ArrayList<FlagSpec>();
-        specs.add(FlagSpec.lng(FlagSpec.PKG_GEARHEAD, "SystemUi__media_hun_in_rail_widget_timeout_ms", value));
-        applyPhixitTweakSpecs("aa_media_hun", specs, mediaHunStatus, null, null);
+        saveValue(value, "media_hun_value");
+        applyPhixitTweakSpecs("aa_media_hun", TweakRegistry.mediaHunSpecs(value), mediaHunStatus, null, null);
     }
 
     public void setUSBbitrate(final double value) {
-        java.util.List<FlagSpec> specs = new java.util.ArrayList<FlagSpec>();
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_usb", 16000000 * value));
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_usb_hevc", 3000000 * value));
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_usb", 8000000 * value));
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_usb_hevc", 1000000 * value));
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_usb", 12000000 * value));
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_usb_hevc", 2000000 * value));
-        applyPhixitTweakSpecs("aa_bitrate_usb", specs, usbBitrateStatus, null, null);
+        saveFloat((float) value, "usb_bitrate_value");
+        applyPhixitTweakSpecs("aa_bitrate_usb", TweakRegistry.usbBitrateSpecs(value), usbBitrateStatus, null, null);
     }
 
     public void setWiFiBitrate(final double value) {
-        java.util.List<FlagSpec> specs = new java.util.ArrayList<FlagSpec>();
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_wireless", 16000000 * value));
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_wireless_hevc", 3000000 * value));
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_wireless", 8000000 * value));
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_wireless_hevc", 1000000 * value));
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless", 12000000 * value));
-        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless_hevc", 2000000 * value));
-        applyPhixitTweakSpecs("aa_bitrate_wireless", specs, wifiBitrateStatus, null, null);
+        saveFloat((float) value, "wifi_bitrate_value");
+        applyPhixitTweakSpecs("aa_bitrate_wireless", TweakRegistry.wifiBitrateSpecs(value), wifiBitrateStatus, null, null);
     }
 
     private void inertialScrollTweak() {
@@ -2593,127 +2591,17 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
      */
     private boolean applyPhixitSpecs(final TextView logs, java.util.List<FlagSpec> specs,
                                      boolean captureBaseline) {
-        final String path = getApplicationInfo().dataDir;
-        final String filesDir = getFilesDir().getAbsolutePath();
         StringBuilder sb = new StringBuilder();
-
-        String policy = runSuWithCmd("getenforce").getInputStreamLog();
-        runSuWithCmd("setenforce 0");
-        runSuWithCmd("am force-stop com.google.android.gms");
-
-        java.util.LinkedHashMap<String, java.util.List<FlagSpec>> byPkg =
-                new java.util.LinkedHashMap<String, java.util.List<FlagSpec>>();
-        for (FlagSpec s : specs) {
-            java.util.List<FlagSpec> l = byPkg.get(s.pkg);
-            if (l == null) { l = new java.util.ArrayList<FlagSpec>(); byPkg.put(s.pkg, l); }
-            l.add(s);
-        }
-
-        StringBuilder script = new StringBuilder();
-        boolean ok = true;
-
-        for (java.util.Map.Entry<String, java.util.List<FlagSpec>> e : byPkg.entrySet()) {
-            String pkg = e.getKey();
-            java.util.List<FlagSpec> ps = e.getValue();
-
-            StreamLogs r = runSuWithCmd(
-                    path + "/sqlite3 -batch " + PHENO_DB + " " +
-                            "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
-                            "WHERE static_config_package_id IN (SELECT static_config_package_id " +
-                            "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
-            if (!r.getErrorStreamLog().isEmpty()) {
-                sb.append("  [").append(pkg).append("] read ERR: ").append(r.getErrorStreamLog()).append("\n");
-                ok = false;
-            }
-            String out = r.getInputStreamLog();
-            if (out.isEmpty()) {
-                sb.append("  [").append(pkg).append("] no partitions matched\n");
-                ok = false;
-                continue;
-            }
-
-            java.util.List<String> pids = new java.util.ArrayList<String>();
-            java.util.List<java.util.List<PhixitSnapshot.Flag>> parts =
-                    new java.util.ArrayList<java.util.List<PhixitSnapshot.Flag>>();
-            for (String line : out.split("\\r?\\n")) {
-                int bar = line.indexOf('|');
-                if (bar <= 0) continue;
-                String pid = line.substring(0, bar).trim();
-                String hex = line.substring(bar + 1).trim();
-                if (hex.isEmpty()) continue;
-                try {
-                    pids.add(pid);
-                    parts.add(PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex))));
-                } catch (Exception ex) {
-                    sb.append("  [").append(pkg).append("] partition ").append(pid)
-                            .append(" decode EXCEPTION ").append(ex).append("\n");
-                    ok = false;
-                }
-            }
-
-            if (captureBaseline) {
-                for (FlagSpec s : ps) captureBaselineIfAbsent(pkg, s.name, parts);
-            }
-
-            for (int i = 0; i < pids.size(); i++) {
-                java.util.List<PhixitSnapshot.Flag> flags = parts.get(i);
-                for (FlagSpec s : ps) applySpecToList(flags, s);
-                byte[] blob = PhixitSnapshot.deflateRaw(PhixitSnapshot.encode(flags));
-                script.append("UPDATE param_partitions SET flags_content=x'")
-                        .append(PhixitSnapshot.bytesToHex(blob))
-                        .append("' WHERE param_partition_id=").append(pids.get(i)).append(";\n");
-            }
-            sb.append("  [").append(pkg).append("] ").append(pids.size()).append(" partitions updated\n");
-        }
-
-        if (script.length() == 0) {
-            ok = false;
-        } else {
-            int servingVersion = (int) (System.currentTimeMillis() / 1000L);
-            script.append("UPDATE last_fetch SET serving_version=").append(servingVersion)
-                    .append(" WHERE type=1;\n");
-            String sqlFile = filesDir + "/phixit_apply.sql";
-            try {
-                java.io.FileOutputStream fos = new java.io.FileOutputStream(sqlFile);
-                fos.write(script.toString().getBytes("UTF-8"));
-                fos.close();
-                StreamLogs w = runSuWithCmd(path + "/sqlite3 -batch " + PHENO_DB + " < " + sqlFile);
-                if (!w.getErrorStreamLog().isEmpty()) {
-                    sb.append("  apply ERR: ").append(w.getErrorStreamLog()).append("\n");
-                    ok = false;
-                }
-                runSuWithCmd("rm -f " + sqlFile);
-            } catch (Exception ex) {
-                sb.append("  write ERR: ").append(ex).append("\n");
-                ok = false;
-            }
-        }
-
-        // Make GMS re-read the edited snapshot from the DB and restart fresh.
-        runSuWithCmd("rm -rf /data/data/com.google.android.gms/files/phenotype");
-        runSuWithCmd("am force-stop com.google.android.gms");
-        if (!policy.equalsIgnoreCase("Permissive")) runSuWithCmd("setenforce 1");
-
+        boolean ok = new PhixitEngine(this, sb).applySpecs(specs, captureBaseline);
         appendText(logs, sb.toString());
         return ok;
     }
 
     /** Restores each spec's flag to the baseline captured at apply time. */
     private boolean revertPhixitSpecs(TextView logs, java.util.List<FlagSpec> applied) {
-        SharedPreferences sp = getPreferences(Context.MODE_PRIVATE);
-        java.util.List<FlagSpec> restore = new java.util.ArrayList<FlagSpec>();
-        for (FlagSpec s : applied) {
-            String b = sp.getString(baselineKey(s.pkg, s.name), null);
-            if (b == null || b.equals("A")) {
-                restore.add(FlagSpec.remove(s.pkg, s.name)); // was absent -> drop it
-            } else {
-                restore.add(deserializeBaseline(s.pkg, s.name, b));
-            }
-        }
-        boolean ok = applyPhixitSpecs(logs, restore, false);
-        SharedPreferences.Editor ed = sp.edit();
-        for (FlagSpec s : applied) ed.remove(baselineKey(s.pkg, s.name));
-        ed.apply();
+        StringBuilder sb = new StringBuilder();
+        boolean ok = new PhixitEngine(this, sb).revertSpecs(applied);
+        appendText(logs, sb.toString());
         return ok;
     }
 
@@ -2744,28 +2632,7 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
 
     /** Reads a long-valued flag's current value from the snapshot, or {@code def}. */
     private long readPhixitLong(String pkg, String name, long def) {
-        String path = getApplicationInfo().dataDir;
-        StreamLogs r = runSuWithCmd(
-                path + "/sqlite3 -batch " + PHENO_DB + " " +
-                        "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
-                        "WHERE static_config_package_id IN (SELECT static_config_package_id " +
-                        "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
-        for (String line : r.getInputStreamLog().split("\\r?\\n")) {
-            int bar = line.indexOf('|');
-            if (bar <= 0) continue;
-            String hex = line.substring(bar + 1).trim();
-            if (hex.isEmpty()) continue;
-            try {
-                for (PhixitSnapshot.Flag f :
-                        PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex)))) {
-                    if (!f.numericName && name.equals(f.name) && f.type == PhixitSnapshot.TYPE_LONG) {
-                        return f.longValue;
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        return def;
+        return new PhixitEngine(this, null).readLong(pkg, name, def);
     }
 
     private void captureBaselineIfAbsent(String pkg, String name,

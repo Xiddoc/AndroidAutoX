@@ -12,6 +12,12 @@
     app:showAsAction="never" />
 
     <item
+        android:id="@+id/auto_reapply"
+        android:checkable="true"
+        app:showAsAction="never"
+        android:title="@string/auto_reapply" />
+
+    <item
         android:id="@+id/aa_settings"
         app:showAsAction="never"
         android:title="@string/menu_aa_settings" />
