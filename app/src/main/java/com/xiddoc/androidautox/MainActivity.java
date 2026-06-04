@@ -2,6 +2,8 @@ package com.xiddoc.androidautox;
 
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.ClipData;
@@ -29,7 +31,6 @@ import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.Animation;
@@ -277,16 +278,17 @@ public class MainActivity extends AppCompatActivity {
 
         rebootButton = findViewById(R.id.reboot_button);
 
-        // Phase 2 depth pass: a real two-layer RenderEffect glow behind the FAB
-        // (wide soft bloom + bright tight rim) plus azure-tinted elevation
-        // shadows on the raised surfaces (API 31+).
+        // Phase 2 depth pass: a real two-layer RenderEffect glow behind the FAB —
+        // a wide soft bloom plus a bright tight neon rim (API 31+). The pucks are
+        // inset inside their views so the blur blooms outward instead of being
+        // clipped at the view edge. Blur radius stays within each layer's inset.
         float density = getResources().getDisplayMetrics().density;
         rebootGlowOuter = findViewById(R.id.reboot_glow_outer);
-        configureGlowLayer(rebootGlowOuter, 24f * density, 0.55f);
+        configureGlowLayer(rebootGlowOuter, 30f * density, 0.65f);
         rebootGlow = findViewById(R.id.reboot_glow);
-        configureGlowLayer(rebootGlow, 9f * density, 0.95f);
+        configureGlowLayer(rebootGlow, 10f * density, 1.0f);
+        startGlowBreathing(rebootGlowOuter);
         applyAzureGlow(rebootButton);
-        applyDepthGlow();
 
 
 
@@ -4219,6 +4221,17 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         v.setAlpha(alpha);
     }
 
+    /** Slow alpha pulse so the outer bloom gently "breathes" like Gemini's orb. */
+    private void startGlowBreathing(View v) {
+        if (v == null) return;
+        ObjectAnimator pulse = ObjectAnimator.ofFloat(v, View.ALPHA, 0.45f, 0.85f);
+        pulse.setDuration(2200);
+        pulse.setRepeatMode(ValueAnimator.REVERSE);
+        pulse.setRepeatCount(ValueAnimator.INFINITE);
+        pulse.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        pulse.start();
+    }
+
     /**
      * Tint a view's elevation shadow with the logo azure so a raised surface
      * casts a soft blue glow instead of a flat gray shadow (API 28+; minSdk 31).
@@ -4228,26 +4241,6 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         int azure = ContextCompat.getColor(this, R.color.accent_blue);
         v.setOutlineSpotShadowColor(azure);
         v.setOutlineAmbientShadowColor(azure);
-    }
-
-    /** Apply the azure glow to the info card and every tweak button. */
-    private void applyDepthGlow() {
-        applyAzureGlow(findViewById(R.id.info_card));
-        View buttonsArea = findViewById(R.id.buttons_area);
-        if (buttonsArea instanceof ViewGroup) {
-            tintButtonShadows((ViewGroup) buttonsArea);
-        }
-    }
-
-    private void tintButtonShadows(ViewGroup group) {
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            if (child instanceof Button) {
-                applyAzureGlow(child);
-            } else if (child instanceof ViewGroup) {
-                tintButtonShadows((ViewGroup) child);
-            }
-        }
     }
 
     public static void openApp(Context context, String packageName) {
