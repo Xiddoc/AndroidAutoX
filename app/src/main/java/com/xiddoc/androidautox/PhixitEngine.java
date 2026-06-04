@@ -237,6 +237,52 @@ public class PhixitEngine {
         }
     }
 
+    // --- Android Auto projection detection (used to defer GMS-restarting re-applies) ---
+
+    private static final String MARK_SERVICE_RECORD  = "servicerecord";
+    private static final String MARK_IS_FOREGROUND   = "isforeground=true";
+    private static final String MARK_FG_SERVICE_TYPE = "foregroundservicetype";
+
+    /**
+     * Best-effort root check for "Android Auto is actively projecting right now", used to
+     * avoid force-stopping GMS (which restarts Android Auto) in the middle of a drive.
+     *
+     * <p>Gearhead hosts a <em>foreground</em> service for the whole projection session, so we
+     * dump its services and look for a foreground marker:
+     * <pre>dumpsys activity services com.google.android.projection.gearhead</pre>
+     * The foreground-service lifetime tracks the projection session closely — far better than
+     * a RESUMED-activity check (misses screen-off-while-projecting) or a bare process check
+     * (gearhead lingers cached after a drive). {@code dumpsys car_service} is absent on most
+     * non-AAOS phones.
+     *
+     * <p><b>Conservative by design.</b> The ONLY path that returns {@code false} ("safe to
+     * re-apply") is a dump that clearly shows gearhead has no running services. Everything
+     * ambiguous — empty/unreadable output, or service records present without a recognized
+     * foreground marker (dumpsys format varies across Android versions) — returns {@code true}
+     * (defer). Rationale: a briefly un-applied tweak is far less bad than Android Auto
+     * restarting mid-drive. Trade-off: on devices where gearhead keeps idle services alive,
+     * this over-defers until they stop or projection ends. Note stderr is intentionally NOT
+     * treated as fatal — {@code su}/{@code dumpsys} emit benign notices to stderr on success
+     * (matching the lenient stdout-only parsing used elsewhere in this class).
+     */
+    public boolean isAndroidAutoProjecting() {
+        StreamLogs r = MainActivity.runSuWithCmd("dumpsys activity services " + FlagSpec.PKG_GEARHEAD);
+        String out = r.getInputStreamLog();
+        if (out == null || out.trim().isEmpty()) {
+            return true; // cannot read -> assume projecting (conservative)
+        }
+        String lower = out.toLowerCase();
+        if (lower.contains(MARK_IS_FOREGROUND) || lower.contains(MARK_FG_SERVICE_TYPE)) {
+            return true; // a live foreground service == active projection session
+        }
+        if (!lower.contains(MARK_SERVICE_RECORD)) {
+            return false; // gearhead has no running services at all -> not projecting
+        }
+        // Services exist but no foreground marker matched. Rather than risk a false negative
+        // (and a mid-drive restart) on an unfamiliar dumpsys format, defer.
+        return true;
+    }
+
     /** Reads a long-valued flag's current value from the snapshot, or {@code def}. */
     public long readLong(String pkg, String name, long def) {
         String path = ctx.getApplicationInfo().dataDir;

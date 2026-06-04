@@ -45,6 +45,9 @@ public final class ReapplyScheduler {
         }
     }
 
+    /** Re-check interval after a re-apply was deferred (AA projecting). Modest, not a loop. */
+    static final long RETRY_LATENCY_MS = 15L * 60 * 1000; // 15 minutes
+
     /** One-shot re-apply shortly from now (e.g. right after boot). */
     public static void runOnceSoon(Context ctx) {
         JobScheduler js = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
@@ -54,6 +57,24 @@ public final class ReapplyScheduler {
                 ReapplyJobService.JOB_ID_ONESHOT, new ComponentName(ctx, ReapplyJobService.class))
                 .setMinimumLatency(10_000)
                 .setOverrideDeadline(120_000)
+                .build();
+        js.schedule(job);
+    }
+
+    /**
+     * Schedules a single deferred re-check ~{@link #RETRY_LATENCY_MS} out, used when a
+     * re-apply was postponed because Android Auto is projecting. Shares JOB_ID_ONESHOT so
+     * repeated deferrals collapse into one pending job (no job storm); the cadence stays at
+     * the retry interval rather than the boot-path's short latency.
+     */
+    public static void scheduleDeferredRetry(Context ctx) {
+        JobScheduler js = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+        if (js == null) return;
+        if (!(isAutoReapplyEnabled(ctx) && TweakRegistry.anyEnabled(ctx))) return;
+        JobInfo job = new JobInfo.Builder(
+                ReapplyJobService.JOB_ID_ONESHOT, new ComponentName(ctx, ReapplyJobService.class))
+                .setMinimumLatency(RETRY_LATENCY_MS)
+                .setOverrideDeadline(2 * RETRY_LATENCY_MS)
                 .build();
         js.schedule(job);
     }

@@ -260,11 +260,11 @@ public final class PhixitTweaks {
                 l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless_hevc", 0));
                 break;
 
-            // Dynamic-value tweak (whitelist rebuilt from appsListPref). Names only,
-            // so revert() can restore the captured baseline for these flags. The
-            // actual values are filled in by TweakRegistry.patchedAppsSpecs() at
-            // apply time; this entry also drives the app reinstall loop NOT at all
-            // (that stays in MainActivity.patchforapps()).
+            // Dynamic-value tweak (whitelist rebuilt from appsListPref). Placeholder names
+            // only -- real values are filled in by TweakRegistry.patchedAppsSpecs() at apply
+            // time; the values here are irrelevant because revert() keys on (pkg, name) to
+            // restore captured baselines. The app uninstall/reinstall loop is NOT driven
+            // here; it lives only in MainActivity.patchforapps().
             case "aa_patched_apps":
                 l.add(FlagSpec.str(FlagSpec.PKG_CAR, "app_white_list", ""));
                 l.add(FlagSpec.str(FlagSpec.PKG_CAR, "car_connect_broadcast_whitelist", ""));

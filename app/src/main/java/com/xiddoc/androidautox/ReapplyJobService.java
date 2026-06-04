@@ -59,76 +59,18 @@ public class ReapplyJobService extends JobService {
         // Android Auto. If the user is actively projecting (e.g. driving), defer rather
         // than yank the screen out from under them — a tweak being briefly un-applied is
         // far less bad than Android Auto restarting mid-drive.
-        if (isAndroidAutoProjecting(ctx)) {
+        if (engine.isAndroidAutoProjecting()) {
             Log.i(TAG, "Drift detected but Android Auto is projecting; deferring re-apply.");
-            // The periodic job retries on its own 6h cadence, but the one-shot path (e.g.
-            // post-boot) has no follow-up of its own, so queue another short-latency
-            // attempt. JobScheduler de-dupes by JOB_ID_ONESHOT, so re-queuing from the
-            // periodic path is harmless.
-            ReapplyScheduler.runOnceSoon(ctx);
+            // Re-check on a modest interval so we re-apply soon after the drive ends. This
+            // deliberately is NOT a short-latency loop: while projection persists each retry
+            // just defers again, so a tight interval would spin su/dumpsys for the whole
+            // drive. The 6h periodic job is the long backstop. (JobScheduler de-dupes by
+            // JOB_ID_ONESHOT, so at most one deferred retry is ever pending.)
+            ReapplyScheduler.scheduleDeferredRetry(ctx);
             return;
         }
 
         boolean ok = engine.applySpecs(specs, false); // don't recapture baselines
         Log.i(TAG, "Re-applied " + specs.size() + " flags, ok=" + ok + "\n" + log);
-    }
-
-    /**
-     * Best-effort root detector for "Android Auto is actively projecting right now".
-     *
-     * <p>There is no perfect signal, so we use the most reliable one available: the
-     * gearhead app hosts a <em>foreground</em> service (the car projection / connection
-     * service) for the entire duration of an active projection session, and tears it down
-     * when the head unit disconnects. We dump gearhead's services and look for a live
-     * foreground-service entry:
-     *
-     * <pre>dumpsys activity services com.google.android.projection.gearhead</pre>
-     *
-     * and scan the output for the foreground-service markers {@code ActiveServices} prints
-     * while one is running ({@code isForeground=true} on modern Android, or a
-     * {@code foregroundServiceType=...} line). We chose {@code dumpsys activity services}
-     * scoped to the gearhead package over the alternatives because:
-     * <ul>
-     *   <li>{@code dumpsys activity activities} (RESUMED activity) misses the very common
-     *       case where the phone screen is off/locked while still projecting to the car;</li>
-     *   <li>a bare "is the process running" check is a false positive — gearhead's process
-     *       lingers cached long after a drive ends;</li>
-     *   <li>{@code dumpsys car_service} is absent on most non-AAOS phones.</li>
-     * </ul>
-     * The foreground-service lifetime tracks the projection session closely, making it the
-     * most faithful root-visible proxy.
-     *
-     * <p><b>Conservative default:</b> if the command is unavailable, returns nothing, or
-     * errors, we return {@code true} (treat as "projecting" and defer). The cost of a false
-     * "projecting" is only a delayed re-apply; the cost of a false "not projecting" is
-     * restarting Android Auto mid-drive, which we must avoid.
-     */
-    static boolean isAndroidAutoProjecting(Context ctx) {
-        StreamLogs r = MainActivity.runSuWithCmd(
-                "dumpsys activity services " + FlagSpec.PKG_GEARHEAD);
-        String out = r.getInputStreamLog();
-
-        // No root / command missing / errored -> we cannot tell, so be conservative.
-        if (out.isEmpty() || !r.getErrorStreamLog().isEmpty()) {
-            Log.w(TAG, "Projection check inconclusive (empty/error output); assuming projecting.");
-            return true;
-        }
-
-        String lower = out.toLowerCase();
-        // "(nothing)" is what dumpsys prints when gearhead has no running services at all,
-        // i.e. it is definitely not projecting.
-        if (lower.contains("(nothing)")) return false;
-
-        // A live foreground service is the projection-session marker. Require an explicit
-        // foreground indicator so a merely cached gearhead process with idle services
-        // doesn't count as projecting.
-        if (lower.contains("isforeground=true") || lower.contains("foregroundservicetype")) {
-            return true;
-        }
-
-        // Service records exist but none is foreground: gearhead is up but not actively
-        // projecting, so allow the normal background re-apply to proceed. (Genuinely
-        // unparseable output would have returned true above.)
-        return false;
     }
 }
