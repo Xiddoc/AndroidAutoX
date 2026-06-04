@@ -39,6 +39,7 @@ import com.xiddoc.androidautox.AppInfo;
 import com.xiddoc.androidautox.MainActivity;
 import com.xiddoc.androidautox.MyAdapter;
 import com.xiddoc.androidautox.R;
+import com.xiddoc.androidautox.RootDb;
 import com.xiddoc.androidautox.StreamLogs;
 import com.xiddoc.androidautox.Utils.RecyclerItemClickListener;
 
@@ -59,28 +60,10 @@ public class AccountsChooser extends AppCompatActivity {
         Bundle b = getIntent().getExtras();
         String path = b.getString("path");
 
-        String getAccounts = runSuWithCmd(
-                path + "/sqlite3 /data/data/com.google.android.gms/databases/phenotype.db " +
-                        "'SELECT DISTINCT user FROM ApplicationTags WHERE user != \"\" ORDER BY user ASC;'").getInputStreamLog();
-
-
-        ArrayList<AccountInfo> allAccounts = new ArrayList<>();
+        final ArrayList<AccountInfo> allAccounts = new ArrayList<>();
 
         final ProgressDialog dialog = ProgressDialog.show(AccountsChooser.this, "",
                 getString(R.string.loading), true);
-        dialog.show();
-
-        while (getAccounts.length() < 1) {
-
-        }
-
-        dialog.dismiss();
-
-
-
-        for (String str : getAccounts.split(Objects.requireNonNull(System.getProperty("line.separator")))) {
-            allAccounts.add(new AccountInfo(str, false));
-        }
 
         final int[] selected = {0};
 
@@ -140,7 +123,27 @@ public class AccountsChooser extends AppCompatActivity {
 
         recyclerView.setAdapter(rvAdapter);
 
-
+        // Load the account list off the main thread (root SQLite via the root service),
+        // then populate the adapter and dismiss the spinner on the UI thread.
+        new Thread() {
+            @Override
+            public void run() {
+                String getAccounts = RootDb.query(
+                        "/data/data/com.google.android.gms/databases/phenotype.db",
+                        "SELECT DISTINCT user FROM ApplicationTags WHERE user != '' ORDER BY user ASC");
+                final String[] users = getAccounts.split("\\r?\\n");
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        for (String str : users) {
+                            if (!str.trim().isEmpty()) allAccounts.add(new AccountInfo(str, false));
+                        }
+                        rvAdapter.notifyDataSetChanged();
+                        dialog.dismiss();
+                    }
+                });
+            }
+        }.start();
     }
 
 

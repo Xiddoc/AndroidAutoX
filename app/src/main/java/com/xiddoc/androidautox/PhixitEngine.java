@@ -38,57 +38,49 @@ public class PhixitEngine {
 
     /** Applies every spec across all of its package's partitions. */
     public boolean applySpecs(List<FlagSpec> specs, boolean captureBaseline) {
-        final String path = ctx.getApplicationInfo().dataDir;
-        final String filesDir = ctx.getFilesDir().getAbsolutePath();
         StringBuilder sb = new StringBuilder();
 
-        String policy = MainActivity.runSuWithCmd("getenforce").getInputStreamLog();
-        MainActivity.runSuWithCmd("setenforce 0");
+        // Capture the db's owner + SELinux mode, force-stop GMS, and drop to permissive
+        // (only if it was enforcing) so the root service can open the private db. All of
+        // this is restored at the end.
+        String owner = MainActivity.runSuWithCmd("stat -c %U:%G " + PHENO_DB).getInputStreamLog().trim();
+        String policy = MainActivity.runSuWithCmd("getenforce").getInputStreamLog().trim();
+        boolean wasEnforcing = policy.equalsIgnoreCase("Enforcing");
+        if (wasEnforcing) MainActivity.runSuWithCmd("setenforce 0");
         MainActivity.runSuWithCmd("am force-stop com.google.android.gms");
 
-        LinkedHashMap<String, List<FlagSpec>> byPkg = new LinkedHashMap<String, List<FlagSpec>>();
-        for (FlagSpec s : specs) {
-            List<FlagSpec> l = byPkg.get(s.pkg);
-            if (l == null) { l = new ArrayList<FlagSpec>(); byPkg.put(s.pkg, l); }
-            l.add(s);
-        }
+        LinkedHashMap<String, List<FlagSpec>> byPkg = groupByPkg(specs);
 
-        StringBuilder script = new StringBuilder();
+        List<Partition> toWrite = new ArrayList<Partition>();
         boolean ok = true;
 
         for (Map.Entry<String, List<FlagSpec>> e : byPkg.entrySet()) {
             String pkg = e.getKey();
             List<FlagSpec> ps = e.getValue();
 
-            StreamLogs r = MainActivity.runSuWithCmd(
-                    path + "/sqlite3 -batch " + PHENO_DB + " " +
-                            "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
-                            "WHERE static_config_package_id IN (SELECT static_config_package_id " +
-                            "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
-            if (!r.getErrorStreamLog().isEmpty()) {
-                sb.append("  [").append(pkg).append("] read ERR: ").append(r.getErrorStreamLog()).append("\n");
+            List<Partition> raw;
+            try {
+                raw = RootDb.readPartitions(pkg);
+            } catch (Exception ex) {
+                sb.append("  [").append(pkg).append("] read ERR: ").append(ex).append("\n");
                 ok = false;
+                continue;
             }
-            String out = r.getInputStreamLog();
-            if (out.isEmpty()) {
+            if (raw.isEmpty()) {
                 sb.append("  [").append(pkg).append("] no partitions matched\n");
                 ok = false;
                 continue;
             }
 
-            List<String> pids = new ArrayList<String>();
+            List<Long> ids = new ArrayList<Long>();
             List<List<PhixitSnapshot.Flag>> parts = new ArrayList<List<PhixitSnapshot.Flag>>();
-            for (String line : out.split("\\r?\\n")) {
-                int bar = line.indexOf('|');
-                if (bar <= 0) continue;
-                String pid = line.substring(0, bar).trim();
-                String hex = line.substring(bar + 1).trim();
-                if (hex.isEmpty()) continue;
+            for (Partition p : raw) {
+                if (p.blob == null || p.blob.length == 0) continue;
                 try {
-                    pids.add(pid);
-                    parts.add(PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex))));
+                    ids.add(p.id);
+                    parts.add(PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob)));
                 } catch (Exception ex) {
-                    sb.append("  [").append(pkg).append("] partition ").append(pid)
+                    sb.append("  [").append(pkg).append("] partition ").append(p.id)
                             .append(" decode EXCEPTION ").append(ex).append("\n");
                     ok = false;
                 }
@@ -98,47 +90,47 @@ public class PhixitEngine {
                 for (FlagSpec s : ps) captureBaselineIfAbsent(pkg, s.name, parts);
             }
 
-            for (int i = 0; i < pids.size(); i++) {
+            for (int i = 0; i < ids.size(); i++) {
                 List<PhixitSnapshot.Flag> flags = parts.get(i);
                 for (FlagSpec s : ps) applySpecToList(flags, s);
                 byte[] blob = PhixitSnapshot.deflateRaw(PhixitSnapshot.encode(flags));
-                script.append("UPDATE param_partitions SET flags_content=x'")
-                        .append(PhixitSnapshot.bytesToHex(blob))
-                        .append("' WHERE param_partition_id=").append(pids.get(i)).append(";\n");
+                toWrite.add(new Partition(ids.get(i), blob));
             }
-            sb.append("  [").append(pkg).append("] ").append(pids.size()).append(" partitions updated\n");
+            sb.append("  [").append(pkg).append("] ").append(ids.size()).append(" partitions updated\n");
         }
 
-        if (script.length() == 0) {
+        if (toWrite.isEmpty()) {
             ok = false;
         } else {
             int servingVersion = (int) (System.currentTimeMillis() / 1000L);
-            script.append("UPDATE last_fetch SET serving_version=").append(servingVersion)
-                    .append(" WHERE type=1;\n");
-            String sqlFile = filesDir + "/phixit_apply.sql";
             try {
-                java.io.FileOutputStream fos = new java.io.FileOutputStream(sqlFile);
-                fos.write(script.toString().getBytes("UTF-8"));
-                fos.close();
-                StreamLogs w = MainActivity.runSuWithCmd(path + "/sqlite3 -batch " + PHENO_DB + " < " + sqlFile);
-                if (!w.getErrorStreamLog().isEmpty()) {
-                    sb.append("  apply ERR: ").append(w.getErrorStreamLog()).append("\n");
-                    ok = false;
-                }
-                MainActivity.runSuWithCmd("rm -f " + sqlFile);
+                RootDb.writePartitions(toWrite, servingVersion);
             } catch (Exception ex) {
-                sb.append("  write ERR: ").append(ex).append("\n");
+                sb.append("  apply ERR: ").append(ex).append("\n");
                 ok = false;
             }
         }
 
-        // Make GMS re-read the edited snapshot from the DB and restart fresh.
+        // Restore ownership/SELinux context on the db (root edits keep the owner, but be
+        // safe), then make GMS re-read the edited snapshot from the DB and restart fresh.
+        if (owner.contains(":")) MainActivity.runSuWithCmd("chown " + owner + " " + PHENO_DB);
+        MainActivity.runSuWithCmd("restorecon " + PHENO_DB);
         MainActivity.runSuWithCmd("rm -rf /data/data/com.google.android.gms/files/phenotype");
         MainActivity.runSuWithCmd("am force-stop com.google.android.gms");
-        if (!policy.equalsIgnoreCase("Permissive")) MainActivity.runSuWithCmd("setenforce 1");
+        if (wasEnforcing) MainActivity.runSuWithCmd("setenforce 1");
 
         log.append(sb);
         return ok;
+    }
+
+    private static LinkedHashMap<String, List<FlagSpec>> groupByPkg(List<FlagSpec> specs) {
+        LinkedHashMap<String, List<FlagSpec>> byPkg = new LinkedHashMap<String, List<FlagSpec>>();
+        for (FlagSpec s : specs) {
+            List<FlagSpec> l = byPkg.get(s.pkg);
+            if (l == null) { l = new ArrayList<FlagSpec>(); byPkg.put(s.pkg, l); }
+            l.add(s);
+        }
+        return byPkg;
     }
 
     /** Restores each spec's flag to the baseline captured at apply time. */
@@ -177,30 +169,21 @@ public class PhixitEngine {
      * avoid restarting GMS when nothing has drifted. No GMS restart, no SELinux change.
      */
     public boolean isApplied(List<FlagSpec> specs) {
-        final String path = ctx.getApplicationInfo().dataDir;
-        LinkedHashMap<String, List<FlagSpec>> byPkg = new LinkedHashMap<String, List<FlagSpec>>();
-        for (FlagSpec s : specs) {
-            List<FlagSpec> l = byPkg.get(s.pkg);
-            if (l == null) { l = new ArrayList<FlagSpec>(); byPkg.put(s.pkg, l); }
-            l.add(s);
-        }
+        LinkedHashMap<String, List<FlagSpec>> byPkg = groupByPkg(specs);
         for (Map.Entry<String, List<FlagSpec>> e : byPkg.entrySet()) {
-            StreamLogs r = MainActivity.runSuWithCmd(
-                    path + "/sqlite3 -batch " + PHENO_DB + " " +
-                            "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
-                            "WHERE static_config_package_id IN (SELECT static_config_package_id " +
-                            "FROM static_config_packages WHERE name=\"" + e.getKey() + "\");'");
-            String out = r.getInputStreamLog();
-            if (out.trim().isEmpty()) return false;
+            List<Partition> raw;
+            try {
+                raw = RootDb.readPartitions(e.getKey());
+            } catch (Exception ex) {
+                return false;
+            }
+            if (raw.isEmpty()) return false;
             boolean sawPartition = false;
-            for (String line : out.split("\\r?\\n")) {
-                int bar = line.indexOf('|');
-                if (bar <= 0) continue;
-                String hex = line.substring(bar + 1).trim();
-                if (hex.isEmpty()) continue;
+            for (Partition p : raw) {
+                if (p.blob == null || p.blob.length == 0) continue;
                 List<PhixitSnapshot.Flag> flags;
                 try {
-                    flags = PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex)));
+                    flags = PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob));
                 } catch (Exception ex) {
                     return false;
                 }
@@ -285,20 +268,17 @@ public class PhixitEngine {
 
     /** Reads a long-valued flag's current value from the snapshot, or {@code def}. */
     public long readLong(String pkg, String name, long def) {
-        String path = ctx.getApplicationInfo().dataDir;
-        StreamLogs r = MainActivity.runSuWithCmd(
-                path + "/sqlite3 -batch " + PHENO_DB + " " +
-                        "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
-                        "WHERE static_config_package_id IN (SELECT static_config_package_id " +
-                        "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
-        for (String line : r.getInputStreamLog().split("\\r?\\n")) {
-            int bar = line.indexOf('|');
-            if (bar <= 0) continue;
-            String hex = line.substring(bar + 1).trim();
-            if (hex.isEmpty()) continue;
+        List<Partition> raw;
+        try {
+            raw = RootDb.readPartitions(pkg);
+        } catch (Exception e) {
+            return def;
+        }
+        for (Partition p : raw) {
+            if (p.blob == null || p.blob.length == 0) continue;
             try {
                 for (PhixitSnapshot.Flag f :
-                        PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex)))) {
+                        PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob))) {
                     if (!f.numericName && name.equals(f.name) && f.type == PhixitSnapshot.TYPE_LONG) {
                         return f.longValue;
                     }

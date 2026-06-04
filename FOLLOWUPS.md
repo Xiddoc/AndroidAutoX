@@ -3,32 +3,29 @@
 Open items and known risks for the Phenotype "phixit" migration + background re-apply
 work. Ordered roughly by priority. Keep this updated as items are resolved.
 
-## 0. Bundled `sqlite3` — old binary shipped in local builds (RESOLVED for builds; hardening remains)
+## 0. Bundled `sqlite3` binary — REMOVED (migrated to libsu RootService + platform SQLite)
 
-Root cause of the on-device "malformed database schema ... near WITHOUT" failure: the
-checked-in `app/src/main/res/raw/sqlite3` was an ancient placeholder (SQLite **3.7.6.3,
-2011**) that predates `WITHOUT ROWID` (added 3.8.2, 2013). The new `phenotype.db` uses
-`WITHOUT ROWID` tables, so SQLite failed parsing the schema and **every** engine query
-failed.
+The original "malformed database schema ... near WITHOUT" failure was a stale 2011 SQLite
+binary (3.7.6.3) that predates `WITHOUT ROWID`. Rather than keep shipping a binary, the whole
+approach was replaced: the app now uses **libsu** (`com.github.topjohnwu.libsu`) — a persistent
+root shell for shell commands, and a **`RootService`** (`PhixitRootService`) that opens GMS's
+databases with the **platform `android.database.sqlite` API inside a root process**. The
+platform SQLite is modern (handles `WITHOUT ROWID`), blobs cross the binder as real `byte[]`
+(no hex), and DB SQL is parameterized (no SQL built into shell strings). The `res/raw/sqlite3`
+binary, `scripts/update-sqlite3.sh`, and the CI "Refresh sqlite3" steps are gone. This closes
+the ABI / supply-chain / local-build-freshness concerns that the binary carried, and also
+resolves the SQL-injection (#2, DB path) and `runSuWithCmd` timeout (#3) items.
 
-The project already had the fix: `scripts/update-sqlite3.sh` downloads a modern static
-ARM sqlite3 and is wired into CI (`build.yml`, `release.yml`). BUT local/`assembleDebug`
-builds do NOT run that step, so locally-built APKs shipped the stale placeholder — which is
-exactly what was tested. **Fixed** by committing a refreshed binary (SQLite 2023-11-24,
-~3.44) into `res/raw/sqlite3` so every build path (local, web, CI) ships a schema-capable
-binary. CI still refreshes it to latest at build time.
-
-Remaining hardening (not blocking, but real):
-- **ABI:** the binary is 32-bit ARM only. It runs on devices with 32-bit support (incl. the
-  test device), but **64-bit-only devices** (many 2023+ phones with no 32-bit runtime) can't
-  execute it. Ship an `arm64-v8a` build (and/or per-ABI selection at runtime).
-- **Supply chain:** `update-sqlite3.sh` pulls a prebuilt binary from a third-party GitHub
-  repo (`rojenzaman/sqlite3-arm-aarch64`) over `main` with **no checksum**, and we run it as
-  **root**. Pin to a specific commit + verify a known SHA256, or build sqlite from the
-  official amalgamation in CI.
-- **Local-build freshness:** consider a best-effort Gradle `preBuild` hook that runs the
-  refresh script (non-fatal if offline), so the committed binary doesn't silently go stale
-  again.
+**Needs on-device validation (not exercisable in CI):**
+- Apply + revert + background re-apply of a tweak of each value type (bool/long/double/string)
+  against a live `phenotype.db`, confirming GMS picks up the edit after restart.
+- That libsu can bind the `RootService` and open GMS's private DB under the device's root
+  solution (Magisk/KernelSU) — including whether the `setenforce 0` window is still needed.
+- `carservicedata.db` paths (`CarRemover`): the original ran `sqlite3` without toggling
+  SELinux; the RootService now opens it in a root process. Verify it can read/write under
+  enforcing, and add a SELinux toggle there if not.
+- First-run Magisk grant prompt still appears and `NoRootDialog` shows on denial.
+- The conservative R8 release build runs correctly (reflection-based libs, custom views).
 
 
 ## 1. patchforapps — reinstall loop is destructive and unguarded (pre-existing)
@@ -49,14 +46,16 @@ testing incl. a split-APK app and a system-updated app.
 Package names from `appsListPref` are interpolated unquoted into `su` command strings
 (`mv`/`pm uninstall`/`pm install`). Normally `[A-Za-z0-9._]`, but unsanitized. Validate
 against `^[A-Za-z0-9._]+$` (or quote/escape) before use. The whitelist *value* path is safe
-(it goes through the engine, not the shell).
+(it goes through the engine, not the shell). Note: the *DB* SQL-injection surface is gone —
+all SQL now runs through `RootDb`/`PhixitRootService` with parameterized queries; this item is
+only about the remaining `pm`/`mv` shell interpolation.
 
-## 3. `runSuWithCmd` has no timeout
+## 3. `runSuWithCmd` timeout — RESOLVED (libsu)
 
-`MainActivity.runSuWithCmd` does an unbounded `su.waitFor()`. In the background JobService a
-superuser policy that *prompts* (no UI present) can wedge the worker thread forever, so
-`jobFinished` is never called. Add a bounded wait (`waitFor(timeout, unit)` / watchdog
-`destroy()`), treat timeout as inconclusive.
+`runSuWithCmd` now runs on libsu's shell, which is configured with a timeout
+(`Shell.Builder.setTimeout(30)` in `AaxApp`) instead of the old unbounded
+`Runtime.exec("su").waitFor()`. A prompting/denied superuser policy no longer wedges the
+background worker forever.
 
 ## 4. patchforapps — `temp` not reset on the warning dialog's "No"/cancel (pre-existing)
 

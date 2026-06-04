@@ -198,9 +198,9 @@ public class SplashActivity extends AppCompatActivity {
     }
 
     // Requests root off the main thread (matching MainActivity's new Thread() idiom) and then
-    // runs copyAssets(), which depends on root for its chmod. Avoids ANR by keeping
-    // su.waitFor() off the main thread. The 5s countdown gives this time to complete and the
-    // user time to tap "Grant". Runs at most once.
+    // pre-binds the root SQLite service. Keeps the blocking root acquisition off the main
+    // thread to avoid an ANR. The 5s countdown gives this time to complete and the user time
+    // to tap "Grant". Runs at most once.
     private void requestRootAsync() {
         if (rootRequestStarted) {
             return;
@@ -210,12 +210,27 @@ public class SplashActivity extends AppCompatActivity {
         new Thread() {
             @Override
             public void run() {
-                // Explicit early su request so Magisk shows the prompt unmistakably.
+                // Acquire root via libsu; this is what surfaces Magisk's grant prompt on
+                // first launch. Crucially we check the SHELL's real root status -- a
+                // non-root fallback shell would still echo "1", so command output can't be
+                // trusted as a root signal.
                 Log.v("com.xiddoc.androidautox", "Requesting root (su)");
-                isDeviceRooted = runSuWithCmd("echo 1");
-                Log.v("com.xiddoc.androidautox", "Root request result: " + isDeviceRooted.getInputStreamLog());
+                boolean rooted = MainActivity.hasRootAccess();
+                StreamLogs result = new StreamLogs();
+                result.setInputStreamLog(rooted ? "1" : "0");
+                isDeviceRooted = result;
+                Log.v("com.xiddoc.androidautox", "Root request result: rooted=" + rooted);
 
-                copyAssets();
+                // Pre-bind the root SQLite service now (off the main thread) so later DB
+                // work -- including UI screens that read on the main thread -- finds it
+                // already connected. Replaces copying the old bundled sqlite3 binary.
+                if (rooted) {
+                    try {
+                        RootDb.get();
+                    } catch (Throwable t) {
+                        Log.e("com.xiddoc.androidautox", "Failed to bind root service", t);
+                    }
+                }
 
                 // Future-launch fast path: now that the async root result is in,
                 // auto-proceed (root-gated) on the UI thread instead of waiting for a tap.
@@ -231,50 +246,6 @@ public class SplashActivity extends AppCompatActivity {
                 }
             }
         }.start();
-    }
-
-    private void copyFile(InputStream in, OutputStream out) throws IOException {
-        byte[] buffer = new byte[1024];
-        int read;
-        while((read = in.read(buffer)) != -1){
-            out.write(buffer, 0, read);
-        }
-    }
-
-    private void copyAssets() {
-        String path = getApplicationInfo().dataDir;
-        boolean sqlite3 = new File(path, "sqlite3").exists();
-
-        if (sqlite3) {
-            return;
-        }
-
-        File file = new File(path, "sqlite3");
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    Log.v("com.xiddoc.androidautox", "\n--  Copy sqlite3 to data directory  --");
-                }
-            });
-            InputStream in;
-            OutputStream out;
-            try {
-                in = this.getResources().openRawResource(R.raw.sqlite3);
-
-                String outDir = getApplicationInfo().dataDir;
-
-                File outFile = new File(outDir, "sqlite3");
-
-                out = new FileOutputStream(outFile);
-                copyFile(in, out);
-                in.close();
-                out.flush();
-                out.close();
-            } catch (IOException e) {
-                Log.e("com.xiddoc.androidautox", "Failed to copy asset file: sqlite3", e);
-            }
-            Log.v("com.xiddoc.androidautox", runSuWithCmd("chmod 777 " + path + "/sqlite3").getStreamLogsWithLabels());
-
     }
 
     public String requestLatest() {

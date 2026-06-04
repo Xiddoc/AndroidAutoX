@@ -116,6 +116,11 @@ android {
 
     buildTypes {
         release {
+            // Conservative R8: shrink + obfuscate code and strip unused resources.
+            // Keep rules for libsu, the AIDL bridge, and reflection-based libs live
+            // in proguard-rules.pro.
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
         debug {
@@ -144,5 +149,9 @@ dependencies {
     implementation 'com.github.RiccardoMoro:RMSwitch:1.2.2'
     implementation 'com.android.volley:volley:1.2.1'
     implementation 'com.github.iGio90:BottomDialogs:master-SNAPSHOT'
+    // Root execution + RootService (in-process SQLite as root). Replaces the
+    // hand-rolled `Runtime.exec("su")` path and the bundled sqlite3 binary.
+    implementation 'com.github.topjohnwu.libsu:core:5.2.2'
+    implementation 'com.github.topjohnwu.libsu:service:5.2.2'
 
 }

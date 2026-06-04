@@ -1559,10 +1559,10 @@ public class MainActivity extends AppCompatActivity {
                 save(false, toRevert);
 
                 appendText(logs, "\n\n-- Reverting the hack  --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS " + toRevert + "; DELETE FROM FlagOverrides;'\n"
-                ).getStreamLogsWithLabels());
+                RootDb.exec(PHENO_DB, java.util.Arrays.asList(
+                        "DROP TRIGGER IF EXISTS " + toRevert,
+                        "DELETE FROM FlagOverrides"));
+                appendText(logs, "\n\tdropped trigger " + toRevert + " and cleared FlagOverrides");
             }
 
 
@@ -2023,8 +2023,11 @@ public class MainActivity extends AppCompatActivity {
 
 
                 appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'DROP TRIGGER IF EXISTS force_ws;\n DROP TRIGGER IF EXISTS force_no_ws;\n" + finalCommand + "'").getStreamLogsWithLabels());
+                java.util.List<String> setupStmts = new java.util.ArrayList<String>();
+                setupStmts.add("DROP TRIGGER IF EXISTS force_ws");
+                setupStmts.add("DROP TRIGGER IF EXISTS force_no_ws");
+                setupStmts.addAll(splitSql(finalCommand.toString()));
+                RootDb.exec(PHENO_DB, setupStmts);
 
                 switch (value) {
                     case 470: {
@@ -2040,13 +2043,11 @@ public class MainActivity extends AppCompatActivity {
                         break;
                     }
                 }
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER " + decideWhat + " AFTER DELETE\n" +
+                RootDb.exec(PHENO_DB,
+                        "CREATE TRIGGER " + decideWhat + " AFTER DELETE\n" +
                                 "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"" + decideWhat + "\";'").getInputStreamLog().length() <= 4) {
+                                "BEGIN\n" + finalCommand + "END");
+                if (RootDb.query(PHENO_DB, "SELECT name FROM sqlite_master WHERE type='trigger' AND name='" + decideWhat + "'").trim().length() <= 4) {
                     suitableMethodFound = false;
                 } else {
                     appendText(logs, "\n--  end SQL method   --");
@@ -2149,27 +2150,20 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 for (String pkg : pkgs) {
                     sb.append("\n-- package: ").append(pkg).append(" --\n");
 
-                    StreamLogs r = runSuWithCmd(
-                            path + "/sqlite3 -batch " + db + " " +
-                                    "'SELECT param_partition_id, hex(flags_content) " +
+                    String out = RootDb.query(db,
+                            "SELECT param_partition_id, hex(flags_content) " +
                                     "FROM param_partitions WHERE static_config_package_id IN " +
                                     "(SELECT static_config_package_id FROM static_config_packages " +
-                                    "WHERE name=\"" + pkg + "\");'");
+                                    "WHERE name='" + pkg + "')");
 
-                    if (!r.getErrorStreamLog().isEmpty()) {
-                        sb.append("  ERR: ").append(r.getErrorStreamLog()).append("\n");
-                    }
-
-                    String out = r.getInputStreamLog();
                     if (out.isEmpty()) {
                         sb.append("  (no partitions matched by static_config_packages.name)\n");
-                        StreamLogs names = runSuWithCmd(
-                                path + "/sqlite3 -batch " + db + " " +
-                                        "'SELECT static_config_package_id || \"=\" || name " +
-                                        "FROM static_config_packages WHERE name LIKE \"%gearhead%\" " +
-                                        "OR name LIKE \"%projection%\" OR name LIKE \"%gms.car%\";'");
+                        String names = RootDb.query(db,
+                                "SELECT static_config_package_id || '=' || name " +
+                                        "FROM static_config_packages WHERE name LIKE '%gearhead%' " +
+                                        "OR name LIKE '%projection%' OR name LIKE '%gms.car%'");
                         sb.append("  candidate static_config_packages:\n");
-                        sb.append("    ").append(names.getInputStreamLog().replace("\n", "\n    ")).append("\n");
+                        sb.append("    ").append(names.replace("\n", "\n    ")).append("\n");
                         continue;
                     }
 
@@ -2323,31 +2317,24 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
     private String phixitApply(String path, String filesDir, String pkg,
                                java.util.List<PhixitSnapshot.Flag> edits) {
         StringBuilder sb = new StringBuilder();
-        String db = "/data/data/com.google.android.gms/databases/phenotype.db";
 
-        StreamLogs r = runSuWithCmd(
-                path + "/sqlite3 -batch " + db + " " +
-                        "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
-                        "WHERE static_config_package_id IN (SELECT static_config_package_id " +
-                        "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
-        if (!r.getErrorStreamLog().isEmpty()) {
-            sb.append("  read ERR: ").append(r.getErrorStreamLog()).append("\n");
+        java.util.List<Partition> raw;
+        try {
+            raw = RootDb.readPartitions(pkg);
+        } catch (Exception e) {
+            sb.append("  read ERR: ").append(e).append("\n");
+            return sb.toString();
         }
-        String out = r.getInputStreamLog();
-        if (out.isEmpty()) {
+        if (raw.isEmpty()) {
             sb.append("  no partitions for ").append(pkg).append("\n");
             return sb.toString();
         }
 
-        StringBuilder script = new StringBuilder();
-        for (String line : out.split("\\r?\\n")) {
-            int bar = line.indexOf('|');
-            if (bar <= 0) continue;
-            String pid = line.substring(0, bar).trim();
-            String hex = line.substring(bar + 1).trim();
-            if (hex.isEmpty()) continue;
+        java.util.List<Partition> toWrite = new java.util.ArrayList<Partition>();
+        for (Partition p : raw) {
+            if (p.blob == null || p.blob.length == 0) continue;
             try {
-                byte[] dec = PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex));
+                byte[] dec = PhixitSnapshot.inflateRaw(p.blob);
                 java.util.List<PhixitSnapshot.Flag> flags = PhixitSnapshot.decode(dec);
 
                 for (PhixitSnapshot.Flag e : edits) {
@@ -2367,61 +2354,40 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 }
 
                 byte[] reCompressed = PhixitSnapshot.deflateRaw(PhixitSnapshot.encode(flags));
-                script.append("UPDATE param_partitions SET flags_content=x'")
-                        .append(PhixitSnapshot.bytesToHex(reCompressed))
-                        .append("' WHERE param_partition_id=").append(pid).append(";\n");
-                sb.append("  partition ").append(pid).append(": ").append(flags.size())
+                toWrite.add(new Partition(p.id, reCompressed));
+                sb.append("  partition ").append(p.id).append(": ").append(flags.size())
                         .append(" flags, wrote ").append(reCompressed.length).append("B\n");
             } catch (Exception e) {
-                sb.append("  partition ").append(pid).append(": EXCEPTION ").append(e).append("\n");
+                sb.append("  partition ").append(p.id).append(": EXCEPTION ").append(e).append("\n");
             }
         }
 
         int servingVersion = (int) (System.currentTimeMillis() / 1000L);
-        script.append("UPDATE last_fetch SET serving_version=").append(servingVersion)
-                .append(" WHERE type=1;\n");
-
-        // Write the script to a file (hex blobs are large) and run it via root sqlite3.
-        String sqlFile = filesDir + "/phixit_apply.sql";
         try {
-            java.io.FileOutputStream fos = new java.io.FileOutputStream(sqlFile);
-            fos.write(script.toString().getBytes("UTF-8"));
-            fos.close();
-        } catch (Exception e) {
-            sb.append("  write script ERR: ").append(e).append("\n");
-            return sb.toString();
-        }
-
-        StreamLogs w = runSuWithCmd(path + "/sqlite3 -batch " + db + " < " + sqlFile);
-        if (!w.getErrorStreamLog().isEmpty()) {
-            sb.append("  apply ERR: ").append(w.getErrorStreamLog()).append("\n");
-        } else {
+            RootDb.writePartitions(toWrite, servingVersion);
             sb.append("  applied (serving_version=").append(servingVersion).append(")\n");
+        } catch (Exception e) {
+            sb.append("  apply ERR: ").append(e).append("\n");
         }
-        runSuWithCmd("rm -f " + sqlFile);
         return sb.toString();
     }
 
     /** Reads a single flag's current decoded value across all partitions of a package. */
     private String phixitReadFlag(String path, String pkg, String name) {
-        String db = "/data/data/com.google.android.gms/databases/phenotype.db";
-        StreamLogs r = runSuWithCmd(
-                path + "/sqlite3 -batch " + db + " " +
-                        "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
-                        "WHERE static_config_package_id IN (SELECT static_config_package_id " +
-                        "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
-        String out = r.getInputStreamLog();
-        for (String line : out.split("\\r?\\n")) {
-            int bar = line.indexOf('|');
-            if (bar <= 0) continue;
-            String hex = line.substring(bar + 1).trim();
-            if (hex.isEmpty()) continue;
+        java.util.List<Partition> raw;
+        try {
+            raw = RootDb.readPartitions(pkg);
+        } catch (Exception e) {
+            return name + ": read ERR " + e;
+        }
+        for (Partition p : raw) {
+            if (p.blob == null || p.blob.length == 0) continue;
             try {
                 java.util.List<PhixitSnapshot.Flag> flags =
-                        PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex)));
+                        PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob));
                 for (PhixitSnapshot.Flag f : flags) {
                     if (!f.numericName && name.equals(f.name)) {
-                        return f.describe() + " [partition " + line.substring(0, bar).trim() + "]";
+                        return f.describe() + " [partition " + p.id + "]";
                     }
                 }
             } catch (Exception ignored) {
@@ -2454,19 +2420,17 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 int total = 0;
                 for (String pkg : pkgs) {
                     java.util.TreeMap<String, String> map = new java.util.TreeMap<String, String>();
-                    StreamLogs r = runSuWithCmd(
-                            path + "/sqlite3 -batch " + PHENO_DB + " " +
-                                    "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
-                                    "WHERE static_config_package_id IN (SELECT static_config_package_id " +
-                                    "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
-                    for (String line : r.getInputStreamLog().split("\\r?\\n")) {
-                        int bar = line.indexOf('|');
-                        if (bar <= 0) continue;
-                        String hex = line.substring(bar + 1).trim();
-                        if (hex.isEmpty()) continue;
+                    java.util.List<Partition> raw;
+                    try {
+                        raw = RootDb.readPartitions(pkg);
+                    } catch (Exception ex) {
+                        raw = java.util.Collections.emptyList();
+                    }
+                    for (Partition p : raw) {
+                        if (p.blob == null || p.blob.length == 0) continue;
                         try {
                             for (PhixitSnapshot.Flag f :
-                                    PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex)))) {
+                                    PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob))) {
                                 if (!f.numericName) map.put(f.name, f.describe());
                             }
                         } catch (Exception ignored) {
@@ -2597,47 +2561,57 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         }
     }
 
+    /**
+     * Runs a shell command as root via libsu's persistent root shell and returns its
+     * output in the same {@link StreamLogs} shape the rest of the app expects. Replaces
+     * the old per-call {@code Runtime.exec("su")} (which spawned a fresh su every time
+     * and had no timeout). DB work no longer goes through here -- it uses
+     * {@link RootDb}/{@link PhixitRootService} -- but file/process/SELinux commands
+     * (am, pm, rm, chown, dumpsys, setenforce, ...) still do.
+     */
     public static StreamLogs runSuWithCmd(String cmd) {
-        DataOutputStream outputStream = null;
-        InputStream inputStream = null;
-        InputStream errorStream = null;
-
         StreamLogs streamLogs = new StreamLogs();
         streamLogs.setOutputStreamLog(cmd);
-
         try {
-            Process su = Runtime.getRuntime().exec("su");
-            outputStream = new DataOutputStream(su.getOutputStream());
-            inputStream = su.getInputStream();
-            errorStream = su.getErrorStream();
-            outputStream.writeBytes(cmd + "\n");
-            outputStream.flush();
-
-            outputStream.writeBytes("exit\n");
-            outputStream.flush();
-
-            try {
-                su.waitFor();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            streamLogs.setInputStreamLog(readFully(inputStream));
-            streamLogs.setErrorStreamLog(readFully(errorStream));
-        } catch (IOException e) {
-            e.printStackTrace();
+            com.topjohnwu.superuser.Shell.Result result =
+                    com.topjohnwu.superuser.Shell.cmd(cmd).exec();
+            streamLogs.setInputStreamLog(joinLines(result.getOut()));
+            streamLogs.setErrorStreamLog(joinLines(result.getErr()));
+        } catch (Throwable t) {
+            streamLogs.setErrorStreamLog(String.valueOf(t));
         }
-
         return streamLogs;
     }
 
-    public static String readFully(InputStream is) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        byte[] buffer = new byte[1024];
-        int length = 0;
-        while ((length = is.read(buffer)) != -1) {
-            baos.write(buffer, 0, length);
+    /** True if root access has actually been granted (a non-root libsu shell would
+     *  still happily echo "1", so callers must check this rather than command output). */
+    public static boolean hasRootAccess() {
+        try {
+            return com.topjohnwu.superuser.Shell.getShell().isRoot();
+        } catch (Throwable t) {
+            return false;
         }
-        return baos.toString("UTF-8");
+    }
+
+    private static String joinLines(java.util.List<String> lines) {
+        if (lines == null || lines.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) sb.append('\n');
+            sb.append(lines.get(i));
+        }
+        return sb.toString();
+    }
+
+    /** Splits a simple {@code ;}-terminated SQL script into individual statements.
+     *  Only used for legacy scripts whose statements (INSERTs) contain no inner ';'. */
+    private static java.util.List<String> splitSql(String script) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        for (String s : script.split(";")) {
+            String t = s.trim();
+            if (!t.isEmpty()) out.add(t);
+        }
+        return out;
     }
 
 
@@ -2655,55 +2629,54 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.loading), true);
 
-        runOnUiThread(new Runnable() {
+        new Thread() {
             @Override
             public void run() {
-                String get_names = runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND tbl_name=\"FlagOverrides\";" +
-                                "SELECT name FROM sqlite_master WHERE type=\"trigger\" AND tbl_name=\"Flags\";" +
-
-                                "SELECT name FROM sqlite_master WHERE type=\"trigger\" AND tbl_name=\"Flags\" AND name=\"after_delete\";" +
-                                "SELECT name FROM sqlite_master WHERE type=\"trigger\" AND tbl_name=\"Flags\" AND name=\"aa_patched_apps\";'").getInputStreamLog();
-                String[] lines = get_names.split(System.getProperty("line.separator"));
-                for (int i = 0; i < lines.length; i++) {
-                    save(true, lines[i]);
+                // Which legacy trigger-based tweaks are currently installed (so their
+                // toggles show as enabled). Triggers on FlagOverrides/Flags cover the
+                // previous per-name checks (after_delete, aa_patched_apps) as a subset.
+                String get_names = RootDb.query(PHENO_DB,
+                        "SELECT name FROM sqlite_master WHERE type='trigger' " +
+                                "AND tbl_name IN ('FlagOverrides','Flags')");
+                for (String name : get_names.split("\\r?\\n")) {
+                    if (!name.trim().isEmpty()) save(true, name.trim());
                 }
-                dialog.dismiss();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        dialog.dismiss();
+                    }
+                });
             }
-        });
+        }.start();
 
     }
 
     public void getAndRemoveOptionsSelected() {
         final TextView log = findViewById(R.id.logs);
-        final String[] allTriggerString = {new String()};
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "", getString(R.string.loading), true);
         new Thread() {
             @Override
             public void run() {
 
-                String path = appDirectory;
-                allTriggerString[0] = path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'";
-                String get_names = runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND tbl_name=\"Flags\";'").getInputStreamLog();
+                String get_names = RootDb.query(PHENO_DB,
+                        "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='Flags'");
                 appendText(log, get_names);
-                String[] lines = get_names.split(System.getProperty("line.separator"));
-                final StringBuilder finalCommand = new StringBuilder();
-                appendText(log, runSuWithCmd(path + "/sqlite3 /data/data/com.google.android.gms/databases/phenotype.db " + "'DROP TABLE FlagOverrides;'").getOutputStreamLog());
-                appendText(log, runSuWithCmd(path + "/sqlite3 /data/data/com.google.android.gms/databases/phenotype.db " + "'DELETE FROM Flags WHERE name=\"com.google.android.projection.gearhead\";'").getOutputStreamLog());
-                appendText(log, runSuWithCmd(path + "/sqlite3 /data/data/com.google.android.gms/databases/phenotype.db " + "'DELETE FROM Flags WHERE name=\"com.google.android.gms.car\";'").getOutputStreamLog());
+                String[] lines = get_names.split("\\r?\\n");
 
-                for (int i = 0; i < lines.length; i++) {
-                    finalCommand.append("DROP TRIGGER IF EXISTS " + lines[i] + ";");
-                    finalCommand.append("\n");
+                java.util.List<String> stmts = new java.util.ArrayList<String>();
+                stmts.add("DROP TABLE FlagOverrides");
+                stmts.add("DELETE FROM Flags WHERE name='com.google.android.projection.gearhead'");
+                stmts.add("DELETE FROM Flags WHERE name='com.google.android.gms.car'");
+                for (String name : lines) {
+                    if (!name.trim().isEmpty()) stmts.add("DROP TRIGGER IF EXISTS " + name.trim());
                 }
-
-                for (int i = 0; i < lines.length; i++) {
-                    appendText(log, runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'" + finalCommand + "'").getOutputStreamLog());
-                }
-                appendText(log, runSuWithCmd(path + "/sqlite3 /data/data/com.google.android.gms/databases/phenotype.db " + "'CREATE TABLE FlagOverrides (packageName TEXT NOT NULL, user TEXT NOT NULL, name TEXT NOT NULL, flagType INTEGER NOT NULL, intVal INTEGER, boolVal INTEGER, floatVal REAL, stringVal TEXT, extensionVal BLOB, committed, PRIMARY KEY(packageName, user, name, committed));'").getOutputStreamLog());
+                stmts.add("CREATE TABLE FlagOverrides (packageName TEXT NOT NULL, user TEXT NOT NULL, " +
+                        "name TEXT NOT NULL, flagType INTEGER NOT NULL, intVal INTEGER, boolVal INTEGER, " +
+                        "floatVal REAL, stringVal TEXT, extensionVal BLOB, committed, " +
+                        "PRIMARY KEY(packageName, user, name, committed))");
+                RootDb.exec(PHENO_DB, stmts);
+                appendText(log, "\n\tcleared FlagOverrides/Flags and dropped triggers");
                 dialog.dismiss();
             }
 

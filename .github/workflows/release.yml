@@ -77,9 +77,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Refresh bundled sqlite3 binary
-        run: bash scripts/update-sqlite3.sh
-
       - name: Decode signing keystore
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
