@@ -15,7 +15,9 @@ import androidx.appcompat.app.AlertDialog;
 public class NoRootDialog extends DialogFragment {
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+        // requireActivity() over getActivity(): if the fragment is detached we want a loud,
+        // clean IllegalStateException rather than a confusing NPE deep inside the builder.
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireActivity());
         builder.setMessage(R.string.root_access_warning);
         builder.setCancelable(false);
         // Retry path: re-request root instead of just dismissing.
@@ -29,7 +31,7 @@ public class NoRootDialog extends DialogFragment {
             }
         });
         // Keep a plain dismiss option for users who simply want to close the dialog.
-        builder.setNegativeButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+        builder.setNegativeButton(R.string.not_now, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
             }
