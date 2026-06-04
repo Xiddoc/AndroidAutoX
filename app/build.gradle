@@ -101,6 +101,20 @@ android {
         aidl true
     }
 
+    testOptions {
+        unitTests {
+            // Robolectric tests (RebootFabController, CommonPageAdapter, the root
+            // flow) need the real android resources/views on the JVM test runner.
+            includeAndroidResources = true
+            // CAVEAT: makes unmocked android.jar methods return 0/null/false
+            // instead of throwing "Method ... not mocked". Convenient, but it can
+            // silently mask Android calls that a real test should mock/verify. Kept
+            // for the Robolectric/JUnit smoke tests; be wary when adding tests that
+            // actually exercise framework behaviour.
+            returnDefaultValues = true
+        }
+    }
+
     defaultConfig {
 
 
@@ -113,18 +127,6 @@ android {
         setProperty("archivesBaseName","AndroidAutoX-" + resolvedVersionName)
         if (hasSigningConfig) {
             signingConfig signingConfigs.'new'
-        }
-    }
-
-    testOptions {
-        unitTests {
-            includeAndroidResources = true
-            // CAVEAT: makes unmocked android.jar methods return 0/null/false
-            // instead of throwing "Method ... not mocked". Convenient, but it can
-            // silently mask Android calls that a real test should mock/verify. Kept
-            // for the Robolectric/JUnit smoke tests; be wary when adding tests that
-            // actually exercise framework behaviour.
-            returnDefaultValues = true
         }
     }
 
@@ -159,7 +161,9 @@ dependencies {
     // Android runtime + resources, supports compileSdk 34; SDK pinned in
     // src/test/resources/robolectric.properties), Mockito for stubbing, and
     // androidx.test core/ext for ApplicationProvider/Context, ActivityScenario,
-    // and the AndroidJUnit4 runner used by the unit tests under src/test.
+    // and the AndroidJUnit4 runner used by the unit tests under src/test. The
+    // RebootFabController / CommonPageAdapter tests run on this too — they create
+    // lightweight android Views without the root-heavy MainActivity.
     testImplementation 'org.robolectric:robolectric:4.12.2'
     testImplementation 'org.mockito:mockito-core:5.11.0'
     testImplementation 'androidx.test:core:1.5.0'
