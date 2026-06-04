@@ -38,6 +38,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest
+
       - name: Assemble debug APK
         run: ./gradlew assembleDebug
 

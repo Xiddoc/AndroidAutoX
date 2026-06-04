@@ -67,6 +67,18 @@ Build types include `debug`, `release`, plus `RC` and `daily` variants. The rele
 AndroidAutoX-<versionName>.apk
 ```
 
+### Running tests
+
+```bash
+./gradlew testDebugUnitTest   # off-device unit tests (Robolectric + JUnit)
+```
+
+This runs the JVM unit tests under `app/src/test/` with no device/emulator. The
+suite mixes plain JUnit (pure logic, e.g. `RootGateTest`) with Robolectric tests
+that use a simulated Android runtime and the app's Android resources. Robolectric
+is pinned to SDK 34 via `app/src/test/resources/robolectric.properties`. CI runs
+this on every push/PR (`.github/workflows/build.yml`).
+
 ### Toolchain in a fresh / cloud environment (READ THIS — common gotcha)
 
 This project uses **Gradle 8.7** + **Android Gradle Plugin 8.5.2**, which need
