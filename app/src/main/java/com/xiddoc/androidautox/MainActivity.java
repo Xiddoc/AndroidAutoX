@@ -303,10 +303,12 @@ public class MainActivity extends AppCompatActivity {
 
         TextView logs = initiateLogsText();
 
-        // PoC (step 1): read-only diagnostic of the new "phixit" Phenotype snapshot.
-        // Decodes param_partitions.flags_content, round-trip self-tests the codec,
-        // and reports flag names/types. Does NOT write to the GMS database.
-        phixitDiagnostic(logs);
+        // Dev-only: read-only diagnostic of the new "phixit" Phenotype snapshot. Hidden
+        // behind developer mode (enable by tapping the About text 7x) so it doesn't run /
+        // spam the log on every launch for normal users.
+        if (isDevMode(this)) {
+            phixitDiagnostic(logs);
+        }
 
 
         animationRun = false;
@@ -1621,12 +1623,32 @@ public class MainActivity extends AppCompatActivity {
         }.start();
     }
 
+    /** Developer mode flag (stored in the shared app prefs). Gates the dev/PoC menu
+     *  actions and the startup diagnostic so they stay out of sight for normal users. */
+    static final String DEV_MODE_KEY = "dev_mode_enabled";
+
+    public static boolean isDevMode(Context ctx) {
+        return ctx.getSharedPreferences(PhixitEngine.PREFS, Context.MODE_PRIVATE)
+                .getBoolean(DEV_MODE_KEY, false);
+    }
+
+    public static void setDevMode(Context ctx, boolean enabled) {
+        ctx.getSharedPreferences(PhixitEngine.PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(DEV_MODE_KEY, enabled).apply();
+    }
+
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
         MenuItem auto = menu.findItem(R.id.auto_reapply);
         if (auto != null) {
             auto.setChecked(ReapplyScheduler.isAutoReapplyEnabled(getApplicationContext()));
         }
+        // Dev/PoC actions are hidden unless developer mode is on.
+        boolean dev = isDevMode(getApplicationContext());
+        MenuItem applyTest = menu.findItem(R.id.phixit_apply_test);
+        if (applyTest != null) applyTest.setVisible(dev);
+        MenuItem dumpAll = menu.findItem(R.id.phixit_dump_all);
+        if (dumpAll != null) dumpAll.setVisible(dev);
         return super.onPrepareOptionsMenu(menu);
     }
 

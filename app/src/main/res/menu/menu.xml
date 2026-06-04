@@ -24,12 +24,14 @@
 
     <item
         android:id="@+id/phixit_apply_test"
+        android:visible="false"
         app:showAsAction="never"
-        android:title="PoC: Phixit apply test" />
+        android:title="Dev: Phixit apply test" />
 
     <item
         android:id="@+id/phixit_dump_all"
+        android:visible="false"
         app:showAsAction="never"
-        android:title="PoC: Dump all flags to file" />
+        android:title="Dev: Dump all flags to file" />
 
 </menu>
