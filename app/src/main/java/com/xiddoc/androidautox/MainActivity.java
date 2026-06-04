@@ -794,13 +794,8 @@ public class MainActivity extends AppCompatActivity {
             messagesHunThrottling.setText(getString(R.string.reset_tweak) + getString(R.string.set_notification_duration_to) + getString(R.string.default_string));
             changeStatus(messagesHunStatus, 2, false);
             if (loadValue("messaging_hun_value") == 0) {
-                try {
-                    saveValue(Integer.parseInt(runSuWithCmd(
-                            path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                    "'SELECT DISTINCT intVal FROM Flags WHERE name=\"SystemUi__hun_default_heads_up_timeout_ms\";'").getInputStreamLog()), "messaging_hun_value");
-                } catch (RuntimeException e) {
-                    e.printStackTrace();
-                }
+                saveValue((int) readPhixitLong(FlagSpec.PKG_GEARHEAD,
+                        "SystemUi__hun_default_heads_up_timeout_ms", 0), "messaging_hun_value");
             }
             currentlySetHun.setText(getString(R.string.currently_set) + loadValue("messaging_hun_value"));
         } else {
@@ -882,13 +877,8 @@ public class MainActivity extends AppCompatActivity {
             mediathrottlingbutton.setText(getString(R.string.reset_tweak) + getString(R.string.media_notification_duration_to) + getString(R.string.default_string));
             changeStatus(mediaHunStatus, 2, false);
             if (loadValue("media_hun_value") == 0) {
-                try {
-                    saveValue(Integer.parseInt(runSuWithCmd(
-                            path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                    "'SELECT DISTINCT intVal FROM Flags WHERE name=\"SystemUi__media_hun_in_rail_widget_timeout_ms\";'").getInputStreamLog()), "media_hun_value");
-                } catch (RuntimeException e) {
-                    e.printStackTrace();
-                }
+                saveValue((int) readPhixitLong(FlagSpec.PKG_GEARHEAD,
+                        "SystemUi__media_hun_in_rail_widget_timeout_ms", 0), "media_hun_value");
             }
             currentlySetMediaHun.setText(getString(R.string.currently_set) + loadValue("media_hun_value"));
         } else {
@@ -1594,6 +1584,13 @@ public class MainActivity extends AppCompatActivity {
      */
     private void applyPhixitTweak(final String key, final ImageView statusView,
                                   final TextView button, final String reEnableLabel) {
+        applyPhixitTweakSpecs(key, PhixitTweaks.specs(key), statusView, button, reEnableLabel);
+    }
+
+    /** As {@link #applyPhixitTweak} but with an explicit spec list (dynamic-value tweaks). */
+    private void applyPhixitTweakSpecs(final String key, final java.util.List<FlagSpec> specs,
+                                       final ImageView statusView, final TextView button,
+                                       final String reEnableLabel) {
         final TextView logs = initiateLogsText();
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
@@ -1601,7 +1598,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 appendText(logs, "\n\n--  Applying (phixit): " + key + "  --");
-                final boolean ok = applyPhixitSpecs(logs, PhixitTweaks.specs(key), true);
+                final boolean ok = applyPhixitSpecs(logs, specs, true);
                 if (ok) save(true, key);
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
@@ -2020,336 +2017,37 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
     }
 
     public void setHunDuration(View view, final int value) {
-        final TextView logs = initiateLogsText();
-
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"SystemUi__hun_default_heads_up_timeout_ms\", \"\"," + value + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-        runOnUiThread(new Thread() {
-            @Override
-            public void run() {
-
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-                appendText(logs, "\n\n-- Run SQL Commands  --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_hun_ms;\n" + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_hun_ms AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_hun_ms\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_hun_ms");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(messagesHunStatus, 1, true);
-                            showRebootButton();
-                            saveValue(value, "messaging_hun_value");
-                            currentlySetHun.setText(getString(R.string.currently_set) + value);
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_hun_ms");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        });
-
+        java.util.List<FlagSpec> specs = new java.util.ArrayList<FlagSpec>();
+        specs.add(FlagSpec.lng(FlagSpec.PKG_GEARHEAD, "SystemUi__hun_default_heads_up_timeout_ms", value));
+        applyPhixitTweakSpecs("aa_hun_ms", specs, messagesHunStatus, null, null);
     }
 
     public void setMediaHunDuration(View view, final int value) {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, intVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"SystemUi__media_hun_in_rail_widget_timeout_ms\", \"\"," + value + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-
-        runOnUiThread(new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_media_hun;\n" + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_media_hun AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_media_hun\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_media_hun");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(mediaHunStatus, 1, true);
-                            showRebootButton();
-                            saveValue(value, "media_hun_value");
-                            currentlySetMediaHun.setText(getString(R.string.currently_set) + value);
-                        }
-                    });
-                }
-
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_media_hun");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        });
-        dialog.dismiss();
+        java.util.List<FlagSpec> specs = new java.util.ArrayList<FlagSpec>();
+        specs.add(FlagSpec.lng(FlagSpec.PKG_GEARHEAD, "SystemUi__media_hun_in_rail_widget_timeout_ms", value));
+        applyPhixitTweakSpecs("aa_media_hun", specs, mediaHunStatus, null, null);
     }
 
     public void setUSBbitrate(final double value) {
-        final TextView logs = initiateLogsText();
-
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_1080p_usb\", \"\"," + String.format("%.0f", 16000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_1080p_usb_hevc\", \"\"," + String.format("%.0f", 3000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_480p_usb\", \"\"," + String.format("%.0f", 8000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_480p_usb_hevc\", \"\"," + String.format("%.0f", 1000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_720p_usb\", \"\"," + String.format("%.0f", 12000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_720p_usb_hevc\", \"\"," + String.format("%.0f", 2000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-        runOnUiThread(new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-
-                appendText(logs, "\n\n-- Run SQL Commands  --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_bitrate_usb;\n DELETE FROM Flags WHERE name LIKE \"VideoEncoderParamsFeature%\";" +
-                                finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_bitrate_usb AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_bitrate_usb\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_bitrate_usb");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(usbBitrateStatus, 1, true);
-                            showRebootButton();
-                            saveFloat((float) value, "usb_bitrate_value");
-                            currentlySetUSBSeekbar.setText(getString(R.string.currently_set) + value);
-                        }
-                    });
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_bitrate_usb");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        });
-
+        java.util.List<FlagSpec> specs = new java.util.ArrayList<FlagSpec>();
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_usb", 16000000 * value));
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_usb_hevc", 3000000 * value));
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_usb", 8000000 * value));
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_usb_hevc", 1000000 * value));
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_usb", 12000000 * value));
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_usb_hevc", 2000000 * value));
+        applyPhixitTweakSpecs("aa_bitrate_usb", specs, usbBitrateStatus, null, null);
     }
 
     public void setWiFiBitrate(final double value) {
-        final TextView logs = initiateLogsText();
-
-        final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
-                getString(R.string.tweak_loading), true);
-
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_1080p_wireless\", \"\"," + String.format("%.0f", 16000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_1080p_wireless_hevc\", \"\"," + String.format("%.0f", 3000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_480p_wireless\", \"\"," + String.format("%.0f", 8000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_480p_wireless_hevc\", \"\"," + String.format("%.0f", 1000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_720p_wireless\", \"\"," + String.format("%.0f", 12000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName,  flagType, name, user, floatVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"VideoEncoderParamsFeature__bitrate_720p_wireless_hevc\", \"\"," + String.format("%.0f", 2000000 * value) + ",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-
-        runOnUiThread(new Thread() {
-            @Override
-            public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
-
-
-
-
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_bitrate_wireless;\n DELETE FROM Flags WHERE name LIKE \"VideoEncoderParamsFeature%\";\n" + finalCommand + "'"
-                ).getStreamLogsWithLabels());
-
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'CREATE TRIGGER aa_bitrate_wireless AFTER DELETE\n" +
-                                "On FlagOverrides\n" +
-                                "BEGIN\n" + finalCommand + "END;'\n"
-                ).getStreamLogsWithLabels());
-                if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_bitrate_wireless\";'").getInputStreamLog().length() <= 4) {
-                    suitableMethodFound = false;
-                } else {
-                    appendText(logs, "\n--  end SQL method   --");
-                    save(true, "aa_bitrate_wireless");
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        @Override
-                        public void run() {
-                            changeStatus(wifiBitrateStatus, 1, true);
-                            showRebootButton();
-                            saveFloat((float) value, "wifi_bitrate_value");
-                            currentlySetWiFiSeekbar.setText(getString(R.string.currently_set) + value);
-                        }
-                    });
-
-                }
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                dialog.dismiss();
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "aa_bitrate_wireless");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
-            }
-        });
-
+        java.util.List<FlagSpec> specs = new java.util.ArrayList<FlagSpec>();
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_wireless", 16000000 * value));
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_wireless_hevc", 3000000 * value));
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_wireless", 8000000 * value));
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_wireless_hevc", 1000000 * value));
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless", 12000000 * value));
+        specs.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless_hevc", 2000000 * value));
+        applyPhixitTweakSpecs("aa_bitrate_wireless", specs, wifiBitrateStatus, null, null);
     }
 
     private void inertialScrollTweak() {
@@ -3042,6 +2740,32 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
 
     private String baselineKey(String pkg, String name) {
         return "phixit_base|" + pkg + "|" + name;
+    }
+
+    /** Reads a long-valued flag's current value from the snapshot, or {@code def}. */
+    private long readPhixitLong(String pkg, String name, long def) {
+        String path = getApplicationInfo().dataDir;
+        StreamLogs r = runSuWithCmd(
+                path + "/sqlite3 -batch " + PHENO_DB + " " +
+                        "'SELECT param_partition_id, hex(flags_content) FROM param_partitions " +
+                        "WHERE static_config_package_id IN (SELECT static_config_package_id " +
+                        "FROM static_config_packages WHERE name=\"" + pkg + "\");'");
+        for (String line : r.getInputStreamLog().split("\\r?\\n")) {
+            int bar = line.indexOf('|');
+            if (bar <= 0) continue;
+            String hex = line.substring(bar + 1).trim();
+            if (hex.isEmpty()) continue;
+            try {
+                for (PhixitSnapshot.Flag f :
+                        PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(PhixitSnapshot.hexToBytes(hex)))) {
+                    if (!f.numericName && name.equals(f.name) && f.type == PhixitSnapshot.TYPE_LONG) {
+                        return f.longValue;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return def;
     }
 
     private void captureBaselineIfAbsent(String pkg, String name,

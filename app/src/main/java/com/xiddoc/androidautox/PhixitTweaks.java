@@ -234,6 +234,31 @@ public final class PhixitTweaks {
             case "aa_vertical_bar":
                 l.add(FlagSpec.lng(FlagSpec.PKG_GEARHEAD, "SystemUi__horizontal_rail_canonical_breakpoint_dp", 40L));
                 break;
+
+            // Dynamic-value tweaks: names only (values set at apply time from the
+            // SeekBar); listed so revert() can restore their captured baseline.
+            case "aa_hun_ms":
+                l.add(FlagSpec.lng(FlagSpec.PKG_GEARHEAD, "SystemUi__hun_default_heads_up_timeout_ms", 0L));
+                break;
+            case "aa_media_hun":
+                l.add(FlagSpec.lng(FlagSpec.PKG_GEARHEAD, "SystemUi__media_hun_in_rail_widget_timeout_ms", 0L));
+                break;
+            case "aa_bitrate_usb":
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_usb", 0));
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_usb_hevc", 0));
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_usb", 0));
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_usb_hevc", 0));
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_usb", 0));
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_usb_hevc", 0));
+                break;
+            case "aa_bitrate_wireless":
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_wireless", 0));
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_1080p_wireless_hevc", 0));
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_wireless", 0));
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_wireless_hevc", 0));
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless", 0));
+                l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless_hevc", 0));
+                break;
             default:
                 return null;
         }
