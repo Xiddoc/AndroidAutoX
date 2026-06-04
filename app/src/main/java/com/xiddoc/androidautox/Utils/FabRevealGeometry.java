@@ -8,6 +8,13 @@ package com.xiddoc.androidautox.Utils;
  * or Robolectric.  All parameters are plain Java primitives or simple value
  * objects.
  *
+ * <p><strong>Side effects:</strong> none.  This class is intentionally
+ * side-effect-free and currently has no runtime callers — it exists purely so
+ * that geometry invariants can be verified in unit tests without touching the
+ * Android framework.  If the geometry logic ever needs to be called at runtime,
+ * consider moving it to a {@code ui.animation} package; for now it lives in
+ * {@code Utils} for convenience alongside the other utility helpers.
+ *
  * <h3>The problem this models</h3>
  * <p>The {@code rebootContainer} FrameLayout holds the FAB button plus two
  * blurred glow layers (children with negative margins = {@code match_parent}
@@ -80,6 +87,16 @@ public final class FabRevealGeometry {
 
     // ──────────────────────────────────────────────────────────────────────────
     // Canonical animation parameters — keep in sync with reboot_button_anim.xml
+    //
+    // NOTE: these compile-time constants serve as documentation and are verified
+    // against each other by FabRevealGeometryTest.fixedReveal_constantsMatchXmlValues
+    // and FabRevealGeometryTest.buggyReveal_constantsMatchOriginalXml.  Those tests
+    // are documentation-only (they test the constants against themselves).
+    //
+    // The *actual* XML is validated at runtime (under Robolectric) by
+    // RebootButtonAnimationTest.animResource_glowBoundsViaGeometryHelper_stayInsideScreen,
+    // which parses R.anim.reboot_button_anim and derives RevealParams from the
+    // matrix — so it catches any XML change that does NOT update these constants.
     // ──────────────────────────────────────────────────────────────────────────
 
     /**
@@ -92,6 +109,11 @@ public final class FabRevealGeometry {
      *   <li>{@code toXScale=toYScale="1.0"}</li>
      *   <li>{@code pivotX=pivotY="50%"} → pivotFrac = 0.5 (centre)</li>
      * </ul>
+     *
+     * <p>With a centre pivot the left-edge sweep is symmetric about the view
+     * centre: {@code sweep = (toScale − fromScale) × (containerW/2 + bleed)},
+     * which is ~7.5 % of containerWidth for the chosen scale range.  Rightward
+     * containment is governed by {@link #maxOnScreenWidth}, not this formula.
      */
     public static final RevealParams FIXED_REVEAL = new RevealParams(
             /* fromScale */ 0.85f,
@@ -105,10 +127,14 @@ public final class FabRevealGeometry {
      * <pre>
      *   fromXScale="0.1"  toXScale="1.0"
      *   pivotX="100%"                      ← right-edge pivot
-     *   fromYScale="1.0"  toYScale="1.0"   ← Y fixed at full size
+     *   fromYScale="1.0"  toYScale="1.0"   ← Y axis was identity (fixed at full size)
      * </pre>
-     * Only the X-axis sweep caused the screen-spanning streak, so this record
-     * models the X-axis parameters.
+     *
+     * <p><strong>X-axis only:</strong> only the X-axis parameters are modelled
+     * here because the original Y-axis animation was the identity (fromYScale=1.0
+     * → toYScale=1.0, zero delta, zero sweep).  It was the X-axis sweep with a
+     * right-edge pivot that produced the screen-spanning streak, so this record
+     * models the X-axis parameters only and should not be used for Y-axis checks.
      */
     public static final RevealParams BUGGY_REVEAL = new RevealParams(
             /* fromScale */ 0.1f,
@@ -127,14 +153,24 @@ public final class FabRevealGeometry {
      * Computes how far the <em>left edge</em> of the glow child sweeps during
      * the reveal animation (in pixels, relative to the container's left edge).
      *
+     * <h4>Symmetry note (centre pivot)</h4>
+     * <p>When {@code pivotFrac = 0.5} (centre) the left-edge sweep equals the
+     * right-edge inward sweep — the motion is symmetric about the view centre.
+     * Only the <em>left-edge</em> sweep is computed here because that is what
+     * creates the visible horizontal "streak."  Rightward containment (ensuring
+     * the child's right edge stays on-screen) is governed by
+     * {@link #maxOnScreenWidth}, not this method.
+     *
      * <h4>Derivation</h4>
      * <p>Let {@code P = pivotFrac × containerWidth} (pivot x in container coords).
      * At scale {@code s}, the container's left edge is rendered at
      * {@code P × (1 − s)} in container coords.  The child overhangs the
-     * container by {@code childBleedPx} on each side, so the child's left edge
-     * in container coords is {@code −childBleedPx}, which after scaling becomes:
+     * container by {@code childBleedPerSidePx} on the <em>left side only</em>
+     * (the right side contributes to {@link #maxOnScreenWidth} instead), so
+     * the child's left edge in container coords is {@code −childBleedPerSidePx},
+     * which after scaling becomes:
      * <pre>
-     *   childLeft(s) = P × (1 − s) − s × childBleedPx
+     *   childLeft(s) = P × (1 − s) − s × childBleedPerSidePx
      * </pre>
      * The sweep is the range of {@code childLeft(s)} across all {@code s} in
      * {@code [fromScale, toScale]}:
@@ -147,21 +183,25 @@ public final class FabRevealGeometry {
      * </pre>
      * A large sweep means the left edge travels far — the visual "streak."
      *
-     * @param containerWidthPx  Container's natural laid-out width (px).
-     * @param childBleedPx      Child overhang beyond the container edge on each
-     *                          side (negative-margin px + blur-radius px).
-     * @param params            Animation parameters for one axis.
+     * @param containerWidthPx       Container's natural laid-out width (px).
+     * @param childBleedPerSidePx    Child overhang beyond the container edge on
+     *                               <em>each</em> side (negative-margin px +
+     *                               blur-radius px).  Only the left-side bleed
+     *                               enters the left-edge formula; the total
+     *                               two-sided bleed (2× this value) is used by
+     *                               {@link #maxOnScreenWidth}.
+     * @param params                 Animation parameters for one axis.
      * @return Left-edge sweep distance (px); always ≥ 0.
      */
     public static float leftEdgeSweepPx(
             float containerWidthPx,
-            float childBleedPx,
+            float childBleedPerSidePx,
             RevealParams params) {
 
         float pivotX       = params.pivotFrac * containerWidthPx;
         float scaleDelta   = params.toScale - params.fromScale;
-        // Formula derived above: sweep = (toScale − fromScale) × (pivotX + childBleed)
-        return Math.abs(scaleDelta) * (pivotX + childBleedPx);
+        // Formula derived above: sweep = (toScale − fromScale) × (pivotX + childBleedPerSide)
+        return Math.abs(scaleDelta) * (pivotX + childBleedPerSidePx);
     }
 
     /**
@@ -215,20 +255,22 @@ public final class FabRevealGeometry {
      * animation achieves 90 % (nearly the full container width, which on a
      * full-width layout is the screen width).
      *
-     * @param containerWidthPx  Container's natural width (px).
-     * @param childBleedPx      Child overhang per side (px).
-     * @param params            Animation parameters.
-     * @param maxSweepFraction  Maximum allowed sweep as a fraction of
-     *                          {@code containerWidthPx} (e.g. 0.15).
-     * @return {@code true} if the sweep is within the allowed fraction.
+     * @param containerWidthPx     Container's natural width (px).
+     * @param childBleedPerSidePx  Child overhang per side (px).  See
+     *                             {@link #leftEdgeSweepPx} for parameter semantics.
+     * @param params               Animation parameters.
+     * @param maxSweepFraction     Maximum allowed sweep as a fraction of
+     *                             {@code containerWidthPx} (e.g. 0.15).
+     * @return {@code true} if the sweep is within the allowed fraction
+     *         (inclusive: sweep == threshold returns {@code true}).
      */
     public static boolean isLeftEdgeSweepContained(
             float containerWidthPx,
-            float childBleedPx,
+            float childBleedPerSidePx,
             RevealParams params,
             float maxSweepFraction) {
 
-        float sweep = leftEdgeSweepPx(containerWidthPx, childBleedPx, params);
+        float sweep = leftEdgeSweepPx(containerWidthPx, childBleedPerSidePx, params);
         return sweep <= containerWidthPx * maxSweepFraction;
     }
 

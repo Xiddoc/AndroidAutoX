@@ -30,9 +30,17 @@
     • Duration 400 ms keeps the reveal snappy without feeling abrupt.
 
     INVARIANT: at any moment during this animation the glow's on-screen
-    bounding box is at most  containerNaturalSize × 1.0 / 0.85  ≈ 1.18×
-    the container's resting size — entirely contained in the bottom-end
-    corner.  This is verified by FabRevealGeometryTest (pure JVM, no device).
+    bounding box is at most containerNaturalSize × 1.0 (= resting size,
+    reached at the end of the reveal; at the start it is 0.85× resting).
+    It is always entirely contained in the bottom-end corner.
+    This is verified by FabRevealGeometryTest (pure JVM, no device) and by
+    RebootButtonAnimationTest (Robolectric, parses this file at runtime).
+
+    NOTE ON fillAfter: the AnimationSet intentionally omits fillAfter="true".
+    The container's natural alpha is 1.0 and showRebootButton() sets visibility
+    VISIBLE before starting the animation, so after the tween completes the
+    view correctly stays at alpha=1.0.  Adding fillAfter would hold the end
+    state indefinitely and could interfere with any future visibility toggle.
 -->
 <set xmlns:android="http://schemas.android.com/apk/res/android"
     android:interpolator="@android:anim/decelerate_interpolator">
