@@ -5,6 +5,16 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!--
+        Two-axis scrolling layout for the log output:
+          - logs_scroll (ScrollView) handles VERTICAL scrolling of the entire log.
+          - logs_hscroll (HorizontalScrollView) handles HORIZONTAL scrolling so
+            long log lines are reachable by the user (rather than just clipped).
+        This replaces the old android:scrollHorizontally + ScrollingMovementMethod
+        approach, which clipped content and broke long-press text selection.
+        Text selection is configured once in code (MainActivity.configureLogsView)
+        so that setTextIsSelectable is not called repeatedly on every button tap.
+    -->
     <ScrollView
         android:id="@+id/logs_scroll"
         android:layout_width="0dp"
@@ -18,16 +28,23 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toTopOf="@id/copy_logs_button">
 
-        <TextView
-            android:id="@+id/logs"
-            android:layout_width="wrap_content"
+        <HorizontalScrollView
+            android:id="@+id/logs_hscroll"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/log_first_line"
-            android:textColor="@color/code_text"
-            android:textSize="12sp"
-            android:typeface="monospace"
-            android:scrollHorizontally="true"
-            android:textIsSelectable="true" />
+            android:scrollbars="horizontal"
+            android:fillViewport="false">
+
+            <TextView
+                android:id="@+id/logs"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/log_first_line"
+                android:textColor="@color/code_text"
+                android:textSize="12sp"
+                android:typeface="monospace" />
+
+        </HorizontalScrollView>
     </ScrollView>
 
     <Button
