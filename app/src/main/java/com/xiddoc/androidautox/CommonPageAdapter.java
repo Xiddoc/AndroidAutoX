@@ -15,9 +15,15 @@ public class CommonPageAdapter extends PagerAdapter {
     private final List<CharSequence> pageTitles = new ArrayList<>();
 
 
-    public void insertViewId(@IdRes int pageId, CharSequence title) {
+    /**
+     * Append a page and return the index it was inserted at. Returning the
+     * index lets callers derive page positions (e.g. the Logs page index) from
+     * insertion order instead of hardcoding magic numbers that can drift.
+     */
+    public int insertViewId(@IdRes int pageId, CharSequence title) {
         pageIds.add(pageId);
         pageTitles.add(title);
+        return pageIds.size() - 1;
     }
 
     @Override
