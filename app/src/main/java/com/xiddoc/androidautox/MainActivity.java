@@ -23,6 +23,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import androidx.annotation.NonNull;
+import androidx.annotation.WorkerThread;
 import androidx.fragment.app.DialogFragment;
 import androidx.viewpager.widget.ViewPager;
 import androidx.appcompat.app.AppCompatActivity;
@@ -2605,30 +2606,74 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         return streamLogs;
     }
 
-    /** True if root access has actually been granted (a non-root libsu shell would
-     *  still happily echo "1", so callers must check this rather than command output).
+    /**
+     * True if root access has actually been granted (a non-root libsu fallback shell
+     * would still happily echo "1", so callers must check the shell's real root status
+     * rather than command output).
      *
-     *  <p>This explicitly <em>builds</em> the libsu shell (which is what spawns
-     *  {@code su} and surfaces Magisk's grant prompt / registers the app under
-     *  Superusers) and then runs a real {@code id} probe through it. Just reading a
-     *  cached {@code isRoot()} flag is not enough to guarantee {@code su} was ever
-     *  executed, so we force a real root command here. MUST be called off the main
-     *  thread — it blocks while waiting for the user to tap "Grant". */
+     * <p>{@link com.topjohnwu.superuser.Shell#getShell()} <em>builds</em> the libsu shell
+     * if one is not already cached, which is what spawns {@code su} and surfaces Magisk's
+     * grant prompt the first time. We then read {@link com.topjohnwu.superuser.Shell#isRoot()},
+     * which reflects whether {@code su} actually succeeded.
+     *
+     * <p><b>Important:</b> libsu caches the shell as a singleton. If a shell already exists
+     * (e.g. a non-root fallback built after an earlier denial), {@code getShell()} returns
+     * the cached instance and does <em>not</em> re-run {@code su}; the {@code id} probe below
+     * runs on that same warm shell and does <em>not</em> re-prompt Magisk. To force a fresh
+     * {@code su} (a genuine re-prompt), the cached shell must first be closed — see
+     * {@link #resetRootShell()}, which the "Request again" retry path calls.
+     *
+     * <p>MUST be called off the main thread — it blocks while waiting for the user to tap
+     * "Grant".
+     *
+     * @return {@code true} only if a root shell was obtained
+     */
+    @WorkerThread
     public static boolean hasRootAccess() {
         try {
             // getShell() blocks until the shell is constructed; with a root-capable
-            // device this spawns `su` and triggers Magisk's prompt the first time.
+            // device a *fresh* shell spawns `su` and triggers Magisk's prompt. On a
+            // warm/cached shell it just returns the existing instance.
             com.topjohnwu.superuser.Shell shell = com.topjohnwu.superuser.Shell.getShell();
             if (!shell.isRoot()) {
                 return false;
             }
-            // Run a real root command so su is definitely exercised (and Magisk
-            // registers the grant) even on code paths where the shell was already
-            // warm. We trust the shell's root status, not this command's echo.
+            // Sanity probe on the (root) shell. Note this does NOT re-exercise `su` on a
+            // warm shell — see resetRootShell() for the actual re-prompt mechanism.
             com.topjohnwu.superuser.Shell.cmd("id").exec();
             return true;
         } catch (Throwable t) {
             return false;
+        }
+    }
+
+    /**
+     * Closes the cached libsu shell so the next {@link #hasRootAccess()} /
+     * {@link com.topjohnwu.superuser.Shell#getShell()} builds a brand-new one and
+     * re-invokes {@code su} (re-prompting Magisk).
+     *
+     * <p>libsu 5.2.2 caches a single shell singleton; once it has been built — especially
+     * a non-root fallback after a denial — {@code getShell()} keeps returning it and never
+     * re-runs {@code su}. {@link com.topjohnwu.superuser.Shell} is {@link java.io.Closeable};
+     * closing the cached instance puts it into a non-alive state, and libsu's internal cache
+     * discards a non-alive shell on the next access so a fresh one is constructed.
+     *
+     * <p>Caveat: if the user previously chose "Deny" in Magisk and asked Magisk to remember
+     * it, Magisk itself caches that decision — a fresh {@code su} may be auto-denied without
+     * any visible prompt until the user changes the rule in Magisk. All we can do (and do
+     * here) is genuinely re-issue {@code su} so a re-prompt happens whenever Magisk allows it.
+     *
+     * <p>MUST be called off the main thread (closing the shell can do I/O).
+     */
+    @WorkerThread
+    public static void resetRootShell() {
+        try {
+            com.topjohnwu.superuser.Shell cached = com.topjohnwu.superuser.Shell.getCachedShell();
+            if (cached != null) {
+                cached.close();
+            }
+        } catch (Throwable t) {
+            // Best-effort: even if close() throws, the next getShell() may still rebuild.
         }
     }
 
