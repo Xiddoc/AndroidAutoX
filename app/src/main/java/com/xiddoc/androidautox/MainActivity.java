@@ -401,7 +401,7 @@ public class MainActivity extends AppCompatActivity {
 
 
         if (load("aa_patched_apps")) {
-            patchapps.setText(getString(R.string.unpatch) + getString(R.string.patch_custom_apps));
+            patchapps.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.patch_custom_apps));
             changeStatus(patchappstatus, 2, false);
         } else {
             patchapps.setText(getString(R.string.patch_app) + getString(R.string.patch_custom_apps));
@@ -1748,131 +1748,43 @@ public class MainActivity extends AppCompatActivity {
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
 
-
-        SharedPreferences appsListPref = getApplicationContext().getSharedPreferences("appsListPref", 0);
-        Map<String, ?> allEntries = appsListPref.getAll();
-        logs.append("--  Apps which will be added to whitelist: --\n");
-        String whiteListString = "";
-        for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
-            logs.append("\t\t- " + entry.getValue() + " (" + entry.getKey() + ")\n");
-            whiteListString += "," + entry.getKey();
-
-            String pathResult = runSuWithCmd("pm path " + entry.getKey()).getInputStreamLogWithLabel();
-            String actualPath = pathResult.substring(pathResult.lastIndexOf(":") + 1);
-
-            appendText(logs , runSuWithCmd("mv " + actualPath + " /data/local/tmp/tmpapk" + entry.getKey() + ".apk").getStreamLogsWithLabels());
-            appendText(logs , runSuWithCmd("pm uninstall " + entry.getKey()).getStreamLogsWithLabels());
-            appendText(logs, runSuWithCmd("pm install -t -i \"com.android.vending\" -r" + " /data/local/tmp/tmpapk" + entry.getKey() + ".apk" ).getStreamLogsWithLabels());
-
-
-        }
-
-        whiteListString = whiteListString.replaceFirst(",", "");
-        final String whiteListStringFinal = whiteListString;
-        final StringBuilder finalCommand = new StringBuilder();
-
-
-
-        finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, stringVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"app_white_list\", \"\",\"");
-            finalCommand.append(whiteListStringFinal);
-            finalCommand.append("\",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, stringVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"car_connect_broadcast_whitelist\", \"\",\"");
-        finalCommand.append(whiteListStringFinal);
-        finalCommand.append("\",0);");
-        finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, stringVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__allowed_package_list\",  \"\" ,\"\",0);");
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, stringVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__blocked_packages_by_installer\", \"\" ,\"\",0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__should_bypass_validation\", \"\" ,1,0);");
-            finalCommand.append(System.getProperty("line.separator"));
-            finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__play_install_api\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__swallow_play_api_exception\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"AppValidation__swallow_play_api_exception_return_value\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.gms.car\",  0,\"should_bypass_validation\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"CarProjectionValidator__filter_disabled_packages_in_ispackageallowed_method\", \"\" ,0,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("INSERT OR REPLACE INTO FlagOverrides (packageName, flagType, name, user, boolVal, committed) VALUES (\"com.google.android.projection.gearhead\",  0,\"UnknownSources__allow_full_screen_apps\", \"\" ,1,0);");
-        finalCommand.append(System.getProperty("line.separator"));
-        finalCommand.append("DELETE FROM Flags WHERE name=\"app_black_list\";");
-        finalCommand.append("DELETE FROM Flags WHERE name=\"app_white_list\";");
-        finalCommand.append(System.getProperty("line.separator"));
-
-
-
-
+        // The app uninstall/reinstall loop (re-signing the APKs through pm so they pass
+        // installer-source validation) lives ONLY here -- it must never run on the headless
+        // re-apply path. The flag overrides themselves are produced by
+        // TweakRegistry.patchedAppsSpecs() and applied via the phixit engine below.
         new Thread() {
             @Override
             public void run() {
-                String path = getApplicationInfo().dataDir;
-                suitableMethodFound = true;
-                killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
-                String currentPolicy = gainOwnership(logs);
+                SharedPreferences appsListPref =
+                        getApplicationContext().getSharedPreferences("appsListPref", 0);
+                Map<String, ?> allEntries = appsListPref.getAll();
+                appendText(logs, "--  Apps which will be added to whitelist: --\n");
+                for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
+                    appendText(logs, "\t\t- " + entry.getValue() + " (" + entry.getKey() + ")\n");
 
-                appendText(logs, "\n\n--  run SQL method   --");
-                appendText(logs, runSuWithCmd(
-                        path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                "'DROP TRIGGER IF EXISTS aa_patched_apps;\n DROP TRIGGER IF EXISTS after_delete;\n" +
-                                "DROP TRIGGER IF EXISTS aa_patched_apps_fix;" +
-                                finalCommand + "'").getStreamLogsWithLabels());
+                    String pathResult = runSuWithCmd("pm path " + entry.getKey()).getInputStreamLogWithLabel();
+                    String actualPath = pathResult.substring(pathResult.lastIndexOf(":") + 1);
 
-                try {
-                    this.sleep(5000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    appendText(logs , runSuWithCmd("mv " + actualPath + " /data/local/tmp/tmpapk" + entry.getKey() + ".apk").getStreamLogsWithLabels());
+                    appendText(logs , runSuWithCmd("pm uninstall " + entry.getKey()).getStreamLogsWithLabels());
+                    appendText(logs, runSuWithCmd("pm install -t -i \"com.android.vending\" -r" + " /data/local/tmp/tmpapk" + entry.getKey() + ".apk" ).getStreamLogsWithLabels());
                 }
 
-                if (suitableMethodFound) {
+                appendText(logs, "\n\n--  restoring Google Play Services   --");
+                appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
 
-
-                    appendText(logs, runSuWithCmd(
-                            path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " +
-                                    "'CREATE TRIGGER aa_patched_apps AFTER DELETE\n" +
-                                    "On FlagOverrides\n" +
-                                    "BEGIN\n" + finalCommand + "END;'\n"
-                    ).getStreamLogsWithLabels());
-                    if (runSuWithCmd(path + "/sqlite3 -batch /data/data/com.google.android.gms/databases/phenotype.db " + "'SELECT name FROM sqlite_master WHERE type=\"trigger\" AND name=\"aa_patched_apps\";'").getInputStreamLog().length() <= 4) {
-                        suitableMethodFound = false;
-                    } else {
-                        appendText(logs, "\n--  end SQL method   --");
-                        save(true, "aa_patched_apps");
-                        new Handler(Looper.getMainLooper()).post(new Runnable() {
-                            @Override
-                            public void run() {
-                                changeStatus(patchappstatus, 1, true);
-                                showRebootButton();
-                                patchapps.setText(getString(R.string.unpatch) + getString(R.string.patch_custom_apps));
-                            }
-                        });
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        dialog.dismiss();
+                        // Apply the whitelist + validation-bypass flags through the phixit
+                        // engine: captures baselines, persists the toggle, updates the UI.
+                        applyPhixitTweakSpecs("aa_patched_apps",
+                                TweakRegistry.patchedAppsSpecs(getApplicationContext()),
+                                patchappstatus, patchapps,
+                                getString(R.string.patch_custom_apps));
                     }
-                }
-                dialog.dismiss();
-                
-                    appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
-
-appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
-
-                if (currentPolicy.toLowerCase().equals("permissive")) {
-                    appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
-                }
-                if (!suitableMethodFound) {
-                    final DialogFragment notSuccessfulDialog = new NotSuccessfulDialog();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("tweak", "custom_apps");
-                    bundle.putString("log", logs.getText().toString());
-                    notSuccessfulDialog.setArguments(bundle);
-                    notSuccessfulDialog.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-                }
+                });
             }
         }.start();
     }

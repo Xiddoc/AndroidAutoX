@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Single source of truth for "which flags does an enabled tweak set". Static tweaks
@@ -28,6 +29,9 @@ public final class TweakRegistry {
             "battery_saver_warning",
             // dynamic (value from saved pref)
             "aa_hun_ms", "aa_media_hun", "aa_bitrate_usb", "aa_bitrate_wireless",
+            // dynamic (whitelist from appsListPref); the re-apply job re-asserts the
+            // flags only -- it never reinstalls apps (that stays in patchforapps()).
+            "aa_patched_apps",
     };
 
     /** Flags for a tweak key, with dynamic values filled in from saved prefs. */
@@ -44,6 +48,8 @@ public final class TweakRegistry {
                 return usbBitrateSpecs(sp.getFloat("usb_bitrate_value", 0));
             case "aa_bitrate_wireless":
                 return wifiBitrateSpecs(sp.getFloat("wifi_bitrate_value", 0));
+            case "aa_patched_apps":
+                return patchedAppsSpecs(ctx);
             default:
                 return PhixitTweaks.specs(key);
         }
@@ -86,6 +92,37 @@ public final class TweakRegistry {
         l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_480p_wireless_hevc", 1000000 * value));
         l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless", 12000000 * value));
         l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless_hevc", 2000000 * value));
+        return l;
+    }
+
+    /**
+     * Flags for the "patch custom apps" tweak. The whitelist value is dynamic:
+     * it is rebuilt from the package names the user selected in {@code appsListPref}.
+     * Only the FLAGS are produced here -- the app uninstall/reinstall loop lives in
+     * {@code MainActivity.patchforapps()} and is intentionally NOT part of this spec
+     * path, so the headless re-apply job re-asserts flags without touching apps.
+     */
+    public static List<FlagSpec> patchedAppsSpecs(Context ctx) {
+        SharedPreferences apps = ctx.getSharedPreferences("appsListPref", Context.MODE_PRIVATE);
+        StringBuilder whiteList = new StringBuilder();
+        for (Map.Entry<String, ?> entry : apps.getAll().entrySet()) {
+            if (whiteList.length() > 0) whiteList.append(",");
+            whiteList.append(entry.getKey());
+        }
+        String whiteListString = whiteList.toString();
+
+        List<FlagSpec> l = new ArrayList<FlagSpec>();
+        l.add(FlagSpec.str(FlagSpec.PKG_CAR, "app_white_list", whiteListString));
+        l.add(FlagSpec.str(FlagSpec.PKG_CAR, "car_connect_broadcast_whitelist", whiteListString));
+        l.add(FlagSpec.str(FlagSpec.PKG_GEARHEAD, "AppValidation__allowed_package_list", ""));
+        l.add(FlagSpec.str(FlagSpec.PKG_GEARHEAD, "AppValidation__blocked_packages_by_installer", ""));
+        l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "AppValidation__should_bypass_validation", true));
+        l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "AppValidation__play_install_api", false));
+        l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "AppValidation__swallow_play_api_exception", true));
+        l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "AppValidation__swallow_play_api_exception_return_value", true));
+        l.add(FlagSpec.bool(FlagSpec.PKG_CAR, "should_bypass_validation", true));
+        l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "CarProjectionValidator__filter_disabled_packages_in_ispackageallowed_method", false));
+        l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "UnknownSources__allow_full_screen_apps", true));
         return l;
     }
 

@@ -259,6 +259,25 @@ public final class PhixitTweaks {
                 l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless", 0));
                 l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless_hevc", 0));
                 break;
+
+            // Dynamic-value tweak (whitelist rebuilt from appsListPref). Names only,
+            // so revert() can restore the captured baseline for these flags. The
+            // actual values are filled in by TweakRegistry.patchedAppsSpecs() at
+            // apply time; this entry also drives the app reinstall loop NOT at all
+            // (that stays in MainActivity.patchforapps()).
+            case "aa_patched_apps":
+                l.add(FlagSpec.str(FlagSpec.PKG_CAR, "app_white_list", ""));
+                l.add(FlagSpec.str(FlagSpec.PKG_CAR, "car_connect_broadcast_whitelist", ""));
+                l.add(FlagSpec.str(FlagSpec.PKG_GEARHEAD, "AppValidation__allowed_package_list", ""));
+                l.add(FlagSpec.str(FlagSpec.PKG_GEARHEAD, "AppValidation__blocked_packages_by_installer", ""));
+                l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "AppValidation__should_bypass_validation", true));
+                l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "AppValidation__play_install_api", false));
+                l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "AppValidation__swallow_play_api_exception", true));
+                l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "AppValidation__swallow_play_api_exception_return_value", true));
+                l.add(FlagSpec.bool(FlagSpec.PKG_CAR, "should_bypass_validation", true));
+                l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "CarProjectionValidator__filter_disabled_packages_in_ispackageallowed_method", false));
+                l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "UnknownSources__allow_full_screen_apps", true));
+                break;
             default:
                 return null;
         }
