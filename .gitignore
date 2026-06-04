@@ -11,3 +11,5 @@
 /captures
 .externalNativeBuild
 /app/release
+# Claude Code local scratch (agent worktrees, session data)
+.claude/
