@@ -28,7 +28,6 @@ import androidx.viewpager.widget.ViewPager;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
-import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -1943,8 +1942,13 @@ public class MainActivity extends AppCompatActivity {
     @NonNull
     private TextView initiateLogsText() {
         final TextView logs = findViewById(R.id.logs);
-        logs.setHorizontallyScrolling(true);
-        logs.setMovementMethod(new ScrollingMovementMethod());
+        // Enable text selection so the user can long-press to copy log output.
+        // Vertical scrolling is handled by the parent ScrollView (logs_scroll);
+        // horizontal scrolling is kept via android:scrollHorizontally="true" in
+        // the layout. ScrollingMovementMethod is intentionally NOT set here because
+        // it would replace the movement method that Android installs for selection
+        // (ArrowKeyMovementMethod) and breaks long-press selection.
+        logs.setTextIsSelectable(true);
         return logs;
     }
 

@@ -26,7 +26,8 @@
             android:textColor="@color/code_text"
             android:textSize="12sp"
             android:typeface="monospace"
-            android:scrollHorizontally="true" />
+            android:scrollHorizontally="true"
+            android:textIsSelectable="true" />
     </ScrollView>
 
     <Button
