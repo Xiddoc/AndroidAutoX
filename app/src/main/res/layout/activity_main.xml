@@ -158,38 +158,17 @@
 
     </androidx.viewpager.widget.ViewPager>
 
-    <!-- FAB + its glow halo. Wrapped in a non-clipping FrameLayout because
-         FrameLayout honours negative margins (ConstraintLayout clamps them to 0),
-         so the two blurred glow layers actually grow PAST the FAB body and have
-         room to bloom. match_parent + negative margin makes each glow view larger
-         than the FAB; the inset drawables then leave transparent margin inside
-         for the RenderEffect blur to spread into. Revealed together on apply. -->
+    <!-- Floating "Reboot to apply" action button. Shown (VISIBLE/GONE toggled by
+         RebootFabController) once a tweak is applied. Kept inside a FrameLayout so
+         the controller has a single root view to toggle. -->
     <FrameLayout
         android:id="@+id/reboot_container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="15dp"
-        android:clipChildren="false"
-        android:clipToPadding="false"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
-
-        <View
-            android:id="@+id/reboot_glow_outer"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_gravity="center"
-            android:layout_margin="-44dp"
-            android:background="@drawable/fab_glow_outer" />
-
-        <View
-            android:id="@+id/reboot_glow"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_gravity="center"
-            android:layout_margin="-18dp"
-            android:background="@drawable/fab_glow" />
 
         <Button
             android:id="@+id/reboot_button"
