@@ -2,6 +2,7 @@ package com.xiddoc.androidautox;
 
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
+import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Dialog;
@@ -290,6 +291,10 @@ public class MainActivity extends AppCompatActivity {
         rebootGlow = findViewById(R.id.reboot_glow);
         configureGlowLayer(rebootGlow, 10f * density, 1.0f);
         applyAzureGlow(rebootButton);
+
+        // Ambient AI backdrop: keep the aurora blobs slowly drifting/breathing
+        // the whole time the screen is open.
+        startAurora();
 
 
 
@@ -4221,6 +4226,33 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         if (v == null) return;
         v.setRenderEffect(RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.DECAL));
         v.setAlpha(alpha);
+    }
+
+    /** Slowly drift, scale and soften the ambient aurora blobs for a dynamic AI feel. */
+    private void startAurora() {
+        float d = getResources().getDisplayMetrics().density;
+        animateBlob(findViewById(R.id.aurora_blob1), 9000, 34f * d, 28f * d, 1.15f);
+        animateBlob(findViewById(R.id.aurora_blob2), 13000, -40f * d, 24f * d, 1.25f);
+        animateBlob(findViewById(R.id.aurora_blob3), 16000, 26f * d, -32f * d, 1.2f);
+    }
+
+    private void animateBlob(View v, long duration, float dx, float dy, float maxScale) {
+        if (v == null) return;
+        float blur = 40f * getResources().getDisplayMetrics().density;
+        v.setRenderEffect(RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.DECAL));
+        ObjectAnimator tx = ObjectAnimator.ofFloat(v, View.TRANSLATION_X, 0f, dx);
+        ObjectAnimator ty = ObjectAnimator.ofFloat(v, View.TRANSLATION_Y, 0f, dy);
+        ObjectAnimator sx = ObjectAnimator.ofFloat(v, View.SCALE_X, 1f, maxScale);
+        ObjectAnimator sy = ObjectAnimator.ofFloat(v, View.SCALE_Y, 1f, maxScale);
+        for (ObjectAnimator a : new ObjectAnimator[]{tx, ty, sx, sy}) {
+            a.setDuration(duration);
+            a.setRepeatCount(ValueAnimator.INFINITE);
+            a.setRepeatMode(ValueAnimator.REVERSE);
+            a.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        }
+        AnimatorSet set = new AnimatorSet();
+        set.playTogether(tx, ty, sx, sy);
+        set.start();
     }
 
     /** Slow alpha pulse so the outer bloom gently "breathes" like Gemini's orb. */

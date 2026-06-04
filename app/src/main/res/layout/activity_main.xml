@@ -9,6 +9,49 @@
     android:clipToPadding="false"
     tools:context=".MainActivity">
 
+    <!-- Ambient AI backdrop: soft colour blobs that slowly drift and breathe
+         behind the content the whole time the app is open (animated in
+         MainActivity#startAurora). Fills the screen, drawn first = behind
+         everything; blobs bleed past the edges (clipChildren=false) for a
+         natural aurora. The translucent surfaces above let it glow through. -->
+    <FrameLayout
+        android:id="@+id/aurora_layer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <View
+            android:id="@+id/aurora_blob1"
+            android:layout_width="380dp"
+            android:layout_height="380dp"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="-80dp"
+            android:layout_marginTop="40dp"
+            android:background="@drawable/aurora_blob_blue" />
+
+        <View
+            android:id="@+id/aurora_blob2"
+            android:layout_width="440dp"
+            android:layout_height="440dp"
+            android:layout_gravity="center|end"
+            android:layout_marginEnd="-120dp"
+            android:background="@drawable/aurora_blob_purple" />
+
+        <View
+            android:id="@+id/aurora_blob3"
+            android:layout_width="420dp"
+            android:layout_height="420dp"
+            android:layout_gravity="bottom|start"
+            android:layout_marginStart="-60dp"
+            android:layout_marginBottom="-40dp"
+            android:background="@drawable/aurora_blob_pink" />
+    </FrameLayout>
+
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/toolbar"
         app:titleTextAppearance="@style/TitleBarTextAppearance"
