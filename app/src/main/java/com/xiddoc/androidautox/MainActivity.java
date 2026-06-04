@@ -2606,10 +2606,27 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
     }
 
     /** True if root access has actually been granted (a non-root libsu shell would
-     *  still happily echo "1", so callers must check this rather than command output). */
+     *  still happily echo "1", so callers must check this rather than command output).
+     *
+     *  <p>This explicitly <em>builds</em> the libsu shell (which is what spawns
+     *  {@code su} and surfaces Magisk's grant prompt / registers the app under
+     *  Superusers) and then runs a real {@code id} probe through it. Just reading a
+     *  cached {@code isRoot()} flag is not enough to guarantee {@code su} was ever
+     *  executed, so we force a real root command here. MUST be called off the main
+     *  thread — it blocks while waiting for the user to tap "Grant". */
     public static boolean hasRootAccess() {
         try {
-            return com.topjohnwu.superuser.Shell.getShell().isRoot();
+            // getShell() blocks until the shell is constructed; with a root-capable
+            // device this spawns `su` and triggers Magisk's prompt the first time.
+            com.topjohnwu.superuser.Shell shell = com.topjohnwu.superuser.Shell.getShell();
+            if (!shell.isRoot()) {
+                return false;
+            }
+            // Run a real root command so su is definitely exercised (and Magisk
+            // registers the grant) even on code paths where the shell was already
+            // warm. We trust the shell's root status, not this command's echo.
+            com.topjohnwu.superuser.Shell.cmd("id").exec();
+            return true;
         } catch (Throwable t) {
             return false;
         }
