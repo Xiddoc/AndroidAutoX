@@ -97,6 +97,8 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="added_app_action">"Added: "</string>
     <string name="removed_app_action">Removed\u0020</string>
     <string name="root_access_warning">Root access denied. Please allow root access.</string>
+    <string name="requesting_root">Requesting root access…</string>
+    <string name="request_root_again">Request again</string>
     <string name="revert_everything_dialog">This will revert ALL applied Android Auto flag and Gearhead modifications back to their default values. Your tweak selections will be cleared. Please restart the app manually after this completes.</string>
     <string name="calendar_tweak">Set %1$s visible days in calendar</string>
     <string name="calendar_tweak_single">Set %1$s visible day in calendar</string>

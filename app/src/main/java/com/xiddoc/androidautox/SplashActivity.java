@@ -173,19 +173,85 @@ public class SplashActivity extends AppCompatActivity {
     }
 
     // Shared root-gated proceed flow used by both bottom buttons.
-    // Treats null (async root result not-yet-arrived) or non-"1" as not-rooted,
-    // so it never NPEs and never blocks the main thread on su.
+    //
+    // Uses the pure RootGate decision logic so the three states are handled
+    // distinctly and we never falsely report "no root" while the async request is
+    // still pending:
+    //   PROCEED    -> enter the app
+    //   WAIT       -> the async root request hasn't finished; show a loading state
+    //                 and resolve once the result arrives (fixes the proceed race)
+    //   SHOW_RETRY -> request finished without root; offer a retry path
+    // Never NPEs and never blocks the main thread on su.
     private void proceedIfRooted() {
-        StreamLogs rootResult = isDeviceRooted;
-        if (rootResult != null && "1".equals(rootResult.getInputStreamLog())) {
-            if (newVersionName != null) {
-                mainActivityIntent.putExtra("NewVersionName", newVersionName);
-            }
-            startActivity(mainActivityIntent);
-            finish();
-        } else {
-            noRootDialog.show(getSupportFragmentManager(), "NoRootDialog");
+        switch (RootGate.decide(rootedState())) {
+            case PROCEED:
+                if (newVersionName != null) {
+                    mainActivityIntent.putExtra("NewVersionName", newVersionName);
+                }
+                startActivity(mainActivityIntent);
+                finish();
+                break;
+            case WAIT:
+                // Async root request still in flight: don't dead-end to NoRootDialog.
+                // Show a brief loading toast and re-evaluate as soon as it completes.
+                Toast.makeText(this, R.string.requesting_root, Toast.LENGTH_SHORT).show();
+                waitForRootThenProceed();
+                break;
+            case SHOW_RETRY:
+            default:
+                noRootDialog.show(getSupportFragmentManager(), "NoRootDialog");
+                break;
         }
+    }
+
+    // Tri-state view of the async root result for RootGate: null = pending,
+    // TRUE = granted, FALSE = denied.
+    private Boolean rootedState() {
+        StreamLogs rootResult = isDeviceRooted;
+        if (rootResult == null) {
+            return null;
+        }
+        return "1".equals(rootResult.getInputStreamLog());
+    }
+
+    // Polls (off the main thread) until the async root request lands, then runs the
+    // proceed flow again on the UI thread. Bounded so a hung su can't wait forever.
+    private void waitForRootThenProceed() {
+        new Thread() {
+            @Override
+            public void run() {
+                long deadline = System.currentTimeMillis() + 35_000L;
+                while (isDeviceRooted == null && System.currentTimeMillis() < deadline) {
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isFinishing()) {
+                            // Result is now PROCEED or SHOW_RETRY (or, if the request
+                            // genuinely never returned, SHOW_RETRY via the FALSE-ish path).
+                            proceedIfRooted();
+                        }
+                    }
+                });
+            }
+        }.start();
+    }
+
+    // Re-triggers root acquisition. Called by NoRootDialog's "Request again" action so a
+    // denied/unavailable result is not a dead end. Clears the previous result and the
+    // once-only guard, then kicks off a fresh async request.
+    void retryRootRequest() {
+        isDeviceRooted = null;
+        rootRequestStarted = false;
+        Toast.makeText(this, R.string.requesting_root, Toast.LENGTH_SHORT).show();
+        requestRootAsync();
+        waitForRootThenProceed();
     }
 
 
