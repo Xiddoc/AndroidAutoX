@@ -97,6 +97,8 @@ android {
     buildFeatures {
         // BuildConfig is off by default in AGP 8; the app reads BuildConfig.VERSION_NAME.
         buildConfig true
+        // AIDL is also off by default in AGP 8; the root SQLite bridge (IPhixitRoot) needs it.
+        aidl true
     }
 
     defaultConfig {
