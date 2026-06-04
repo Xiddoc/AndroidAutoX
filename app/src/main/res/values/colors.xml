@@ -41,12 +41,6 @@
     <!-- Top-of-gradient bright accent for the main fill -->
     <color name="accent_blue_top">#42A5F5</color>
 
-    <!-- Gemini-style multi-hue glow stops (blue -> purple -> pink). Heavily
-         blurred behind the FAB they read as a soft, premium Google-app bloom. -->
-    <color name="gemini_blue">#4285F4</color>
-    <color name="gemini_purple">#9B72CB</color>
-    <color name="gemini_pink">#D96570</color>
-
     <!-- ============================================================
          BOLD NEON GLOW (unified BLUE family #2196F3 across all rims)
          Stepped alpha ramp: faint outer -> mid -> luminous inner.

@@ -35,7 +35,6 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.Animation;
-import android.view.animation.AnimationUtils;
 import android.view.animation.LinearInterpolator;
 import android.view.animation.RotateAnimation;
 import android.widget.Button;
@@ -101,8 +100,14 @@ public class MainActivity extends AppCompatActivity {
     private TextView currentlySetWiFiSeekbar;
     private Button rebootButton;
     private View rebootContainer;
-    private View rebootGlow;
-    private View rebootGlowOuter;
+
+    /** Injected into {@link RebootFabController} where no animation is wanted. */
+    private static final Runnable NO_OP = new Runnable() {
+        @Override
+        public void run() {
+            // Intentionally empty: the reboot FAB appears with no animation/glow.
+        }
+    };
     private Button nospeed;
     private Button taplimitat;
     private Button coolwalkDayNightTweak;
@@ -313,42 +318,21 @@ public class MainActivity extends AppCompatActivity {
         );
 
         rebootButton = findViewById(R.id.reboot_button);
-
-        // Phase 2 depth pass: a real two-layer RenderEffect glow behind the FAB —
-        // a wide soft bloom plus a bright tight neon rim (API 31+). The glow views
-        // live in a non-clipping FrameLayout (reboot_container) so they can grow
-        // past the FAB; their inset-puck drawables give the blur room to bloom.
-        float density = getResources().getDisplayMetrics().density;
         rebootContainer = findViewById(R.id.reboot_container);
-        rebootGlowOuter = findViewById(R.id.reboot_glow_outer);
-        configureGlowLayer(rebootGlowOuter, 30f * density, 0.6f);
-        rebootGlow = findViewById(R.id.reboot_glow);
-        configureGlowLayer(rebootGlow, 10f * density, 1.0f);
         applyAzureGlow(rebootButton);
 
         // Build the FAB controller now that its views exist. It owns the
-        // VISIBLE/GONE + entrance-animation + glow apply path; the entrance
-        // animation and glow are injected as Runnables so the controller stays
-        // free of the animation framework (and unit-testable). Initialise its
-        // page state from the pager's current item so a restored Logs page is
-        // honoured immediately (addOnPageChangeListener does NOT fire for the
-        // initial/restored page).
+        // VISIBLE/GONE apply path (shown once a tweak is applied, hidden on the
+        // Logs page). The entrance animation and glow are injected as Runnables;
+        // they are no-ops here — the FAB simply appears with no animation or
+        // colour-glow overlay. Initialise its page state from the pager's current
+        // item so a restored Logs page is honoured immediately
+        // (addOnPageChangeListener does NOT fire for the initial/restored page).
         final View rebootFabRoot = RebootFabController.resolveFabRoot(rebootContainer, rebootButton);
         rebootFabController = new RebootFabController(
                 rebootFabRoot,
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        rebootFabRoot.startAnimation(
-                                AnimationUtils.loadAnimation(getApplicationContext(), R.anim.reboot_button_anim));
-                    }
-                },
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        startGlowBreathing(rebootGlowOuter);
-                    }
-                },
+                NO_OP,
+                NO_OP,
                 logsPageIndex,
                 viewPager.getCurrentItem());
 
@@ -2881,17 +2865,6 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         });
     }
 
-    /**
-     * Turn a solid-colour puck into a real glow layer by blurring it at the
-     * given radius (px) and dialing its intensity via alpha. Used for the FAB's
-     * stacked outer-bloom / inner-rim halo.
-     */
-    private void configureGlowLayer(View v, float blurPx, float alpha) {
-        if (v == null) return;
-        v.setRenderEffect(RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.DECAL));
-        v.setAlpha(alpha);
-    }
-
     /** Slowly drift, scale and soften the ambient aurora blobs for a dynamic AI feel. */
     private void startAurora() {
         float d = getResources().getDisplayMetrics().density;
@@ -2917,17 +2890,6 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         AnimatorSet set = new AnimatorSet();
         set.playTogether(tx, ty, sx, sy);
         set.start();
-    }
-
-    /** Slow alpha pulse so the outer bloom gently "breathes" like Gemini's orb. */
-    private void startGlowBreathing(View v) {
-        if (v == null) return;
-        ObjectAnimator pulse = ObjectAnimator.ofFloat(v, View.ALPHA, 0.45f, 0.85f);
-        pulse.setDuration(2200);
-        pulse.setRepeatMode(ValueAnimator.REVERSE);
-        pulse.setRepeatCount(ValueAnimator.INFINITE);
-        pulse.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
-        pulse.start();
     }
 
     /**
