@@ -132,6 +132,15 @@ android {
         daily {
         }
     }
+
+    // Robolectric needs the merged Android resources/assets/manifest on the
+    // JVM unit-test classpath so view inflation and resource lookups work.
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
@@ -143,6 +152,12 @@ dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'androidx.cardview:cardview:1.0.0'
     testImplementation 'junit:junit:4.13.2'
+    // JVM-side Android UI tests (no device/emulator needed). Robolectric 4.12.x
+    // supports compileSdk 34; androidx.test core/ext provide ActivityScenario
+    // and the AndroidJUnit4 runner used by the unit tests under src/test.
+    testImplementation 'org.robolectric:robolectric:4.12.2'
+    testImplementation 'androidx.test:core:1.5.0'
+    testImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test:runner:1.5.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     // Sourced from JitPack: the original com.romandanylyk:pageindicatorview /
