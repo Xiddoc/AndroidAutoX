@@ -3,31 +3,33 @@
 Open items and known risks for the Phenotype "phixit" migration + background re-apply
 work. Ordered roughly by priority. Keep this updated as items are resolved.
 
-## 0. BLOCKER — bundled `sqlite3` is too old for the new schema (found on-device)
+## 0. Bundled `sqlite3` — old binary shipped in local builds (RESOLVED for builds; hardening remains)
 
-`app/src/main/res/raw/sqlite3` is **SQLite 3.7.6.3 (2011-05-19)**, 32-bit ARM. The new
-`phenotype.db` uses `WITHOUT ROWID` tables (e.g. `flag_overrides_to_commit`), a feature
-added in SQLite **3.8.2 (2013)**. SQLite parses the whole schema before any query, so on
-this device **every** engine read/write fails with:
+Root cause of the on-device "malformed database schema ... near WITHOUT" failure: the
+checked-in `app/src/main/res/raw/sqlite3` was an ancient placeholder (SQLite **3.7.6.3,
+2011**) that predates `WITHOUT ROWID` (added 3.8.2, 2013). The new `phenotype.db` uses
+`WITHOUT ROWID` tables, so SQLite failed parsing the schema and **every** engine query
+failed.
 
-```
-Error: malformed database schema (flag_overrides_to_commit) - near "WITHOUT": syntax error
-```
+The project already had the fix: `scripts/update-sqlite3.sh` downloads a modern static
+ARM sqlite3 and is wired into CI (`build.yml`, `release.yml`). BUT local/`assembleDebug`
+builds do NOT run that step, so locally-built APKs shipped the stale placeholder — which is
+exactly what was tested. **Fixed** by committing a refreshed binary (SQLite 2023-11-24,
+~3.44) into `res/raw/sqlite3` so every build path (local, web, CI) ships a schema-capable
+binary. CI still refreshes it to latest at build time.
 
-=> all tweaks report "no partitions matched"; nothing is actually applied. This blocks the
-entire engine on-device regardless of the (correct) flag logic.
+Remaining hardening (not blocking, but real):
+- **ABI:** the binary is 32-bit ARM only. It runs on devices with 32-bit support (incl. the
+  test device), but **64-bit-only devices** (many 2023+ phones with no 32-bit runtime) can't
+  execute it. Ship an `arm64-v8a` build (and/or per-ABI selection at runtime).
+- **Supply chain:** `update-sqlite3.sh` pulls a prebuilt binary from a third-party GitHub
+  repo (`rojenzaman/sqlite3-arm-aarch64`) over `main` with **no checksum**, and we run it as
+  **root**. Pin to a specific commit + verify a known SHA256, or build sqlite from the
+  official amalgamation in CI.
+- **Local-build freshness:** consider a best-effort Gradle `preBuild` hook that runs the
+  refresh script (non-fatal if offline), so the committed binary doesn't silently go stale
+  again.
 
-Fix options:
-- **(A) Platform SQLite, no binary (recommended):** rewrite `PhixitEngine` DB I/O to copy
-  `phenotype.db` (+ `-wal`/`-shm`) out via root into app storage, edit it with Android's
-  built-in `android.database.sqlite.SQLiteDatabase` (modern, supports `WITHOUT ROWID`,
-  reads/writes blobs directly — no hex round-trip, no shell-escaping), then copy back via
-  root. Must capture & restore the original **owner/group and SELinux context** on copy-back
-  (`stat`/`ls -Z` before; `chown` + `restorecon`/`chcon` after), and fold WAL before copy.
-- **(B) Bundle a modern static `sqlite3`:** replace the binary with a current statically
-  linked build for `arm64-v8a` (+ `armeabi-v7a`), select by ABI at runtime. Smallest code
-  change, keeps the current engine — but requires sourcing/vetting a trusted bionic static
-  binary.
 
 ## 1. patchforapps — reinstall loop is destructive and unguarded (pre-existing)
 
