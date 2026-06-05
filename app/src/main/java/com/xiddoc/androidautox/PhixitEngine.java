@@ -169,37 +169,16 @@ public class PhixitEngine {
      * avoid restarting GMS when nothing has drifted. No GMS restart, no SELinux change.
      */
     public boolean isApplied(List<FlagSpec> specs) {
-        LinkedHashMap<String, List<FlagSpec>> byPkg = groupByPkg(specs);
-        for (Map.Entry<String, List<FlagSpec>> e : byPkg.entrySet()) {
-            List<Partition> raw;
-            try {
-                raw = RootDb.readPartitions(e.getKey());
-            } catch (Exception ex) {
-                return false;
-            }
-            if (raw.isEmpty()) return false;
-            boolean sawPartition = false;
-            for (Partition p : raw) {
-                if (p.blob == null || p.blob.length == 0) continue;
-                List<PhixitSnapshot.Flag> flags;
-                try {
-                    flags = PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob));
-                } catch (Exception ex) {
-                    return false;
-                }
-                sawPartition = true;
-                for (FlagSpec s : e.getValue()) {
-                    PhixitSnapshot.Flag f = findFlag(flags, s.name);
-                    if (s.remove) {
-                        if (f != null) return false;
-                    } else if (f == null || !valueEquals(f, s.flag)) {
-                        return false;
-                    }
-                }
-            }
-            if (!sawPartition) return false;
+        // Lenient wrapper around the strict core: any structural unavailability
+        // (no root, unbound RootDb, empty partitions, decode failure) that the strict
+        // variant surfaces as an exception is swallowed here and reported as "not applied".
+        // ReapplyJobService relies on this false-on-error behaviour to conservatively
+        // trigger a re-apply when the DB can't be read.
+        try {
+            return isAppliedStrict(specs);
+        } catch (Exception e) {
+            return false;
         }
-        return true;
     }
 
     /**
