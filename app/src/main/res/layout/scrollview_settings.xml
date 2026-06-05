@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Settings tab page. Included by activity_main.xml as the third ViewPager
+    page (the <include> assigns android:id="@+id/page_three"), so the root
+    ScrollView intentionally has NO id of its own (the include's id wins),
+    matching scrollview.xml. Holds the About section (moved out of the old
+    overflow menu), the general settings toggles/actions, and a developer
+    group that is shown only when developer mode is enabled.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbarDefaultDelayBeforeFade="3000">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp">
+
+        <!-- ABOUT -->
+        <TextView
+            style="@style/SectionHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_header_about" />
+
+        <TextView
+            android:id="@+id/settings_about_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="@string/about_part_one"
+            android:textColor="@color/text_primary" />
+
+        <Button
+            android:id="@+id/settings_translators"
+            style="@style/ButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="@string/translators_button" />
+
+        <!-- GENERAL -->
+        <TextView
+            style="@style/SectionHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_header_general" />
+
+        <Button
+            android:id="@+id/settings_reset"
+            style="@style/ButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="@string/settings_reset_label" />
+
+        <Button
+            android:id="@+id/settings_reapply"
+            style="@style/ButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="@string/settings_reapply_label" />
+
+        <Button
+            android:id="@+id/settings_aa"
+            style="@style/ButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="@string/settings_aa_label" />
+
+        <Button
+            android:id="@+id/settings_ndpatch"
+            style="@style/ButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="@string/settings_ndpatch_label" />
+
+        <Button
+            android:id="@+id/settings_backup"
+            style="@style/ButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="@string/settings_backup_label" />
+
+        <!-- DEVELOPER (shown only when developer mode is enabled) -->
+        <LinearLayout
+            android:id="@+id/settings_dev_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                style="@style/SectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_header_developer" />
+
+            <Button
+                android:id="@+id/settings_devtest"
+                style="@style/ButtonStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="@string/settings_devtest_label" />
+
+            <Button
+                android:id="@+id/settings_devdump"
+                style="@style/ButtonStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="@string/settings_devdump_label" />
+        </LinearLayout>
+
+        <!-- Developer-mode toggle (always visible; replaces the secret 7-tap gesture) -->
+        <Button
+            android:id="@+id/settings_devmode"
+            style="@style/ButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="@string/settings_devmode_label" />
+
+    </LinearLayout>
+</ScrollView>

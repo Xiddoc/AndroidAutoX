@@ -257,7 +257,6 @@ def jacocoExclusions = [
         // Application
         '**/AaxApp*.*',
         // Dialog wrappers that only inflate views
-        '**/AboutDialog*.*',
         '**/NoRootDialog*.*',
         '**/NotSuccessfulDialog*.*',
         '**/RebootDialog*.*',
