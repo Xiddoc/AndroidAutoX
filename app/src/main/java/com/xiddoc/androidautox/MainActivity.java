@@ -116,6 +116,13 @@ public class MainActivity extends AppCompatActivity {
     private volatile boolean activityDestroyed;
 
     /**
+     * Single per-tweak state store (enabled / reboot-pending markers), initialized in
+     * {@link #onCreate}. Shared by the reconcile pass, revert and apply paths so we don't
+     * re-allocate a thin prefs wrapper on every call.
+     */
+    private TweakStateStore tweakStateStore;
+
+    /**
      * One UI target for a flag-mapped tweak: the status icon plus, optionally, the toggle
      * button and the labels to show for the applied/disabled states. Dynamic-value tweaks
      * (HUN / bitrate / patched-apps) register with {@code button == null} so only the icon is
@@ -174,37 +181,75 @@ public class MainActivity extends AppCompatActivity {
      */
     private void reconcileTweakStatusesInBackground() {
         if (reconcileTargets.isEmpty()) return;
-        final java.util.LinkedHashMap<String, ReconcileTarget> targets =
+        // Snapshot the view targets and build the pure coordinator's label-only targets from them.
+        final java.util.LinkedHashMap<String, ReconcileTarget> viewTargets =
                 new java.util.LinkedHashMap<String, ReconcileTarget>(reconcileTargets);
+        final java.util.LinkedHashMap<String, TweakReconcileCoordinator.Target> coordTargets =
+                new java.util.LinkedHashMap<String, TweakReconcileCoordinator.Target>();
+        for (Map.Entry<String, ReconcileTarget> e : viewTargets.entrySet()) {
+            coordTargets.put(e.getKey(),
+                    new TweakReconcileCoordinator.Target(e.getValue().enabledLabel,
+                            e.getValue().disabledLabel));
+        }
+
         final TweakAppliedChecker checker = new TweakAppliedChecker(getApplicationContext());
-        final TweakStateStore store = new TweakStateStore(getApplicationContext());
+        // POSSIBLE FOLLOW-UPS (deferred, intentionally not implemented here):
+        //   (a) a batch applied-state API on TweakAppliedChecker/PhixitEngine that reads the DB
+        //       once for many keys, instead of the per-key probe scanning it independently; and
+        //   (b) guarding against overlapping reconcile threads if the activity is recreated
+        //       rapidly (each onCreate currently spawns its own pass).
+        final TweakReconcileCoordinator coordinator = new TweakReconcileCoordinator(
+                coordTargets, checker::appliedState, tweakStateStore);
+
         new Thread() {
             @Override
             public void run() {
-                for (final Map.Entry<String, ReconcileTarget> e : targets.entrySet()) {
-                    if (activityDestroyed) return;
-                    final String key = e.getKey();
-                    final ReconcileTarget target = e.getValue();
-                    // Blocking root IPC — must stay off the main thread.
-                    final Boolean appliedInDb = checker.appliedState(key);
-                    final TweakStatus status = TweakReconciler.reconcile(key, appliedInDb, store);
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (activityDestroyed) return;
-                            changeStatus(target.statusView, status.code(), false);
-                            if (target.button != null) {
-                                // DISABLED uses the disabled label; APPLIED/REBOOT_PENDING keep
-                                // the "enabled/applied" label (the tweak is on either way).
-                                String label = (status == TweakStatus.DISABLED)
-                                        ? target.disabledLabel : target.enabledLabel;
-                                if (label != null) target.button.setText(label);
+                coordinator.run(new TweakReconcileCoordinator.Sink() {
+                    @Override
+                    public void paint(final String key, final TweakStatus status,
+                                      final String labelOrNull) {
+                        if (activityDestroyed) return;
+                        final ReconcileTarget target = viewTargets.get(key);
+                        if (target == null) return;
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (activityDestroyed) return;
+                                changeStatus(target.statusView, status.code(), false);
+                                if (target.button != null && labelOrNull != null) {
+                                    target.button.setText(labelOrNull);
+                                }
                             }
-                        }
-                    });
-                }
+                        });
+                    }
+                });
             }
         }.start();
+    }
+
+    /**
+     * Synchronously repaints every enabled-but-reboot-pending tweak's icon yellow, before the
+     * background reconcile runs. The per-tweak {@code load(key)} paint in {@link #onCreate} only
+     * knows green/red, so a freshly-applied (reboot-pending) tweak would briefly show green and
+     * then be flipped to yellow by the reconcile pass — this removes that flicker by drawing
+     * yellow up front (the resolver's precedence is the same: enabled + reboot-pending → yellow).
+     */
+    private void paintOptimisticRebootPending() {
+        for (Map.Entry<String, ReconcileTarget> e : reconcileTargets.entrySet()) {
+            String key = e.getKey();
+            if (tweakStateStore.isEnabled(key) && tweakStateStore.isRebootPending(key)) {
+                changeStatus(e.getValue().statusView, TweakStatus.REBOOT_PENDING.code(), false);
+            }
+        }
+    }
+
+    /**
+     * The set of flag-mapped tweak keys registered for the post-root reconcile pass. Exposed
+     * package-private so {@code MainActivityReconcileRegistrationTest} can assert every LIVE
+     * flag-mapped tweak is registered (guarding against forgetting to wire up a new tweak).
+     */
+    java.util.Set<String> registeredReconcileKeys() {
+        return new java.util.LinkedHashSet<String>(reconcileTargets.keySet());
     }
 
     /** Injected into {@link RebootFabController} where no animation is wanted. */
@@ -284,6 +329,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
 
         super.onCreate(savedInstanceState);
+
+        // Single shared state store for enabled / reboot-pending markers (used by the reconcile
+        // pass, revert and apply paths). App context so it doesn't pin this Activity.
+        tweakStateStore = new TweakStateStore(getApplicationContext());
 
         // Recover a reboot that was pending before this activity was recreated
         // (e.g. on rotation) so the FAB can be re-shown on the Tweaks page.
@@ -1710,11 +1759,15 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // All status views are now looked up and optimistically painted from the stored
-        // booleans. Now correct them from the real phenotype-DB state on a single background
-        // thread (heals lost booleans, persists yellow/reboot state correctly). Runs off the
-        // main thread; if root isn't available the checks return UNKNOWN and behaviour is
-        // unchanged.
+        // All status views are now looked up and optimistically painted (green/red) from the
+        // stored enabled booleans. Re-paint any enabled-but-reboot-pending tweak yellow up front
+        // so there is no green→yellow flicker: without this, the background reconcile below would
+        // flip a freshly-applied tweak from green to yellow a moment later.
+        paintOptimisticRebootPending();
+
+        // Now correct the icons from the real phenotype-DB state on a single background thread
+        // (heals lost booleans, persists yellow/reboot state correctly). Runs off the main
+        // thread; if root isn't available the checks return UNKNOWN and behaviour is unchanged.
         reconcileTweakStatusesInBackground();
 
     }
@@ -1793,11 +1846,27 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 // The tweak is being turned off: clear any reboot-pending marker so it can't
                 // linger as yellow after a revert (covers both the phixit and legacy paths below).
-                new TweakStateStore(MainActivity.this).setRebootPending(toRevert, false);
-                // Migrated tweaks: restore the captured baseline via the phixit engine.
-                if (PhixitTweaks.has(toRevert) && hasBaseline(toRevert)) {
+                tweakStateStore.setRebootPending(toRevert, false);
+                // Migrated (phixit) tweaks: their flags live in the Phenotype param_partitions
+                // blobs, which the legacy "DROP TRIGGER + DELETE FROM FlagOverrides" path below
+                // does NOT touch. So we must always go through the phixit engine here, regardless
+                // of whether a baseline was captured:
+                //   - With a baseline (applied by a current build): restore the captured value,
+                //     which drops appended flags back to "absent".
+                //   - Without a baseline (applied by an old pre-baseline build, then reverted):
+                //     explicitly REMOVE the tweak's override flags from the blobs.
+                // Either way isAppliedStrict() reads FALSE afterwards, so the post-launch
+                // reconcile cannot "heal" a deliberately-disabled tweak back to green.
+                if (PhixitTweaks.has(toRevert)) {
                     appendText(logs, "\n\n--  Reverting (phixit): " + toRevert + "  --");
-                    revertPhixitSpecs(logs, PhixitTweaks.specs(toRevert));
+                    if (hasBaseline(toRevert)) {
+                        revertPhixitSpecs(logs, PhixitTweaks.specs(toRevert));
+                    } else {
+                        // No baseline to restore — strip the tweak's flags outright so they no
+                        // longer linger in the DB and resurrect the tweak on next launch.
+                        appendText(logs, "\n\tno baseline captured; removing override flags");
+                        applyPhixitSpecs(logs, removeSpecsFor(PhixitTweaks.specs(toRevert)), false);
+                    }
                     save(false, toRevert);
                     return;
                 }
@@ -1849,7 +1918,7 @@ public class MainActivity extends AppCompatActivity {
                     // Flags are written but the consuming process hasn't restarted: mark the tweak
                     // as reboot-pending so it shows yellow (not green) until the device reboots,
                     // and so the state survives an app restart. Cleared on boot / on revert.
-                    new TweakStateStore(MainActivity.this).setRebootPending(key, true);
+                    tweakStateStore.setRebootPending(key, true);
                 }
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
@@ -2117,7 +2186,7 @@ public class MainActivity extends AppCompatActivity {
                 if (ok) {
                     save(true, "battery_saver_warning");
                     // Persist reboot-pending so the icon stays yellow across an app restart.
-                    new TweakStateStore(MainActivity.this).setRebootPending("battery_saver_warning", true);
+                    tweakStateStore.setRebootPending("battery_saver_warning", true);
                 }
 
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
@@ -2155,7 +2224,7 @@ public class MainActivity extends AppCompatActivity {
                 revertPhixitSpecs(logs, batteryWarningSpecs());
                 save(false, "battery_saver_warning");
                 // Tweak turned off: clear reboot-pending so it doesn't stay yellow.
-                new TweakStateStore(MainActivity.this).setRebootPending("battery_saver_warning", false);
+                tweakStateStore.setRebootPending("battery_saver_warning", false);
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
                     public void run() {
@@ -2773,6 +2842,21 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         return ok;
     }
 
+    /**
+     * Maps each applied spec to a {@link FlagSpec#remove} spec for the same pkg/name, so the
+     * phixit engine drops the override flags from the param_partition blobs. Used by the
+     * no-baseline revert path (legacy pre-baseline applies) so a reverted tweak's flags really
+     * leave the DB and {@code isAppliedStrict} reads FALSE afterwards.
+     */
+    private static java.util.List<FlagSpec> removeSpecsFor(java.util.List<FlagSpec> applied) {
+        java.util.List<FlagSpec> removes = new java.util.ArrayList<FlagSpec>();
+        if (applied == null) return removes;
+        for (FlagSpec s : applied) {
+            removes.add(FlagSpec.remove(s.pkg, s.name));
+        }
+        return removes;
+    }
+
     /** Restores each spec's flag to the baseline captured at apply time. */
     private boolean revertPhixitSpecs(TextView logs, java.util.List<FlagSpec> applied) {
         StringBuilder sb = new StringBuilder();
@@ -3001,10 +3085,12 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 // toggles force_ws / force_no_ws / force_portrait), none of which are in
                 // TweakRegistry.ALL_KEYS. The flag-mapped (phixit) tweaks set Phenotype
                 // param_partitions blobs and create NO triggers, so they can never be matched
-                // here. Their status is owned by reconcileTweakStatusesInBackground(), which
-                // runs after this and is the authority for every flag-mapped key — so this scan
-                // cannot fight the DB-truth reconciliation. Left in place because the legacy
-                // force-screen toggles (which are NOT reconciled) still rely on it.
+                // here. Their status is owned by reconcileTweakStatusesInBackground(), the
+                // authority for every flag-mapped key. The two run on independent background
+                // threads (no ordering between them), but they can never fight: this scan ONLY
+                // writes legacy trigger-based keys (the force-screen toggles), and NONE of those
+                // are in TweakRegistry.ALL_KEYS — so the set of keys each one touches is disjoint.
+                // Left in place because the legacy force-screen toggles (NOT reconciled) rely on it.
                 String get_names = RootDb.query(PHENO_DB,
                         "SELECT name FROM sqlite_master WHERE type='trigger' " +
                                 "AND tbl_name IN ('FlagOverrides','Flags')");
