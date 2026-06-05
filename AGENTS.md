@@ -79,6 +79,47 @@ that use a simulated Android runtime and the app's Android resources. Robolectri
 is pinned to SDK 34 via `app/src/test/resources/robolectric.properties`. CI runs
 this on every push/PR (`.github/workflows/build.yml`).
 
+### Code coverage (JaCoCo — 100% gate)
+
+Coverage is enforced with JaCoCo (pinned `toolVersion = '0.8.12'`, JDK 21 / AGP
+8.5.2 compatible). The gate requires **100% LINE and BRANCH** coverage on all
+*included* classes.
+
+```bash
+./gradlew jacocoTestReport                  # report only (xml + html)
+./gradlew jacocoTestCoverageVerification     # fails the build if < 100%
+./gradlew check                              # runs the verification (and so the report + tests)
+```
+
+- HTML report: `app/build/reports/jacoco/jacocoTestReport/html/index.html`
+- XML report:  `app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml`
+- CI runs `jacocoTestReport jacocoTestCoverageVerification` after the unit tests
+  and uploads the HTML report as the `coverage-report` artifact, so a drop below
+  100% fails the build.
+- A live gap analysis (every class below 100%, with missed lines/branches and
+  uncovered methods, bucketed by test strategy) lives in `docs/coverage-gap.md`.
+
+**Exclusion policy.** We exclude **only** irreducible Android framework glue and
+generated code; everything else must reach 100%. The authoritative list is the
+`jacocoExclusions` Groovy variable in `app/build.gradle` (commented inline). Two
+groups are excluded:
+
+1. **Generated code** — `R`/`R$*`, `BuildConfig`, `Manifest*`, `*_*Factory`, and
+   the AIDL-generated bridge stubs (`IPhixitRoot*`, `Partition$*`). The
+   hand-written `Partition` POJO itself is *not* excluded.
+2. **Framework-entry classes that need instrumentation** — the Activities
+   (`MainActivity`, `SplashActivity`, `AccountsChooser`, `CarRemover`,
+   `StreamLogs`), Services (`PhixitRootService`, `ReapplyJobService`),
+   `BootReceiver`, the `AaxApp` Application, and the view-only dialog wrappers
+   (`AboutDialog`, `NoRootDialog`, `NotSuccessfulDialog`, `RebootDialog`).
+
+Logic / POJO / helper classes (e.g. `RootGate`, `TweakRegistry`, `PhixitTweaks`,
+`PhixitEngine`, `PhixitSnapshot`, `FlagSpec`, `RootDb`, `Version`, `UtilsLibrary`,
+the adapters, `RebootFabController`, `ReapplyScheduler`, the data POJOs) are **in
+scope** and must hit 100%. When you extract logic out of an excluded framework
+class into a new helper, that helper is automatically in scope (it won't match the
+exclusion globs) — add tests for it.
+
 ### Toolchain in a fresh / cloud environment (READ THIS — common gotcha)
 
 This project uses **Gradle 8.7** + **Android Gradle Plugin 8.5.2**, which need
