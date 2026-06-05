@@ -2,6 +2,7 @@ package com.xiddoc.androidautox;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThrows;
 
 import org.junit.Test;
 
@@ -15,7 +16,21 @@ import org.junit.Test;
  *   <li>{@code appliedInDb} ∈ {Boolean.TRUE, Boolean.FALSE, null}</li>
  * </ul>
  *
- * Also verifies the int-code mapping (0/1/2) produced by {@link TweakStatus#code()}.
+ * Also verifies the int-code mapping (0/1/2) produced by {@link TweakStatus#code()},
+ * round-trip via {@link TweakStatus#fromCode}, and invalid-code rejection.
+ *
+ * <h3>Expected truth table (precedence rules in {@link TweakStatusResolver})</h3>
+ * <pre>
+ * enabled | rebootPending | appliedInDb | expected
+ * --------+---------------+-------------+-----------------
+ *   false |     *         |     *       | DISABLED        (rule 1)
+ *   true  |     true      |   TRUE      | REBOOT_PENDING  (rule 2 beats rule 3)
+ *   true  |     true      |   FALSE     | REBOOT_PENDING  (rule 2)
+ *   true  |     true      |   null      | REBOOT_PENDING  (rule 2)
+ *   true  |     false     |   TRUE      | APPLIED         (rule 3)
+ *   true  |     false     |   FALSE     | DISABLED        (rule 5)
+ *   true  |     false     |   null      | APPLIED         (rule 4: optimistic)
+ * </pre>
  */
 public class TweakStatusResolverTest {
 
@@ -40,138 +55,137 @@ public class TweakStatusResolverTest {
 
     @Test
     public void fromCode_roundTrips() {
-        assertEquals(TweakStatus.DISABLED,      TweakStatus.fromCode(0));
-        assertEquals(TweakStatus.REBOOT_PENDING, TweakStatus.fromCode(1));
-        assertEquals(TweakStatus.APPLIED,        TweakStatus.fromCode(2));
+        for (TweakStatus s : TweakStatus.values()) {
+            assertEquals(s, TweakStatus.fromCode(s.code()));
+        }
+        assertEquals(TweakStatus.DISABLED,       TweakStatus.fromCode(0));
+        assertEquals(TweakStatus.REBOOT_PENDING,  TweakStatus.fromCode(1));
+        assertEquals(TweakStatus.APPLIED,         TweakStatus.fromCode(2));
+    }
+
+    @Test
+    public void fromCode_invalidCode_throwsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> TweakStatus.fromCode(99));
+        assertThrows(IllegalArgumentException.class, () -> TweakStatus.fromCode(-1));
     }
 
     // =========================================================================
-    // Truth table — appliedInDb == Boolean.TRUE (rule 1: reality wins → APPLIED)
+    // Truth table — enabled = false (rule 1: always DISABLED regardless of other inputs)
     // =========================================================================
 
-    // enabled=true, rebootPending=true, appliedInDb=TRUE
+    // enabled=false, rebootPending=true, appliedInDb=TRUE  → DISABLED  (rule 1)
     @Test
-    public void tt01_enabled_rebootPending_dbTrue_isApplied() {
-        assertEquals(TweakStatus.APPLIED,
-                TweakStatusResolver.resolve(true, true, Boolean.TRUE));
-    }
-
-    // enabled=true, rebootPending=false, appliedInDb=TRUE
-    @Test
-    public void tt02_enabled_noReboot_dbTrue_isApplied() {
-        assertEquals(TweakStatus.APPLIED,
-                TweakStatusResolver.resolve(true, false, Boolean.TRUE));
-    }
-
-    // enabled=false, rebootPending=true, appliedInDb=TRUE
-    @Test
-    public void tt03_disabled_rebootPending_dbTrue_isApplied() {
-        assertEquals(TweakStatus.APPLIED,
+    public void tt01_disabled_rebootPending_dbTrue_isDisabled() {
+        assertEquals(TweakStatus.DISABLED,
                 TweakStatusResolver.resolve(false, true, Boolean.TRUE));
     }
 
-    // enabled=false, rebootPending=false, appliedInDb=TRUE
+    // enabled=false, rebootPending=false, appliedInDb=TRUE  → DISABLED  (rule 1)
     @Test
-    public void tt04_disabled_noReboot_dbTrue_isApplied() {
-        assertEquals(TweakStatus.APPLIED,
+    public void tt02_disabled_noReboot_dbTrue_isDisabled() {
+        assertEquals(TweakStatus.DISABLED,
                 TweakStatusResolver.resolve(false, false, Boolean.TRUE));
     }
 
-    // =========================================================================
-    // Truth table — appliedInDb == Boolean.FALSE (confirmed NOT in DB)
-    // =========================================================================
-
-    // enabled=true, rebootPending=true, appliedInDb=FALSE → REBOOT_PENDING (rule 2)
+    // enabled=false, rebootPending=true, appliedInDb=FALSE  → DISABLED  (rule 1)
     @Test
-    public void tt05_enabled_rebootPending_dbFalse_isRebootPending() {
-        assertEquals(TweakStatus.REBOOT_PENDING,
-                TweakStatusResolver.resolve(true, true, Boolean.FALSE));
-    }
-
-    // enabled=true, rebootPending=false, appliedInDb=FALSE → DISABLED (rule 4: drift)
-    @Test
-    public void tt06_enabled_noReboot_dbFalse_isDisabled() {
-        assertEquals(TweakStatus.DISABLED,
-                TweakStatusResolver.resolve(true, false, Boolean.FALSE));
-    }
-
-    // enabled=false, rebootPending=true, appliedInDb=FALSE → DISABLED (rule 4: not enabled)
-    @Test
-    public void tt07_disabled_rebootPending_dbFalse_isDisabled() {
+    public void tt03_disabled_rebootPending_dbFalse_isDisabled() {
         assertEquals(TweakStatus.DISABLED,
                 TweakStatusResolver.resolve(false, true, Boolean.FALSE));
     }
 
-    // enabled=false, rebootPending=false, appliedInDb=FALSE → DISABLED (rule 4)
+    // enabled=false, rebootPending=false, appliedInDb=FALSE  → DISABLED  (rule 1)
     @Test
-    public void tt08_disabled_noReboot_dbFalse_isDisabled() {
+    public void tt04_disabled_noReboot_dbFalse_isDisabled() {
         assertEquals(TweakStatus.DISABLED,
                 TweakStatusResolver.resolve(false, false, Boolean.FALSE));
     }
 
-    // =========================================================================
-    // Truth table — appliedInDb == null (unknown / no-root fallback)
-    // =========================================================================
-
-    // enabled=true, rebootPending=true, appliedInDb=null → REBOOT_PENDING (rule 2)
+    // enabled=false, rebootPending=true, appliedInDb=null  → DISABLED  (rule 1)
     @Test
-    public void tt09_enabled_rebootPending_dbUnknown_isRebootPending() {
-        assertEquals(TweakStatus.REBOOT_PENDING,
-                TweakStatusResolver.resolve(true, true, null));
-    }
-
-    // enabled=true, rebootPending=false, appliedInDb=null → APPLIED (rule 3: optimistic)
-    @Test
-    public void tt10_enabled_noReboot_dbUnknown_isApplied() {
-        assertEquals(TweakStatus.APPLIED,
-                TweakStatusResolver.resolve(true, false, null));
-    }
-
-    // enabled=false, rebootPending=true, appliedInDb=null → DISABLED (rule 4: not enabled)
-    @Test
-    public void tt11_disabled_rebootPending_dbUnknown_isDisabled() {
+    public void tt05_disabled_rebootPending_dbNull_isDisabled() {
         assertEquals(TweakStatus.DISABLED,
                 TweakStatusResolver.resolve(false, true, null));
     }
 
-    // enabled=false, rebootPending=false, appliedInDb=null → DISABLED (rule 4)
+    // enabled=false, rebootPending=false, appliedInDb=null  → DISABLED  (rule 1)
     @Test
-    public void tt12_disabled_noReboot_dbUnknown_isDisabled() {
+    public void tt06_disabled_noReboot_dbNull_isDisabled() {
         assertEquals(TweakStatus.DISABLED,
                 TweakStatusResolver.resolve(false, false, null));
+    }
+
+    // =========================================================================
+    // Truth table — enabled=true, rebootPending=true (rule 2: REBOOT_PENDING beats all)
+    // =========================================================================
+
+    /**
+     * Anti-regression: when rebootPending is true, appliedInDb=TRUE must NOT produce
+     * APPLIED.  The flags were just written (DB is TRUE) but the process hasn't restarted
+     * yet; we must stay yellow until the reboot clears the pending marker.
+     */
+    @Test
+    public void tt07_enabled_rebootPending_dbTrue_isRebootPending() {
+        assertEquals(TweakStatus.REBOOT_PENDING,
+                TweakStatusResolver.resolve(true, true, Boolean.TRUE));
+    }
+
+    // enabled=true, rebootPending=true, appliedInDb=FALSE  → REBOOT_PENDING  (rule 2)
+    @Test
+    public void tt08_enabled_rebootPending_dbFalse_isRebootPending() {
+        assertEquals(TweakStatus.REBOOT_PENDING,
+                TweakStatusResolver.resolve(true, true, Boolean.FALSE));
+    }
+
+    // enabled=true, rebootPending=true, appliedInDb=null  → REBOOT_PENDING  (rule 2)
+    @Test
+    public void tt09_enabled_rebootPending_dbNull_isRebootPending() {
+        assertEquals(TweakStatus.REBOOT_PENDING,
+                TweakStatusResolver.resolve(true, true, null));
+    }
+
+    // =========================================================================
+    // Truth table — enabled=true, rebootPending=false (rules 3–5)
+    // =========================================================================
+
+    // enabled=true, rebootPending=false, appliedInDb=TRUE  → APPLIED  (rule 3)
+    @Test
+    public void tt10_enabled_noReboot_dbTrue_isApplied() {
+        assertEquals(TweakStatus.APPLIED,
+                TweakStatusResolver.resolve(true, false, Boolean.TRUE));
+    }
+
+    // enabled=true, rebootPending=false, appliedInDb=FALSE  → DISABLED  (rule 5: confirmed gone)
+    @Test
+    public void tt11_enabled_noReboot_dbFalse_isDisabled() {
+        assertEquals(TweakStatus.DISABLED,
+                TweakStatusResolver.resolve(true, false, Boolean.FALSE));
+    }
+
+    /**
+     * Anti-regression: "optimistic null" (enabled, no reboot pending, DB unreadable) must
+     * return APPLIED, not DISABLED.  Prevents false-red when root/DB is momentarily
+     * unavailable for a tweak that was correctly applied earlier.
+     */
+    @Test
+    public void tt12_enabled_noReboot_dbNull_isApplied_doesNotRegressToRed() {
+        TweakStatus result = TweakStatusResolver.resolve(true, false, null);
+        assertEquals(TweakStatus.APPLIED, result);
+        assertNotEquals(TweakStatus.DISABLED, result);
     }
 
     // =========================================================================
     // Sanity guards
     // =========================================================================
 
-    /** dbTrue must always beat rebootPending regardless of the enabled flag. */
-    @Test
-    public void dbTrue_alwaysBeatsRebootPending() {
-        assertEquals(
-                TweakStatus.APPLIED,
-                TweakStatusResolver.resolve(true, true, Boolean.TRUE));
-        assertEquals(
-                TweakStatus.APPLIED,
-                TweakStatusResolver.resolve(false, true, Boolean.TRUE));
-    }
-
-    /** The three possible return values are all distinct enum members. */
-    @Test
-    public void threeStatusesAreDistinct() {
-        assertNotEquals(TweakStatus.DISABLED,      TweakStatus.REBOOT_PENDING);
-        assertNotEquals(TweakStatus.DISABLED,      TweakStatus.APPLIED);
-        assertNotEquals(TweakStatus.REBOOT_PENDING, TweakStatus.APPLIED);
-    }
-
     /**
-     * Regression: "optimistic null" (enabled, null DB) must return APPLIED, not DISABLED.
-     * This ensures we never regress to red just because root wasn't checked yet.
+     * The three possible return values are all distinct enum members (no accidental
+     * aliasing).
      */
     @Test
-    public void optimisticNull_doesNotRegessToRed() {
-        TweakStatus result = TweakStatusResolver.resolve(true, false, null);
-        assertNotEquals(TweakStatus.DISABLED, result);
-        assertEquals(TweakStatus.APPLIED, result);
+    public void threeStatusesAreDistinct() {
+        assertNotEquals(TweakStatus.DISABLED,       TweakStatus.REBOOT_PENDING);
+        assertNotEquals(TweakStatus.DISABLED,       TweakStatus.APPLIED);
+        assertNotEquals(TweakStatus.REBOOT_PENDING, TweakStatus.APPLIED);
     }
 }

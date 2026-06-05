@@ -14,20 +14,26 @@ package com.xiddoc.androidautox;
  *       applied, {@code null} = unknown (e.g. root not yet granted or DB not checked).</li>
  * </ul>
  *
- * <h3>Precedence rules</h3>
+ * <h3>Precedence rules (ORDER IS LOAD-BEARING — do not reorder)</h3>
  * <ol>
- *   <li><b>Reality wins.</b> {@code appliedInDb == TRUE} → {@link TweakStatus#APPLIED}.
- *       A DB-confirmed applied state is green regardless of any pending-reboot flag.</li>
- *   <li><b>Waiting on reboot.</b> {@code enabled && rebootPending} →
- *       {@link TweakStatus#REBOOT_PENDING}. The user applied the tweak; the DB hasn't
- *       confirmed it yet (or was not checked); the yellow state is preserved.</li>
- *   <li><b>Optimistic / no-root fallback.</b> {@code enabled && appliedInDb == null} →
- *       {@link TweakStatus#APPLIED}. When we simply couldn't check the DB (no root,
- *       service not bound, etc.) we fall back to the boolean preference and show green,
- *       matching today's behaviour so we never regress to red just because we couldn't
- *       verify.</li>
- *   <li><b>Everything else</b> → {@link TweakStatus#DISABLED}. Not enabled, or enabled
- *       but the DB confirms the tweak is gone and no reboot is pending (drift / failure).</li>
+ *   <li><b>Not enabled.</b> {@code !enabled} → {@link TweakStatus#DISABLED} immediately.
+ *       Nothing else matters if the user hasn't switched the tweak on.</li>
+ *   <li><b>Waiting on reboot.</b> {@code rebootPending} → {@link TweakStatus#REBOOT_PENDING}.
+ *       A tweak that was just written to the DB has {@code rebootPending == true}; we must
+ *       show yellow until the device reboots and the marker is cleared. This rule MUST
+ *       precede the {@code appliedInDb == TRUE} check: immediately after writing flags
+ *       the DB <em>is</em> TRUE, but the consuming process hasn't restarted yet — showing
+ *       green at that point would be premature and misleading.</li>
+ *   <li><b>DB confirms applied.</b> {@code Boolean.TRUE.equals(appliedInDb)} →
+ *       {@link TweakStatus#APPLIED}. We only reach here when no reboot is pending, so a
+ *       TRUE result genuinely means the tweak is live.</li>
+ *   <li><b>Optimistic / no-root fallback.</b> {@code appliedInDb == null} →
+ *       {@link TweakStatus#APPLIED}. We reach here (null not consumed by rule 3) only
+ *       because rule 3 already handled TRUE. When the DB couldn't be checked (no root,
+ *       service not bound, decode error) we trust the stored intent and show green,
+ *       preserving legacy behaviour and preventing false-red regressions.</li>
+ *   <li><b>Confirmed gone.</b> {@code appliedInDb == FALSE} → {@link TweakStatus#DISABLED}.
+ *       Flags are confirmed absent — tweak drifted or failed to apply.</li>
  * </ol>
  *
  * <p>This class has no Android dependencies and no mutable state. All logic is in the
@@ -50,22 +56,34 @@ public final class TweakStatusResolver {
      */
     public static TweakStatus resolve(boolean enabled, boolean rebootPending,
             Boolean appliedInDb) {
-        // Rule 1: DB ground-truth confirmed → always green.
+        // Rule 1: tweak is not enabled by the user — always red, check nothing else.
+        if (!enabled) {
+            return TweakStatus.DISABLED;
+        }
+
+        // Rule 2: reboot pending takes priority over the DB state (LOAD-BEARING ORDER).
+        // Right after writing flags to the DB, appliedInDb will be TRUE — but the consuming
+        // process hasn't restarted yet, so we must stay yellow until the reboot clears this
+        // marker.  This rule MUST come before the appliedInDb == TRUE check.
+        if (rebootPending) {
+            return TweakStatus.REBOOT_PENDING;
+        }
+
+        // Rule 3: DB confirms the flags are live.  We only arrive here when rebootPending is
+        // false, so TRUE genuinely means the tweak is applied and running.
         if (Boolean.TRUE.equals(appliedInDb)) {
             return TweakStatus.APPLIED;
         }
 
-        // Rule 2: User applied it; not yet confirmed in DB; waiting on reboot → yellow.
-        if (enabled && rebootPending) {
-            return TweakStatus.REBOOT_PENDING;
-        }
-
-        // Rule 3: Enabled and DB state is unknown (null) → optimistic green fallback.
-        if (enabled && appliedInDb == null) {
+        // Rule 4: DB was not readable (null — could not determine).  Note: TRUE was already
+        // consumed by rule 3 above, so null is the only remaining non-FALSE value here.
+        // Fall back to "optimistic green": trust the stored intent rather than regressing to
+        // red just because root/DB wasn't available at query time.
+        if (appliedInDb == null) {
             return TweakStatus.APPLIED;
         }
 
-        // Rule 4: Disabled, or enabled but DB confirmed gone with no pending reboot.
+        // Rule 5: appliedInDb == FALSE — flags confirmed absent (drift or failed apply).
         return TweakStatus.DISABLED;
     }
 }

@@ -44,11 +44,11 @@ public enum TweakStatus {
      * @throws IllegalArgumentException if {@code code} is not 0, 1, or 2
      */
     public static TweakStatus fromCode(int code) {
-        for (TweakStatus s : values()) {
-            if (s.code == code) {
-                return s;
-            }
+        switch (code) {
+            case 0: return DISABLED;
+            case 1: return REBOOT_PENDING;
+            case 2: return APPLIED;
+            default: throw new IllegalArgumentException("Unknown TweakStatus code: " + code);
         }
-        throw new IllegalArgumentException("Unknown TweakStatus code: " + code);
     }
 }
