@@ -28,27 +28,45 @@ resolves the SQL-injection (#2, DB path) and `runSuWithCmd` timeout (#3) items.
 - The conservative R8 release build runs correctly (reflection-based libs, custom views).
 
 
-## 1. patchforapps — reinstall loop is destructive and unguarded (pre-existing)
+## 1. patchforapps — reinstall loop hardened — RESOLVED
 
-In `MainActivity.patchforapps()` the per-app `pm path -> mv -> pm uninstall -> pm install`
-loop has no failure checks between steps:
-- `pm path` returning empty or **multiple lines (split APKs)** -> wrong/garbage path -> app
-  uninstalled but reinstall reads a bad file -> **app left uninstalled**.
-- `mv` or `pm install` failure after uninstall -> **app gone**, temp APK stranded in
-  `/data/local/tmp`.
-Harden: validate `pm path` yields exactly one `package:` line, abort uninstall if `mv`
-failed, verify install succeeded before deleting the temp APK, attempt rollback on failure.
-Pre-existing; blast radius widened now that the tweak is background-eligible. Needs on-device
-testing incl. a split-APK app and a system-updated app.
+The destructive loop in `MainActivity.patchforapps()` is now guarded:
+- APK path comes from `PackageManager.getApplicationInfo().sourceDir` (no `pm path` parse);
+  split-APK apps are detected (`PatchAppsPolicy.isSplitApk`) and **skipped** before any
+  destructive step instead of being corrupted.
+- The flow copies (not moves) the APK aside, only uninstalls after the copy succeeds, judges
+  each `pm` step by parsing its output for `Success` (NOT the unreliable exit code —
+  `PatchAppsPolicy.pmSucceeded`), confirms the package is actually installed via
+  `PackageManager` before deleting the only APK copy, and attempts best-effort rollback on
+  failure. The rollback decision tree is a pure, unit-tested seam (`PatchAppsPolicy.nextAction`).
+- Any app that still ends up lost is surfaced to the user via `NotSuccessfulDialog` naming the
+  package and its `/data/local/tmp/tmpapk<pkg>.apk` recovery path (no longer buried in a log).
+- Additionally, every GMS DB edit is now auto-backed-up first (see "DB backup safety net"),
+  so even a worst-case DB corruption is recoverable.
+Still needs on-device testing incl. a split-APK app and a system-updated app.
 
-## 2. patchforapps — shell injection via package names (pre-existing)
+## 2. patchforapps — shell injection via package names — RESOLVED
 
-Package names from `appsListPref` are interpolated unquoted into `su` command strings
-(`mv`/`pm uninstall`/`pm install`). Normally `[A-Za-z0-9._]`, but unsanitized. Validate
-against `^[A-Za-z0-9._]+$` (or quote/escape) before use. The whitelist *value* path is safe
-(it goes through the engine, not the shell). Note: the *DB* SQL-injection surface is gone —
-all SQL now runs through `RootDb`/`PhixitRootService` with parameterized queries; this item is
-only about the remaining `pm`/`mv` shell interpolation.
+Package names are now validated against `^[A-Za-z0-9._]+$` (`PatchAppsPolicy.isValidPackageName`)
+and skipped if invalid before any interpolation, and the OS-derived APK paths are
+single-quoted (`PatchAppsPolicy.quoteShellArg`) in every `su` command. The whitelist *value*
+path and all DB SQL were already safe (engine / parameterized queries).
+
+## DB backup safety net (default-on) — ADDED
+
+Every mutating call through `RootDb` (`writePartitions`/`exec`/`execStatements`) now takes a
+backup of the target GMS database BEFORE editing, gated by the default-on `auto_backup_dbs`
+pref (toggle in the menu; `DbBackup`). This covers `phenotype.db` (engine) AND
+`carservicedata.db` (`CarRemover`) and the raw phenotype edits — "the DBs we mess with",
+plural. Backups are WAL-consistent (`wal_checkpoint(TRUNCATE)` + sidecars), written atomically
+(temp -> fsync -> rename), chowned to the app uid, kept newest-N per DB, and non-blocking on
+failure (logged). Root FS primitives (`statOwner`/`chownPath`/`deleteRecursive`/`backupFile`)
+replaced the `stat`/`chown`/`rm -rf` shell-outs; `deleteRecursive` is symlink-safe and
+allowlist-guarded.
+
+**Remaining cleanup:** `MainActivity` still holds its own duplicate `PHENO_DB` literal — migrate
+it to `GmsPaths.PHENO_DB` (the new single source of truth used by `PhixitEngine`/`DbBackup`/
+`PhixitRootService`/`CarRemover`).
 
 ## 3. `runSuWithCmd` timeout — RESOLVED (libsu)
 
