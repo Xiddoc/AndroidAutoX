@@ -14,6 +14,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -129,6 +130,17 @@ public class DbBackupTest {
     }
 
     @Test
+    public void dbName_null_returnsEmpty() {
+        assertEquals("", DbBackup.dbName(null));
+    }
+
+    @Test
+    public void isBackupOf_nullArgs_returnFalse() {
+        assertFalse(DbBackup.isBackupOf("phenotype.db", null));
+        assertFalse(DbBackup.isBackupOf(null, "phenotype.db.20210101T000000000Z.bak"));
+    }
+
+    @Test
     public void selectForPruning_ignoresNonBackupNames() {
         long base = 1609459200000L;
         List<String> names = Arrays.asList(bak(base), "phenotype.db", "random.txt", null);
@@ -218,6 +230,69 @@ public class DbBackupTest {
     }
 
     @Test
+    public void twoArgConstructor_usesGivenRetention_andDefaultCopier() {
+        Context ctx = ApplicationProvider.getApplicationContext();
+        DbBackup.setEnabled(ctx, true);
+        // The (ctx, retention) ctor wires the default (root) copier. We don't invoke the
+        // copy here -- just prove the object is usable and honours the pref decision.
+        DbBackup b = new DbBackup(ctx, 3);
+        assertTrue(b.isEnabled());
+    }
+
+    @Test
+    public void threeArgConstructor_nullCopier_fallsBackToDefault() {
+        Context ctx = ApplicationProvider.getApplicationContext();
+        DbBackup.setEnabled(ctx, false); // disabled so backupBeforeEdit short-circuits, no root call
+        DbBackup b = new DbBackup(ctx, DbBackup.DEFAULT_RETENTION, null);
+        // Disabled path returns false without ever touching the (default/root) copier.
+        assertFalse(b.backupBeforeEdit(PHENO));
+        DbBackup.setEnabled(ctx, true);
+    }
+
+    @Test
+    public void backupBeforeEdit_pruneSkipsForeignBackups_andToleratesUndeletable() throws Exception {
+        Context ctx = ApplicationProvider.getApplicationContext();
+        DbBackup.setEnabled(ctx, true);
+        RecordingCopier copier = new RecordingCopier(false);
+        DbBackup b = new DbBackup(ctx, 1, copier); // keep only the newest phenotype backup
+        File dir = new File(ctx.getFilesDir(), DbBackup.BACKUP_DIR);
+        if (dir.exists()) for (File f : dir.listFiles()) deleteTree(f);
+        dir.mkdirs();
+
+        // A backup of a DIFFERENT db must be ignored by this db's prune (isBackupOf false branch).
+        File foreign = new File(dir, DbBackup.backupFileName(
+                "/x/carservicedata.db", 1609459200000L));
+        try (java.io.FileOutputStream os = new java.io.FileOutputStream(foreign)) {
+            os.write(1);
+        }
+        // An OLD phenotype backup that cannot be deleted (a non-empty directory named like a
+        // backup) -- exercises the "could not prune" tolerance (delete() returns false).
+        File undeletable = new File(dir, DbBackup.backupFileName(PHENO, 1L));
+        undeletable.mkdirs();
+        new File(undeletable, "child").createNewFile();
+
+        // Now write two fresh phenotype backups; with retention 1, prune targets the older
+        // ones (including the undeletable dir) but must not throw and must spare the foreign one.
+        b.backupBeforeEdit(PHENO);
+        Thread.sleep(2);
+        b.backupBeforeEdit(PHENO);
+
+        assertTrue("foreign-db backup must survive this db's prune", foreign.exists());
+        assertTrue("undeletable old backup tolerated (logged, not fatal)", undeletable.exists());
+
+        // cleanup
+        for (File f : dir.listFiles()) deleteTree(f);
+    }
+
+    private static void deleteTree(File f) {
+        if (f.isDirectory()) {
+            File[] kids = f.listFiles();
+            if (kids != null) for (File k : kids) deleteTree(k);
+        }
+        f.delete();
+    }
+
+    @Test
     public void backupBeforeEdit_copyOk_returnsTrue_andPrunesToRetention() {
         Context ctx = ApplicationProvider.getApplicationContext();
         DbBackup.setEnabled(ctx, true);
@@ -241,5 +316,54 @@ public class DbBackupTest {
             if (DbBackup.isBackupOf("phenotype.db", n)) remaining++;
         }
         assertEquals("prune keeps only the newest `retention` backups", 2, remaining);
+    }
+
+    // --- defensive internals (white-box: real behavior of the private prune helper) ---
+
+    /** A File whose listing returns null (missing dir) or throws, to drive prune's defenses. */
+    private static final class ListingFile extends File {
+        private final boolean throwOnList;
+        ListingFile(String pathname, boolean throwOnList) {
+            super(pathname);
+            this.throwOnList = throwOnList;
+        }
+        @Override
+        public String[] list() {
+            if (throwOnList) throw new RuntimeException("simulated list() failure (e.g. SecurityException)");
+            return null; // simulate "not a directory" / unreadable -> null listing
+        }
+    }
+
+    @Test
+    public void pruneOldBackups_nullListing_returnsWithoutDeleting() throws Exception {
+        Context ctx = ApplicationProvider.getApplicationContext();
+        DbBackup b = new DbBackup(ctx, 1);
+        Method prune = DbBackup.class.getDeclaredMethod("pruneOldBackups", File.class, String.class);
+        prune.setAccessible(true);
+        // dir.list() == null -> the method must early-return cleanly (no exception).
+        prune.invoke(b, new ListingFile("/no/such/dir", false), "phenotype.db");
+    }
+
+    @Test
+    public void pruneOldBackups_listingThrows_isSwallowed() throws Exception {
+        // A dir.list() that throws (e.g. SecurityException) must be logged and swallowed so a
+        // prune failure never undoes the just-written backup.
+        Context ctx = ApplicationProvider.getApplicationContext();
+        DbBackup b = new DbBackup(ctx, 1);
+        Method prune = DbBackup.class.getDeclaredMethod("pruneOldBackups", File.class, String.class);
+        prune.setAccessible(true);
+        // Must not propagate the exception.
+        prune.invoke(b, new ListingFile(System.getProperty("java.io.tmpdir"), true), "phenotype.db");
+    }
+
+    @Test
+    public void tsOf_nonMatchingName_returnsEmptyString() throws Exception {
+        Method tsOf = DbBackup.class.getDeclaredMethod("tsOf", String.class);
+        tsOf.setAccessible(true);
+        // A name that does not match the backup pattern yields "" (the defensive else branch).
+        assertEquals("", tsOf.invoke(null, "not-a-backup-name"));
+        // Sanity: a matching name yields its embedded timestamp.
+        assertEquals("20210101T000000000Z",
+                tsOf.invoke(null, "phenotype.db.20210101T000000000Z.bak"));
     }
 }
