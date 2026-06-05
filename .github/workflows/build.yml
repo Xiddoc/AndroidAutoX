@@ -6,6 +6,7 @@ on:
       - main
       - master
       - claude/app-refactor-ci-setup-bLSpb
+      - claude/100-percent-test-coverage-5mbY4
   pull_request:
 
 jobs:
@@ -40,6 +41,16 @@ jobs:
 
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
+
+      - name: Verify 100% code coverage (JaCoCo)
+        run: ./gradlew jacocoTestReport jacocoTestCoverageVerification
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: app/build/reports/jacoco/jacocoTestReport/html
 
       - name: Assemble debug APK
         run: ./gradlew assembleDebug

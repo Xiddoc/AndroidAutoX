@@ -1,4 +1,11 @@
 apply plugin: 'com.android.application'
+apply plugin: 'jacoco'
+
+// JaCoCo: pin a version compatible with JDK 21 + AGP 8.5.2. 0.8.12 supports the
+// class-file format emitted by JDK 21.
+jacoco {
+    toolVersion = '0.8.12'
+}
 
 allprojects {
     repositories {
@@ -112,6 +119,18 @@ android {
             // for the Robolectric/JUnit smoke tests; be wary when adding tests that
             // actually exercise framework behaviour.
             returnDefaultValues = true
+            // JaCoCo + Robolectric: Robolectric loads classes through its own
+            // instrumenting sandbox classloader, which strips the source-location
+            // debug info JaCoCo relies on. Without this flag JaCoCo treats those
+            // classes as "no location" and silently drops their coverage, so every
+            // Robolectric-exercised class reports 0% despite passing tests. Including
+            // no-location classes makes that coverage register against the report.
+            all {
+                jacoco {
+                    includeNoLocationClasses = true
+                    excludes = ['jdk.internal.*']
+                }
+            }
         }
     }
 
@@ -181,4 +200,128 @@ dependencies {
     implementation 'com.github.topjohnwu.libsu:core:5.2.2'
     implementation 'com.github.topjohnwu.libsu:service:5.2.2'
 
+}
+
+// ---------------------------------------------------------------------------
+// Code-coverage gate (JaCoCo) — 100% LINE + BRANCH on included classes.
+// ---------------------------------------------------------------------------
+//
+// EXCLUSION POLICY
+// ----------------
+// We exclude ONLY irreducible Android framework glue and generated code.
+// Everything else MUST reach 100% line + branch coverage. The two groups are:
+//
+//   1. Generated code — produced by the build (R, BuildConfig, Manifest,
+//      Dagger/Hilt-style *_Factory, and AIDL-generated stubs). These are not
+//      hand-written and not meaningfully unit-testable.
+//
+//   2. Framework-entry classes — Activities, Services, BroadcastReceivers, the
+//      Application subclass, and dialog wrappers that only inflate views. These
+//      cannot be exercised without instrumentation (a real/emulated device) and
+//      so are out of scope for the off-device JVM (Robolectric/JUnit) suite.
+//
+// IMPORTANT: logic / POJO / helper classes are NOT excluded and must hit 100%
+// (RootGate, TweakRegistry, PhixitTweaks, PhixitEngine, PhixitSnapshot,
+// FlagSpec, RootDb, Version, UtilsLibrary, RecyclerItemClickListener,
+// BottomDialog, CommonPageAdapter, MyAdapter, AccountAdapter, CarAdapter,
+// RebootFabController, RebootFabVisibility, ReapplyScheduler, AppInfo, AppsList,
+// AccountInfo, CarInfo, Partition data class).
+//
+// Later agents: to change what is in/out of scope, edit jacocoExclusions below.
+def jacocoExclusions = [
+        // --- Group 1: generated code ---
+        '**/R.class',
+        '**/R$*.class',
+        '**/BuildConfig.*',
+        '**/Manifest*.*',
+        '**/*_*Factory.*',
+        // AIDL-generated bridge stubs (the .aidl-derived IPhixitRoot interface +
+        // the generated Stub/Proxy for the Partition parcelable). NOTE: the
+        // hand-written Partition POJO (Partition.class) is NOT excluded — only
+        // its generated inner classes (Partition$*).
+        '**/IPhixitRoot*.*',
+        '**/Partition$*.*',
+
+        // --- Group 2: framework-entry classes (need instrumentation) ---
+        // Activities
+        '**/MainActivity*.*',
+        '**/SplashActivity*.*',
+        '**/AccountsChooser*.*',
+        '**/CarRemover*.*',
+        '**/StreamLogs*.*',
+        // Services
+        '**/PhixitRootService*.*',
+        '**/ReapplyJobService*.*',
+        // BroadcastReceiver
+        '**/BootReceiver*.*',
+        // Application
+        '**/AaxApp*.*',
+        // Dialog wrappers that only inflate views
+        '**/AboutDialog*.*',
+        '**/NoRootDialog*.*',
+        '**/NotSuccessfulDialog*.*',
+        '**/RebootDialog*.*',
+]
+
+// Debug-variant javac output (and kotlin, if any is ever added) form the class
+// dirs we measure. Source dirs are the main java/kotlin trees.
+def coverageClassDirs = {
+    fileTree(dir: "${buildDir}/intermediates/javac/debug/compileDebugJavaWithJavac/classes",
+             excludes: jacocoExclusions) +
+    fileTree(dir: "${buildDir}/tmp/kotlin-classes/debug",
+             excludes: jacocoExclusions)
+}
+def coverageSourceDirs = files([
+        'src/main/java',
+        'src/main/kotlin',
+])
+def coverageExecData = fileTree(dir: buildDir, includes: [
+        'jacoco/testDebugUnitTest.exec',
+        'outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec',
+])
+
+tasks.register('jacocoTestReport', JacocoReport) {
+    dependsOn 'testDebugUnitTest'
+    group = 'verification'
+    description = 'Generates JaCoCo coverage report (xml + html) for the debug unit tests.'
+
+    reports {
+        xml.required = true
+        html.required = true
+    }
+
+    sourceDirectories.setFrom(coverageSourceDirs)
+    classDirectories.setFrom(coverageClassDirs())
+    executionData.setFrom(coverageExecData)
+}
+
+tasks.register('jacocoTestCoverageVerification', JacocoCoverageVerification) {
+    dependsOn 'jacocoTestReport'
+    group = 'verification'
+    description = 'Fails the build unless included classes have 100% line + branch coverage.'
+
+    sourceDirectories.setFrom(coverageSourceDirs)
+    classDirectories.setFrom(coverageClassDirs())
+    executionData.setFrom(coverageExecData)
+
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 1.0
+            }
+            limit {
+                counter = 'BRANCH'
+                value = 'COVEREDRATIO'
+                minimum = 1.0
+            }
+        }
+    }
+}
+
+// `./gradlew check` runs the coverage gate (which in turn runs the report and
+// the unit tests). CI runs `jacocoTestReport jacocoTestCoverageVerification`.
+tasks.named('check') {
+    dependsOn 'jacocoTestCoverageVerification'
 }
