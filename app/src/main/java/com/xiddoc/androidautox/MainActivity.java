@@ -410,6 +410,10 @@ public class MainActivity extends AppCompatActivity {
         // Settings is the new third tab (Logs stays page_two / logsPageIndex).
         adapter.insertViewId(R.id.page_three, getString(R.string.tab_settings));
         viewPager.setAdapter(adapter);
+        // All three pages are static <include> views; with the default offscreen limit of 1,
+        // swiping away from Settings (page three) would detach it and a swipe back would find
+        // a null page_three. Keep all three alive.
+        viewPager.setOffscreenPageLimit(2);
 
         com.google.android.material.tabs.TabLayout tabLayout = findViewById(R.id.tab_layout);
         tabLayout.setupWithViewPager(viewPager);
@@ -1974,156 +1978,124 @@ public class MainActivity extends AppCompatActivity {
 
         final View devGroup = findViewById(R.id.settings_dev_group);
 
-        // Drive the wiring from SettingAction so it stays the source of truth for the
-        // on-screen set and dev-only gating.
+        // Drive the wiring from SettingAction so it stays the canonical list of settings
+        // actions and their dev-only gating.
         for (SettingAction action : SettingAction.values()) {
             switch (action) {
                 case RESET_TWEAKS: {
                     Button b = findViewById(R.id.settings_reset);
-                    b.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            androidx.appcompat.app.AlertDialog.Builder builder =
-                                    new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this);
-                            builder.setMessage(getString(R.string.revert_everything_dialog))
-                                    .setPositiveButton(getString(android.R.string.ok),
-                                            new DialogInterface.OnClickListener() {
-                                                public void onClick(DialogInterface dialog, int id) {
-                                                    getAndRemoveOptionsSelected();
-                                                }
-                                            })
-                                    .setNegativeButton(getString(android.R.string.cancel),
-                                            new DialogInterface.OnClickListener() {
-                                                public void onClick(DialogInterface dialog, int id) {
-                                                    dialog.cancel();
-                                                }
-                                            });
-                            builder.setCancelable(true);
-                            builder.create().show();
-                        }
-                    });
+                    b.setOnClickListener(v -> showResetTweaksDialog());
                     setOnLongClickListener(b, R.string.settings_reset_desc);
                     break;
                 }
                 case AUTO_REAPPLY: {
-                    final Button b = findViewById(R.id.settings_reapply);
-                    applyToggleLabel(b, R.string.settings_reapply_label,
-                            ReapplyScheduler.isAutoReapplyEnabled(getApplicationContext()));
-                    b.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            boolean newState = !ReapplyScheduler.isAutoReapplyEnabled(getApplicationContext());
-                            ReapplyScheduler.setAutoReapplyEnabled(getApplicationContext(), newState);
-                            applyToggleLabel(b, R.string.settings_reapply_label, newState);
-                            Toast.makeText(getApplicationContext(),
-                                    getString(newState ? R.string.auto_reapply_on : R.string.auto_reapply_off),
-                                    Toast.LENGTH_SHORT).show();
-                        }
-                    });
+                    Button b = findViewById(R.id.settings_reapply);
+                    bindToggle(b, R.string.settings_reapply_label,
+                            () -> ReapplyScheduler.isAutoReapplyEnabled(getApplicationContext()),
+                            on -> ReapplyScheduler.setAutoReapplyEnabled(getApplicationContext(), on),
+                            R.string.auto_reapply_on, R.string.auto_reapply_off, null);
                     setOnLongClickListener(b, R.string.settings_reapply_desc);
                     break;
                 }
                 case AA_SETTINGS: {
                     Button b = findViewById(R.id.settings_aa);
-                    b.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            openApp(getApplicationContext(), "com.google.android.projection.gearhead");
-                        }
-                    });
+                    b.setOnClickListener(v -> openAndroidAutoSettings());
                     setOnLongClickListener(b, R.string.settings_aa_desc);
                     break;
                 }
                 case NONDESTRUCTIVE_PATCH: {
-                    final Button b = findViewById(R.id.settings_ndpatch);
-                    applyToggleLabel(b, R.string.settings_ndpatch_label,
-                            isExperimentalNonDestructivePatch(getApplicationContext()));
-                    b.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            // Opt-in, default-OFF: switch patchforapps() between the destructive
-                            // reinstall (default) and the experimental non-destructive
-                            // pm set-installer path. See docs/patch-apps-installer-analysis.md.
-                            boolean newState = !isExperimentalNonDestructivePatch(getApplicationContext());
-                            setExperimentalNonDestructivePatch(newState);
-                            applyToggleLabel(b, R.string.settings_ndpatch_label, newState);
-                            Toast.makeText(getApplicationContext(),
-                                    getString(newState ? R.string.nondestructive_patch_on
-                                            : R.string.nondestructive_patch_off),
-                                    Toast.LENGTH_SHORT).show();
-                        }
-                    });
+                    Button b = findViewById(R.id.settings_ndpatch);
+                    // Opt-in, default-OFF: switch patchforapps() between the destructive
+                    // reinstall (default) and the experimental non-destructive
+                    // pm set-installer path. See docs/patch-apps-installer-analysis.md.
+                    bindToggle(b, R.string.settings_ndpatch_label,
+                            () -> isExperimentalNonDestructivePatch(getApplicationContext()),
+                            this::setExperimentalNonDestructivePatch,
+                            R.string.nondestructive_patch_on, R.string.nondestructive_patch_off, null);
                     setOnLongClickListener(b, R.string.settings_ndpatch_desc);
                     break;
                 }
                 case AUTO_BACKUP_DBS: {
-                    final Button b = findViewById(R.id.settings_backup);
-                    applyToggleLabel(b, R.string.settings_backup_label, DbBackup.isEnabled(prefs));
-                    b.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            // Default-ON safety net: a copy of every GMS DB is stashed before an
-                            // edit. This makes that toggle user-visible/disableable. See DbBackup.
-                            boolean newState = !DbBackup.isEnabled(prefs);
-                            DbBackup.setEnabled(getApplicationContext(), newState);
-                            applyToggleLabel(b, R.string.settings_backup_label, newState);
-                            Toast.makeText(getApplicationContext(),
-                                    getString(newState ? R.string.auto_backup_dbs_on
-                                            : R.string.auto_backup_dbs_off),
-                                    Toast.LENGTH_SHORT).show();
-                        }
-                    });
+                    Button b = findViewById(R.id.settings_backup);
+                    // Default-ON safety net: a copy of every GMS DB is stashed before an edit.
+                    // This makes that toggle user-visible/disableable. See DbBackup.
+                    bindToggle(b, R.string.settings_backup_label,
+                            () -> DbBackup.isEnabled(prefs),
+                            on -> DbBackup.setEnabled(getApplicationContext(), on),
+                            R.string.auto_backup_dbs_on, R.string.auto_backup_dbs_off, null);
                     setOnLongClickListener(b, R.string.settings_backup_desc);
                     break;
                 }
                 case PHIXIT_APPLY_TEST: {
                     Button b = findViewById(R.id.settings_devtest);
-                    b.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            phixitApplyTest((TextView) findViewById(R.id.logs));
-                        }
-                    });
+                    b.setOnClickListener(v -> phixitApplyTest(getLogsView()));
                     setOnLongClickListener(b, R.string.settings_devtest_desc);
                     break;
                 }
                 case PHIXIT_DUMP_ALL: {
                     Button b = findViewById(R.id.settings_devdump);
-                    b.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            dumpAllFlags((TextView) findViewById(R.id.logs));
-                        }
-                    });
+                    b.setOnClickListener(v -> dumpAllFlags(getLogsView()));
                     setOnLongClickListener(b, R.string.settings_devdump_desc);
                     break;
                 }
                 case DEV_MODE_TOGGLE: {
-                    final Button b = findViewById(R.id.settings_devmode);
-                    applyToggleLabel(b, R.string.settings_devmode_label, DevModeStore.isEnabled(prefs));
-                    b.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            boolean enabled = DevModeStore.toggle(prefs);
-                            applyToggleLabel(b, R.string.settings_devmode_label, enabled);
-                            Toast.makeText(getApplicationContext(),
-                                    enabled ? "Developer mode enabled" : "Developer mode disabled",
-                                    Toast.LENGTH_SHORT).show();
-                            devGroup.setVisibility(enabled ? View.VISIBLE : View.GONE);
-                        }
-                    });
+                    Button b = findViewById(R.id.settings_devmode);
+                    bindToggle(b, R.string.settings_devmode_label,
+                            () -> DevModeStore.isEnabled(prefs),
+                            on -> DevModeStore.setEnabled(prefs, on),
+                            R.string.settings_devmode_on, R.string.settings_devmode_off,
+                            () -> devGroup.setVisibility(
+                                    DevModeStore.isEnabled(prefs) ? View.VISIBLE : View.GONE));
                     setOnLongClickListener(b, R.string.settings_devmode_desc);
                     break;
                 }
             }
         }
 
-        // Initial visibility of the developer group: only shown when the dev-only actions
-        // are part of the visible set (i.e. developer mode is enabled).
-        boolean devMode = DevModeStore.isEnabled(prefs);
-        boolean showDevGroup = SettingAction.visibleActions(devMode)
-                .contains(SettingAction.PHIXIT_APPLY_TEST);
-        devGroup.setVisibility(showDevGroup ? View.VISIBLE : View.GONE);
+        // Initial visibility of the developer group, derived the same way as the toggle path.
+        devGroup.setVisibility(DevModeStore.isEnabled(prefs) ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * Wires a settings toggle button: paints the current label, and on click flips the
+     * persisted state, repaints the label, toasts on/off, and optionally runs
+     * {@code afterToggle} (e.g. to flip the developer group's visibility).
+     *
+     * @param afterToggle optional follow-up run after the new state is persisted; may be null.
+     */
+    private void bindToggle(Button btn, int labelRes,
+                            java.util.function.BooleanSupplier getter,
+                            java.util.function.Consumer<Boolean> setter,
+                            int onMsgRes, int offMsgRes, Runnable afterToggle) {
+        applyToggleLabel(btn, labelRes, getter.getAsBoolean());
+        btn.setOnClickListener(v -> {
+            boolean newState = !getter.getAsBoolean();
+            setter.accept(newState);
+            applyToggleLabel(btn, labelRes, newState);
+            Toast.makeText(getApplicationContext(),
+                    getString(newState ? onMsgRes : offMsgRes), Toast.LENGTH_SHORT).show();
+            if (afterToggle != null) {
+                afterToggle.run();
+            }
+        });
+    }
+
+    /** Confirms then resets all tweaks (the old overflow "Reset all tweaks" action). */
+    private void showResetTweaksDialog() {
+        androidx.appcompat.app.AlertDialog.Builder builder =
+                new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this);
+        builder.setMessage(getString(R.string.revert_everything_dialog))
+                .setPositiveButton(getString(android.R.string.ok),
+                        (dialog, id) -> getAndRemoveOptionsSelected())
+                .setNegativeButton(getString(android.R.string.cancel),
+                        (dialog, id) -> dialog.cancel());
+        builder.setCancelable(true);
+        builder.create().show();
+    }
+
+    /** Opens the Android Auto (Gearhead) settings app. */
+    private void openAndroidAutoSettings() {
+        openApp(getApplicationContext(), "com.google.android.projection.gearhead");
     }
 
     /**
@@ -2131,8 +2103,8 @@ public class MainActivity extends AppCompatActivity {
      * persisted state inline (these were checkable menu items before the Settings tab).
      */
     private void applyToggleLabel(Button b, int labelRes, boolean on) {
-        b.setText(getString(labelRes) + ": "
-                + getString(on ? R.string.settings_state_on : R.string.settings_state_off));
+        b.setText(getString(R.string.settings_toggle_label, getString(labelRes),
+                getString(on ? R.string.settings_state_on : R.string.settings_state_off)));
     }
 
     /**
@@ -2142,54 +2114,14 @@ public class MainActivity extends AppCompatActivity {
     private void showTranslatorsDialog() {
         androidx.appcompat.app.AlertDialog.Builder builder =
                 new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this);
-        builder.setMessage(Html.fromHtml("Russian: Diversant96<br>" +
-                "Dutch: Coyenzo, smit.sydney<br>" +
-                "Slovak: Jozo19<br>" +
-                "Spanish: Krilok, jdavidcs4<br>" +
-                "Czech: Martin2412, LLZN, pesekpata<br>" +
-                "Slovenian: Brubblu<br>" +
-                "French: Nova.kin, Sperafico<br>" +
-                "Brazilian Portuguese: Gsproenca<br>" +
-                "Vietnamese: Quang.chk1, votruongvu.hcm<br>" +
-                "German: Lassmiranda, cbrosius<br>" +
-                "Korean: Mabig<br>" +
-                "Catalan: rogerpi95<br>" +
-                "Polish: Nor7ovich, MarcinzSowie, Geranium743<br>" +
-                "Serbian: BojanJagodic91<br>" +
-                "Chinese (simplified): Danchunlanse<br>" +
-                "Chinese (traditional): chh2299<br>" +
-                "Hebrew: yaari302<br>" +
-                "Japanese: HHSAN<br>" +
-                "Greek: panbimis<br>" +
-                "Turkish: un4saken<br>" +
-                "Arabic: almaqhor<br>" +
-                "<br>Interested in translating AndroidAutoX in your own language? Open a translation PR on <a href=\"https://github.com/Xiddoc/AndroidAutoX\">GitHub</a>!"));
+        builder.setMessage(Html.fromHtml(getString(R.string.translators_list)));
         builder.setCancelable(true);
-        builder.setPositiveButton(getString(android.R.string.ok), new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-            }
+        builder.setPositiveButton(getString(android.R.string.ok), (dialog, which) -> {
         });
         androidx.appcompat.app.AlertDialog alert = builder.create();
         alert.show();
         ((TextView) alert.findViewById(android.R.id.message))
                 .setMovementMethod(LinkMovementMethod.getInstance());
-    }
-
-    /** Developer mode flag (stored in the shared app prefs). Gates the dev/PoC settings
-     *  entries and the startup diagnostic so they stay out of sight for normal users.
-     *  Persistence lives in {@link DevModeStore}; these helpers just resolve the prefs
-     *  from a {@code Context} and delegate, keeping the prefs key identical. */
-    static final String DEV_MODE_KEY = DevModeStore.DEV_MODE_KEY;
-
-    public static boolean isDevMode(Context ctx) {
-        return DevModeStore.isEnabled(
-                ctx.getSharedPreferences(PhixitEngine.PREFS, Context.MODE_PRIVATE));
-    }
-
-    public static void setDevMode(Context ctx, boolean enabled) {
-        DevModeStore.setEnabled(
-                ctx.getSharedPreferences(PhixitEngine.PREFS, Context.MODE_PRIVATE), enabled);
     }
 
     public WindowManager.LayoutParams setDialogLayoutParams(Dialog dialog) {
@@ -2329,7 +2261,7 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Reads the experimental non-destructive patch preference (default {@code false}). Stored
      * in the shared {@link PhixitEngine#PREFS} file (the same explicitly-named file used by
-     * {@link #isDevMode(Context)} and {@link DbBackup}) so all the app toggles live together.
+     * {@link DevModeStore} and {@link DbBackup}) so all the app toggles live together.
      * See {@link PatchAppsPolicy} and docs/patch-apps-installer-analysis.md.
      */
     static boolean isExperimentalNonDestructivePatch(Context ctx) {
