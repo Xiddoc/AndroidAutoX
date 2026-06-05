@@ -2,22 +2,32 @@ package com.xiddoc.androidautox;
 
 /**
  * Single source of truth for the on-device paths of the GMS / Gearhead databases
- * and caches this app edits. Previously these literals were duplicated across
- * {@link PhixitEngine}, {@link DbBackup}, {@link com.xiddoc.androidautox.CarRemoverActivity.CarRemover}
- * (and {@code MainActivity}); centralizing them keeps the auto-backup choke point and
- * the engine in agreement about exactly which files get the safety net.
+ * and caches this app edits, so the same absolute path is never spelled out in more
+ * than one place. The phenotype DB path in particular was previously duplicated
+ * across {@link GmsCommandBuilder}, {@link GearheadDbQueries}, {@link PhixitEngine},
+ * {@link DbBackup}, {@link com.xiddoc.androidautox.CarRemoverActivity.CarRemover}
+ * (and {@code MainActivity}); those now all reference the constants here, keeping the
+ * auto-backup choke point and the engine in agreement about exactly which files get
+ * the safety net.
  *
- * <p>NOTE: {@code MainActivity} still holds its own copy of the phenotype DB path
- * (it is owned by another agent and out of scope here); migrating it to this holder
- * is a follow-up.
+ * <p>Pure constants holder — no behaviour, no device access.
  */
 public final class GmsPaths {
 
-    private GmsPaths() {}
+    private GmsPaths() {
+    }
 
-    /** GMS Phenotype feature-flag database. */
-    public static final String PHENO_DB =
+    /**
+     * Absolute path to the GMS phenotype feature-flag database.
+     *
+     * <p>{@link #PHENO_DB} is a synonym kept for the call sites that spell it that
+     * way; both point at the same literal.
+     */
+    public static final String PHENOTYPE_DB =
             "/data/data/com.google.android.gms/databases/phenotype.db";
+
+    /** Synonym of {@link #PHENOTYPE_DB} (same literal). */
+    public static final String PHENO_DB = PHENOTYPE_DB;
 
     /** GMS's phenotype cache dir, cleared after an edit so GMS re-reads the DB. */
     public static final String PHENO_CACHE_DIR =

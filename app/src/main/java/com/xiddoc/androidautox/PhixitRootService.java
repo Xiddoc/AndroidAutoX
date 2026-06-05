@@ -185,25 +185,22 @@ public class PhixitRootService extends RootService {
         public String query(String dbPath, String sql) {
             SQLiteDatabase db = openRW(dbPath);
             Cursor c = null;
-            StringBuilder sb = new StringBuilder();
+            List<String> rows = new ArrayList<String>();
             try {
                 c = db.rawQuery(sql, null);
                 int cols = c.getColumnCount();
-                boolean firstRow = true;
                 while (c.moveToNext()) {
-                    if (!firstRow) sb.append('\n');
-                    firstRow = false;
+                    String[] row = new String[cols];
                     for (int i = 0; i < cols; i++) {
-                        if (i > 0) sb.append('|');
-                        String v = c.getString(i);
-                        if (v != null) sb.append(v);
+                        row[i] = c.getString(i);
                     }
+                    rows.add(RootSqlText.formatRow(row));
                 }
             } finally {
                 if (c != null) c.close();
                 db.close();
             }
-            return sb.toString();
+            return RootSqlText.joinRows(rows);
         }
 
         @Override
@@ -213,13 +210,10 @@ public class PhixitRootService extends RootService {
                 // Lenient, like `sqlite3 -batch` (no .bail): attempt each statement and
                 // keep going on error, so e.g. a DELETE against a table that no longer
                 // exists on modern GMS doesn't abort the rest.
-                for (String s : statements) {
-                    if (s == null) continue;
-                    String t = s.trim();
-                    // Strip a single trailing ';' (the outermost terminator). Statement
-                    // bodies -- e.g. a trigger's BEGIN ... END -- keep their inner ';'.
-                    if (t.endsWith(";")) t = t.substring(0, t.length() - 1).trim();
-                    if (t.isEmpty()) continue;
+                // Normalise (trim + strip a single outermost ';', dropping null/blank)
+                // in RootSqlText, then execute each — bodies like a trigger's
+                // BEGIN ... END keep their inner ';'.
+                for (String t : RootSqlText.normalizeBatch(statements)) {
                     try {
                         db.execSQL(t);
                     } catch (Throwable err) {

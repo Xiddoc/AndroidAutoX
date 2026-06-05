@@ -3,6 +3,8 @@ package com.xiddoc.androidautox;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import androidx.annotation.VisibleForTesting;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -128,9 +130,19 @@ public final class TweakRegistry {
 
     /** Collects the specs for every currently-enabled tweak. */
     public static List<FlagSpec> enabledSpecs(Context ctx) {
+        return enabledSpecs(ctx, ALL_KEYS);
+    }
+
+    /**
+     * Collects the specs for every enabled key in {@code keys}. Package-private so the
+     * (defensive) {@code specsFor == null} arm can be exercised with a bogus key — for the
+     * real {@link #ALL_KEYS} every key resolves to a non-null spec list.
+     */
+    @VisibleForTesting
+    static List<FlagSpec> enabledSpecs(Context ctx, String[] keys) {
         SharedPreferences sp = ctx.getSharedPreferences(PhixitEngine.PREFS, Context.MODE_PRIVATE);
         List<FlagSpec> all = new ArrayList<FlagSpec>();
-        for (String key : ALL_KEYS) {
+        for (String key : keys) {
             if (!sp.getBoolean(key, false)) continue;
             List<FlagSpec> s = specsFor(ctx, key);
             if (s != null) all.addAll(s);

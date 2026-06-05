@@ -9,6 +9,8 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.topjohnwu.superuser.ipc.RootService;
 
 import java.util.Arrays;
@@ -27,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 public final class RootDb {
 
     private static final String TAG = "AndroidAutoX";
+    /** Default bind timeout for the public {@link #get()} entry point. */
     private static final long BIND_TIMEOUT_SECONDS = 40;
 
     private static volatile IPhixitRoot svc;
@@ -40,6 +43,18 @@ public final class RootDb {
 
     /** Returns the connected bridge, binding on first use. Background-thread only. */
     public static synchronized IPhixitRoot get() {
+        return get(BIND_TIMEOUT_SECONDS);
+    }
+
+    /**
+     * Bind+await implementation behind {@link #get()}. Package-private so off-device
+     * tests can pass a short timeout to exercise the timeout branch without a
+     * 40-second wall-clock wait, instead of mutating shared static state. The public
+     * {@link #get()} always delegates here with {@link #BIND_TIMEOUT_SECONDS}, so its
+     * behavior is unchanged.
+     */
+    @VisibleForTesting
+    static synchronized IPhixitRoot get(long timeoutSeconds) {
         if (svc != null && svc.asBinder() != null && svc.asBinder().isBinderAlive()) {
             return svc;
         }
@@ -67,7 +82,7 @@ public final class RootDb {
             }
         });
         try {
-            if (!latch.await(BIND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            if (!latch.await(timeoutSeconds, TimeUnit.SECONDS)) {
                 Log.e(TAG, "Timed out binding PhixitRootService");
             }
         } catch (InterruptedException e) {

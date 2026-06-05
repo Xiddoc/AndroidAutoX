@@ -2180,7 +2180,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 appendText(logs, "\n\n--  restoring Google Play Services   --");
-                appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
+                appendText(logs, runSuWithCmd(GmsCommandBuilder.enableGms()).getStreamLogsWithLabels());
 
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
@@ -2405,11 +2405,11 @@ public class MainActivity extends AppCompatActivity {
 
     private String gainOwnership(final TextView logs) {
         appendText(logs, "\n\n--  Gaining ownership of the database   --");
-        appendText(logs, runSuWithCmd("chown root /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
+        appendText(logs, runSuWithCmd(GmsCommandBuilder.chownPhenotypeToRoot()).getStreamLogsWithLabels());
 
-        String currentPolicy = runSuWithCmd("getenforce").getInputStreamLog();
+        String currentPolicy = runSuWithCmd(GmsCommandBuilder.getEnforce()).getInputStreamLog();
         appendText(logs, "\n\n--  Setting SELINUX to permessive   --");
-        appendText(logs, runSuWithCmd("setenforce 0").getStreamLogsWithLabels());
+        appendText(logs, runSuWithCmd(GmsCommandBuilder.setEnforce(false)).getStreamLogsWithLabels());
         return currentPolicy;
     }
 
@@ -2655,7 +2655,7 @@ public class MainActivity extends AppCompatActivity {
                 String path = getApplicationInfo().dataDir;
                 suitableMethodFound = true;
                 killps(logs);
-                String currentOwner = runSuWithCmd("stat -c \"%U\" /data/data/com.google.android.gms/databases/phenotype.db").getInputStreamLog();
+                String currentOwner = runSuWithCmd(GmsCommandBuilder.statPhenotypeOwner()).getInputStreamLog();
                 String currentPolicy = gainOwnership(logs);
                 String decideWhat = new String();
 
@@ -2669,20 +2669,7 @@ public class MainActivity extends AppCompatActivity {
                 setupStmts.addAll(splitSql(finalCommand.toString()));
                 RootDb.exec(PHENO_DB, setupStmts);
 
-                switch (value) {
-                    case 470: {
-                        decideWhat = "force_ws";
-                        break;
-                    }
-                    case 1920: {
-                        decideWhat = "force_no_ws";
-                        break;
-                    }
-                    case 10: {
-                        decideWhat = "force_portrait";
-                        break;
-                    }
-                }
+                decideWhat = ScreenSetupTweaks.breakpointTweakName(value);
                 RootDb.exec(PHENO_DB,
                         "CREATE TRIGGER " + decideWhat + " AFTER DELETE\n" +
                                 "On FlagOverrides\n" +
@@ -2725,15 +2712,15 @@ public class MainActivity extends AppCompatActivity {
 
                 
                     appendText(logs, "\n\n--  restoring Google Play Services   --");
-                    appendText(logs, runSuWithCmd("pm enable com.google.android.gms").getStreamLogsWithLabels());
-                
+                    appendText(logs, runSuWithCmd(GmsCommandBuilder.enableGms()).getStreamLogsWithLabels());
+
 
 appendText(logs, "\n\n--  Restoring ownership of the database   --");
-                appendText(logs, runSuWithCmd("chown " + currentOwner + " /data/data/com.google.android.gms/databases/phenotype.db").getStreamLogsWithLabels());
+                appendText(logs, runSuWithCmd(GmsCommandBuilder.chownPhenotypeTo(currentOwner)).getStreamLogsWithLabels());
 
-                if (currentPolicy.toLowerCase().equals("permissive")) {
+                if (GmsCommandBuilder.shouldRestoreEnforcing(currentPolicy)) {
                     appendText(logs, "\n\n--  Restoring SELINUX   --");
-                    appendText(logs, runSuWithCmd("setenforce 1").getStreamLogsWithLabels());
+                    appendText(logs, runSuWithCmd(GmsCommandBuilder.setEnforce(true)).getStreamLogsWithLabels());
                 }
                 dialog.dismiss();
                 if (!suitableMethodFound) {
@@ -2751,7 +2738,7 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
 
     private void killps(final TextView logs) {
         appendText(logs, "\n\n--  Force stopping Google Play Services   --");
-        appendText(logs, runSuWithCmd("am kill all com.google.android.gms").getStreamLogsWithLabels());
+        appendText(logs, runSuWithCmd(GmsCommandBuilder.killGms()).getStreamLogsWithLabels());
     }
 
 
@@ -2767,7 +2754,7 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
      */
     private void phixitDiagnostic(final TextView logs) {
         final String path = getApplicationInfo().dataDir;
-        final String db = "/data/data/com.google.android.gms/databases/phenotype.db";
+        final String db = GmsPaths.PHENOTYPE_DB;
         final String[] pkgs = {
                 "com.google.android.projection.gearhead",
                 "com.google.android.gms.car"
@@ -2902,18 +2889,18 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                 edits.add(longFlag("ContentBrowse__drawer_default_allowed_taps_touchpad", 999));
                 edits.add(boolFlag("AppQualityTester__developer_setting_enabled", true));
 
-                String policy = runSuWithCmd("getenforce").getInputStreamLog();
-                runSuWithCmd("setenforce 0");
-                runSuWithCmd("am force-stop com.google.android.gms");
+                String policy = runSuWithCmd(GmsCommandBuilder.getEnforce()).getInputStreamLog();
+                runSuWithCmd(GmsCommandBuilder.setEnforce(false));
+                runSuWithCmd(GmsCommandBuilder.forceStopGms());
 
                 sb.append(phixitApply(path, filesDir, pkg, edits));
 
                 // Drop GMS's cached phenotype so it re-reads our edited snapshot from
                 // the DB, then force-stop so it restarts fresh on next access.
-                runSuWithCmd("rm -rf /data/data/com.google.android.gms/files/phenotype");
-                runSuWithCmd("am force-stop com.google.android.gms");
+                runSuWithCmd(GmsCommandBuilder.removePhenotypeCache());
+                runSuWithCmd(GmsCommandBuilder.forceStopGms());
                 if (!policy.equals("Permissive")) {
-                    runSuWithCmd("setenforce 1");
+                    runSuWithCmd(GmsCommandBuilder.setEnforce(true));
                 }
 
                 // Verify: re-read and report the edited flags' current values.
@@ -3042,8 +3029,7 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
     // legacy FlagOverrides/Flags SQL, which no longer exists on recent GMS.
     // =====================================================================
 
-    public static final String PHENO_DB =
-            "/data/data/com.google.android.gms/databases/phenotype.db";
+    public static final String PHENO_DB = GmsPaths.PHENOTYPE_DB;
 
     /**
      * Decodes every gearhead + car flag from the snapshot and writes them

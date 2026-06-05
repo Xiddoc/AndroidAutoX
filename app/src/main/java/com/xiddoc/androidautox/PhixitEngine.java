@@ -3,6 +3,8 @@ package com.xiddoc.androidautox;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import androidx.annotation.VisibleForTesting;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -104,8 +106,12 @@ public class PhixitEngine {
             for (Partition p : raw) {
                 if (p.blob == null || p.blob.length == 0) continue;
                 try {
+                    // Decode first, then record the id, so a decode failure leaves the
+                    // ids/parts lists aligned (a bad partition is skipped, not half-added).
+                    List<PhixitSnapshot.Flag> decoded =
+                            PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob));
                     ids.add(p.id);
-                    parts.add(PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob)));
+                    parts.add(decoded);
                 } catch (Exception ex) {
                     sb.append("  [").append(pkg).append("] partition ").append(p.id)
                             .append(" decode EXCEPTION ").append(ex).append("\n");
@@ -306,7 +312,11 @@ public class PhixitEngine {
         return null;
     }
 
-    private static boolean valueEquals(PhixitSnapshot.Flag a, PhixitSnapshot.Flag b) {
+    // Package-private (not private) so the null-string arm can be unit-tested directly:
+    // via isApplied() the decoded flag's stringValue is never null (the codec normalizes
+    // it to ""), so a.stringValue == null is only reachable in a direct call.
+    @VisibleForTesting
+    static boolean valueEquals(PhixitSnapshot.Flag a, PhixitSnapshot.Flag b) {
         if (a.type != b.type) return false;
         switch (b.type) {
             case PhixitSnapshot.TYPE_LONG:   return a.longValue == b.longValue;
@@ -433,7 +443,11 @@ public class PhixitEngine {
         return "phixit_base|" + pkg + "|" + name;
     }
 
-    private static String serializeBaseline(PhixitSnapshot.Flag f) {
+    // Package-private (not private) so the edge branches — unknown flag type and the
+    // String UTF-8 catch — can be unit-tested directly; they are unreachable via the
+    // normal capture path because the codec only produces known flag types.
+    @VisibleForTesting
+    static String serializeBaseline(PhixitSnapshot.Flag f) {
         if (f == null) return "A";
         switch (f.type) {
             case PhixitSnapshot.TYPE_BOOL_FALSE: return "B0";
@@ -451,7 +465,10 @@ public class PhixitEngine {
         }
     }
 
-    private static FlagSpec deserializeBaseline(String pkg, String name, String b) {
+    // Package-private (not private) so the edge branches — unknown tag and the
+    // Base64-decode catch — can be unit-tested directly.
+    @VisibleForTesting
+    static FlagSpec deserializeBaseline(String pkg, String name, String b) {
         char tag = b.charAt(0);
         String body = b.substring(1);
         switch (tag) {

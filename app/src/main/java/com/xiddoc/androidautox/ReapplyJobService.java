@@ -40,37 +40,68 @@ public class ReapplyJobService extends JobService {
         return true; // reschedule if interrupted
     }
 
-    /** Re-applies enabled tweaks if drifted. Safe to call from any background context. */
+    /**
+     * Re-applies enabled tweaks if drifted. Safe to call from any background context.
+     *
+     * <p>All branching lives in the pure {@link ReapplyDecision}; this only wires the
+     * production collaborators (root engine + scheduler) into its {@link
+     * ReapplyDecision.Env} seam. The "drift detected but projecting" path force-stops
+     * GMS otherwise, so deferring is intentional — see {@link
+     * ReapplyScheduler#scheduleDeferredRetry}.
+     */
     static void reapplyNow(Context ctx) {
-        if (!ReapplyScheduler.isAutoReapplyEnabled(ctx)) return;
-        List<FlagSpec> specs = TweakRegistry.enabledSpecs(ctx);
-        if (specs.isEmpty()) return;
+        final Context app = ctx.getApplicationContext();
+        final StringBuilder log = new StringBuilder();
+        final PhixitEngine engine = new PhixitEngine(app, log);
 
-        StringBuilder log = new StringBuilder();
-        PhixitEngine engine = new PhixitEngine(ctx, log);
-        // Cheap read-only drift check first: no GMS restart, no SELinux change. The
-        // common "nothing changed" case bails out here.
-        if (engine.isApplied(specs)) {
-            Log.i(TAG, "Tweaks still applied (" + specs.size() + " flags); nothing to do.");
-            return;
+        // Diagnostic detail captured as the decision runs (log-only; does not affect
+        // control flow or the ReapplyDecision/Outcome model). Mirrors the per-path
+        // detail the pre-extraction log carried: the enabled-spec count, and for the
+        // re-applied path the apply result boolean.
+        final int[] specCount = {0};
+        final boolean[] applyResult = {false};
+        final boolean[] applied = {false};
+
+        ReapplyDecision.Outcome outcome = ReapplyDecision.evaluate(new ReapplyDecision.Env() {
+            @Override
+            public boolean isAutoReapplyEnabled() {
+                return ReapplyScheduler.isAutoReapplyEnabled(app);
+            }
+
+            @Override
+            public List<FlagSpec> enabledSpecs() {
+                List<FlagSpec> specs = TweakRegistry.enabledSpecs(app);
+                specCount[0] = specs == null ? 0 : specs.size();
+                return specs;
+            }
+
+            @Override
+            public boolean isApplied(List<FlagSpec> specs) {
+                return engine.isApplied(specs);
+            }
+
+            @Override
+            public boolean isAndroidAutoProjecting() {
+                return engine.isAndroidAutoProjecting();
+            }
+
+            @Override
+            public void scheduleDeferredRetry() {
+                ReapplyScheduler.scheduleDeferredRetry(app);
+            }
+
+            @Override
+            public boolean applySpecs(List<FlagSpec> specs) {
+                boolean ok = engine.applySpecs(specs, false); // don't recapture baselines
+                applyResult[0] = ok;
+                applied[0] = true;
+                return ok;
+            }
+        });
+        String detail = "specs=" + specCount[0];
+        if (applied[0]) {
+            detail += ", ok=" + applyResult[0];
         }
-
-        // Drift detected: re-applying requires force-stopping GMS, which restarts
-        // Android Auto. If the user is actively projecting (e.g. driving), defer rather
-        // than yank the screen out from under them — a tweak being briefly un-applied is
-        // far less bad than Android Auto restarting mid-drive.
-        if (engine.isAndroidAutoProjecting()) {
-            Log.i(TAG, "Drift detected but Android Auto is projecting; deferring re-apply.");
-            // Re-check on a modest interval so we re-apply soon after the drive ends. This
-            // deliberately is NOT a short-latency loop: while projection persists each retry
-            // just defers again, so a tight interval would spin su/dumpsys for the whole
-            // drive. The 6h periodic job is the long backstop. (JobScheduler de-dupes by
-            // JOB_ID_ONESHOT, so at most one deferred retry is ever pending.)
-            ReapplyScheduler.scheduleDeferredRetry(ctx);
-            return;
-        }
-
-        boolean ok = engine.applySpecs(specs, false); // don't recapture baselines
-        Log.i(TAG, "Re-applied " + specs.size() + " flags, ok=" + ok + "\n" + log);
+        Log.i(TAG, "Re-apply outcome=" + outcome + " (" + detail + ")\n" + log);
     }
 }
