@@ -28,8 +28,26 @@ public class SettingActionTest {
 
     @Test
     public void visibleActions_devMode_returnsAllInDeclarationOrder() {
-        List<SettingAction> expected = Arrays.asList(SettingAction.values());
+        List<SettingAction> expected = Arrays.asList(
+                SettingAction.RESET_TWEAKS,
+                SettingAction.AUTO_REAPPLY,
+                SettingAction.AA_SETTINGS,
+                SettingAction.NONDESTRUCTIVE_PATCH,
+                SettingAction.AUTO_BACKUP_DBS,
+                SettingAction.PHIXIT_APPLY_TEST,
+                SettingAction.PHIXIT_DUMP_ALL,
+                SettingAction.DEV_MODE_TOGGLE);
         assertEquals(expected, SettingAction.visibleActions(true));
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void visibleActions_devMode_returnsUnmodifiableList() {
+        SettingAction.visibleActions(true).add(SettingAction.RESET_TWEAKS);
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void visibleActions_normalMode_returnsUnmodifiableList() {
+        SettingAction.visibleActions(false).add(SettingAction.RESET_TWEAKS);
     }
 
     @Test

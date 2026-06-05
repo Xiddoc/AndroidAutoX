@@ -5,16 +5,17 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Single source of truth for the ordered entries shown on the Settings tab and which of
- * them are developer-only.
+ * Canonical list of the settings actions and which of them are developer-only.
  *
- * <p>Declaration order is the on-screen order. Developer-only entries are hidden unless
- * developer mode is enabled (see {@link DevModeStore}); {@link #DEV_MODE_TOGGLE} is always
- * shown and is conceptually last (it is what turns developer mode on/off).
+ * <p>Consumed by {@code MainActivity}, which wires each constant to its button, label and
+ * handler. The on-screen layout itself is static XML ({@code scrollview_settings.xml}); this
+ * enum does not own that layout's order or visibility — it records the set of actions and
+ * their dev-only gating. Developer-only entries are gated on developer mode being enabled
+ * (see {@link DevModeStore}); {@link #DEV_MODE_TOGGLE} is always shown (it is what turns
+ * developer mode on/off).
  *
  * <p>This enum is deliberately pure: it references no Android {@code R.*} resource, so it
- * stays decoupled and plain-JUnit testable (and so JaCoCo-visible). The activity owner maps
- * each constant to its label/handler.
+ * stays decoupled and plain-JUnit testable (and so JaCoCo-visible).
  */
 public enum SettingAction {
     RESET_TWEAKS(false),

@@ -43,6 +43,15 @@ public class DevModeStoreTest {
     }
 
     @Test
+    public void setEnabled_false_persistsFalseUnderLegacyKey() {
+        SharedPreferences p = prefs();
+        DevModeStore.setEnabled(p, true);
+        DevModeStore.setEnabled(p, false);
+        // Mirror the true-case: the false value must also land under the exact legacy key.
+        assertFalse(p.getBoolean("dev_mode_enabled", true));
+    }
+
+    @Test
     public void toggle_flipsFromFalseToTrue() {
         SharedPreferences p = prefs();
         boolean result = DevModeStore.toggle(p);
