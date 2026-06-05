@@ -4,6 +4,8 @@
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android-3DDC84.svg)](https://github.com/Xiddoc/AndroidAutoX)
+[![Build](https://github.com/Xiddoc/AndroidAutoX/actions/workflows/build.yml/badge.svg)](https://github.com/Xiddoc/AndroidAutoX/actions/workflows/build.yml)
+[![Coverage: 100%](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/Xiddoc/AndroidAutoX/actions/workflows/build.yml)
 
 The ultimate All-In-One utility to tweak Android Auto behaviour.
 
@@ -39,6 +41,21 @@ Grab the latest APK from the [Releases page](https://github.com/Xiddoc/AndroidAu
 ## 🔧 How it works
 
 On a rooted device, the app runs `sqlite3` against Google Play Services' Phenotype database to toggle Android Auto flags. Many Android Auto features — including some not yet officially released — are controlled by these flags, and overriding them changes the app's behaviour.
+
+## 🧪 Tests & coverage
+
+Off-device unit tests (Robolectric + JUnit) run on every push and pull request. The
+build enforces a **100% line and branch coverage gate** (JaCoCo
+`jacocoTestCoverageVerification`) over all testable classes — irreducible Android
+framework shells (Activities, Services, the `BroadcastReceiver`, generated/AIDL code)
+are the only exclusions, and their logic is extracted into covered helpers. CI fails
+if coverage drops below 100%, so the badge above stays honest. See the *Code coverage*
+section in [`AGENTS.md`](AGENTS.md) and the per-class map in
+[`docs/coverage-gap.md`](docs/coverage-gap.md).
+
+```bash
+./gradlew testDebugUnitTest jacocoTestReport jacocoTestCoverageVerification
+```
 
 ## 🌍 Translations
 
