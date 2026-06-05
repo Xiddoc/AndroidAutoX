@@ -156,6 +156,12 @@
             android:layout_width="0dp"
             layout="@layout/scrollview_second" />
 
+        <include
+            android:id="@+id/page_three"
+            android:layout_height="0dp"
+            android:layout_width="0dp"
+            layout="@layout/scrollview_settings" />
+
     </androidx.viewpager.widget.ViewPager>
 
     <!-- Floating "Reboot to apply" action button. Shown (VISIBLE/GONE toggled by
