@@ -24,6 +24,10 @@ public class PhixitEngine {
     public static final String PHENO_DB =
             "/data/data/com.google.android.gms/databases/phenotype.db";
 
+    /** GMS's phenotype cache dir, cleared after an edit so GMS re-reads the DB. */
+    static final String PHENO_CACHE_DIR =
+            "/data/data/com.google.android.gms/files/phenotype";
+
     private final Context ctx;
     private final StringBuilder log;
 
@@ -40,14 +44,25 @@ public class PhixitEngine {
     public boolean applySpecs(List<FlagSpec> specs, boolean captureBaseline) {
         StringBuilder sb = new StringBuilder();
 
-        // Capture the db's owner + SELinux mode, force-stop GMS, and drop to permissive
-        // (only if it was enforcing) so the root service can open the private db. All of
-        // this is restored at the end.
-        String owner = MainActivity.runSuWithCmd("stat -c %U:%G " + PHENO_DB).getInputStreamLog().trim();
+        // Capture the db's owner (numeric uid/gid via Os.stat in the root process -- more
+        // robust than parsing `stat -c %U:%G`) + SELinux mode, force-stop GMS, and drop to
+        // permissive (only if it was enforcing) so the root service can open the private db.
+        // All of this is restored at the end.
+        int[] owner;
+        try {
+            owner = RootDb.statOwner(PHENO_DB);
+        } catch (Exception ex) {
+            owner = null; // best-effort; root edits already preserve ownership
+            sb.append("  statOwner ERR: ").append(ex).append("\n");
+        }
         String policy = MainActivity.runSuWithCmd("getenforce").getInputStreamLog().trim();
         boolean wasEnforcing = policy.equalsIgnoreCase("Enforcing");
         if (wasEnforcing) MainActivity.runSuWithCmd("setenforce 0");
         MainActivity.runSuWithCmd("am force-stop com.google.android.gms");
+
+        // Safety net: back up the DB before we touch it (default opted-in). Non-fatal --
+        // a backup failure is logged inside DbBackup and never blocks the tweak.
+        new DbBackup(ctx).backupBeforeEdit(PHENO_DB);
 
         LinkedHashMap<String, List<FlagSpec>> byPkg = groupByPkg(specs);
 
@@ -113,9 +128,19 @@ public class PhixitEngine {
 
         // Restore ownership/SELinux context on the db (root edits keep the owner, but be
         // safe), then make GMS re-read the edited snapshot from the DB and restart fresh.
-        if (owner.contains(":")) MainActivity.runSuWithCmd("chown " + owner + " " + PHENO_DB);
+        if (owner != null) {
+            try {
+                RootDb.chownPath(PHENO_DB, owner[0], owner[1]);
+            } catch (Exception ex) {
+                sb.append("  chownPath ERR: ").append(ex).append("\n");
+            }
+        }
         MainActivity.runSuWithCmd("restorecon " + PHENO_DB);
-        MainActivity.runSuWithCmd("rm -rf /data/data/com.google.android.gms/files/phenotype");
+        try {
+            RootDb.deleteRecursive(PHENO_CACHE_DIR);
+        } catch (Exception ex) {
+            sb.append("  cache clear ERR: ").append(ex).append("\n");
+        }
         MainActivity.runSuWithCmd("am force-stop com.google.android.gms");
         if (wasEnforcing) MainActivity.runSuWithCmd("setenforce 1");
 
