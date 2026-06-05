@@ -29,6 +29,12 @@
         android:title="@string/menu_nondestructive_patch" />
 
     <item
+        android:id="@+id/auto_backup_dbs"
+        android:checkable="true"
+        app:showAsAction="never"
+        android:title="@string/menu_auto_backup_dbs" />
+
+    <item
         android:id="@+id/phixit_apply_test"
         android:visible="false"
         app:showAsAction="never"
