@@ -176,4 +176,34 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="tutorial_inertial_scroll">This tweak will override the default scrolling behaviour of Android Auto, making it so that it doesn\'t stop page by page.</string>
     <string name="vertical_bar_tweak">Vertical Bar</string>
     <string name="tutorial_vertical_bar_tweak">This tweak will force the bar to be vertical. This tweak will only work on Coolwalk UI.</string>
+
+    <!-- Settings tab -->
+    <string name="tab_settings">Settings</string>
+    <string name="settings_header_about">About</string>
+    <string name="settings_header_general">Settings</string>
+    <string name="settings_header_developer">Developer</string>
+
+    <!-- Settings tab: short button labels -->
+    <string name="settings_reset_label">Reset all tweaks</string>
+    <string name="settings_reapply_label">Auto-reapply tweaks</string>
+    <string name="settings_aa_label">Android Auto settings</string>
+    <string name="settings_ndpatch_label">Non-destructive patching</string>
+    <string name="settings_backup_label">Back up databases</string>
+    <string name="settings_devtest_label">Phixit apply test</string>
+    <string name="settings_devdump_label">Dump all flags</string>
+    <string name="settings_devmode_label">Developer mode</string>
+
+    <!-- Settings tab: long-press explanations -->
+    <string name="settings_reset_desc">Reverts ALL applied Android Auto flag and Gearhead modifications back to their default values and clears your tweak selections. Please restart the app manually after this completes.</string>
+    <string name="settings_reapply_desc">When ON, your applied tweaks are automatically re-applied in the background if Android Auto reverts them. This uses a periodic job that runs even after the app is closed.</string>
+    <string name="settings_aa_desc">Opens the Android Auto (Gearhead) app\'s own settings screen on your phone.</string>
+    <string name="settings_ndpatch_desc">Experimental. When ON, apps are only re-stamped via pm set-installer instead of being uninstalled and reinstalled, so their data is preserved. May not pass Android Auto validation. When OFF, apps are uninstalled and reinstalled (default).</string>
+    <string name="settings_backup_desc">When ON, a copy of each GMS database is saved before every edit as a safety net. When OFF, no copy is saved before edits.</string>
+    <string name="settings_devtest_desc">Developer diagnostic: runs the Phixit apply self-test and prints the results to the log view.</string>
+    <string name="settings_devdump_desc">Developer diagnostic: dumps all Phenotype flags to a file for inspection.</string>
+    <string name="settings_devmode_desc">Unlocks the developer diagnostics below. Tap to toggle. Replaces the old \"tap About 7 times\" gesture.</string>
+
+    <!-- Settings tab: toggle state suffixes -->
+    <string name="settings_state_on">On</string>
+    <string name="settings_state_off">Off</string>
 </resources>
