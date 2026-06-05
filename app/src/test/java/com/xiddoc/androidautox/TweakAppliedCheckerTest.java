@@ -1,5 +1,6 @@
 package com.xiddoc.androidautox;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -175,6 +176,25 @@ public class TweakAppliedCheckerTest {
     }
 
     // -----------------------------------------------------------------------
+    // Partial-apply case: multi-spec, probe returns false -> appliedState == FALSE
+    // -----------------------------------------------------------------------
+
+    /**
+     * When the probe reports that at least one spec is NOT applied (returns false),
+     * {@link TweakAppliedChecker#appliedState} must return {@link Boolean#FALSE} even
+     * for a multi-spec tweak.  This guards the partial-apply path: the DB is readable
+     * (no exception), but the flags are confirmed gone.
+     */
+    @Test
+    public void multipleSpecs_probeReturnsFalse_appliedStateIsFalse() {
+        TweakAppliedChecker checker = new TweakAppliedChecker(PROBE_FALSE,
+                key -> MULTI_SPECS);
+        Boolean result = checker.appliedState("multi_flag_key");
+        assertNotNull("Result should not be null when probe returns false", result);
+        assertFalse("appliedState should be FALSE when probe reports not-applied", result);
+    }
+
+    // -----------------------------------------------------------------------
     // Multi-spec list: probe called with the full list
     // -----------------------------------------------------------------------
 
@@ -198,9 +218,28 @@ public class TweakAppliedCheckerTest {
         Boolean result = checker.appliedState("multi_flag_key");
 
         assertTrue("Probe should have been called", probeCalled[0]);
-        assertTrue("Probe should have received all specs", probeSpecCount[0] == MULTI_SPECS.size());
+        // Use assertEquals instead of assertTrue(x == y) for a clear failure message.
+        assertEquals("Probe should have received all specs",
+                (long) MULTI_SPECS.size(), (long) probeSpecCount[0]);
         assertNotNull(result);
         assertTrue(result);
+    }
+
+    // -----------------------------------------------------------------------
+    // Null key: resolver returns null specs -> appliedState is null, no crash
+    // -----------------------------------------------------------------------
+
+    /**
+     * When {@code key} is null, the resolver may throw or return null — either way
+     * {@link TweakAppliedChecker#appliedState} must return {@code null} without crashing.
+     * Verifies the null-key path is safe regardless of resolver behavior.
+     */
+    @Test
+    public void nullKey_appliedStateIsNull_noCrash() {
+        // Use a resolver that returns null for any key (including null).
+        TweakAppliedChecker checker = new TweakAppliedChecker(PROBE_THROWS, RESOLVER_NULL);
+        Boolean result = checker.appliedState(null);
+        assertNull("appliedState should be null (UNKNOWN) for a null key", result);
     }
 
     // -----------------------------------------------------------------------
@@ -229,25 +268,27 @@ public class TweakAppliedCheckerTest {
     /**
      * Light construction smoke test for the convenience production constructor.
      * Verifies that {@code new TweakAppliedChecker(ctx)} produces a non-null checker
-     * and that calling {@link TweakAppliedChecker#appliedState} does not throw
-     * (it will return null/UNKNOWN in a test environment without root).
+     * and that calling {@link TweakAppliedChecker#appliedState} returns {@code null}
+     * (UNKNOWN) in a rootless test environment.
      *
-     * <p>This test does NOT assert the actual applied state — the environment has no
-     * rooted device or GMS DB. It merely guards the wiring (that the constructor and
-     * method run without crashing).
+     * <p>The production constructor wires {@link PhixitEngine#isAppliedStrict} as the probe.
+     * In a test environment without root, {@code isAppliedStrict} THROWS (it does not catch
+     * the {@code RootDb.readPartitions} failure, unlike {@code isApplied}). That exception is
+     * caught by {@link TweakAppliedChecker#appliedState} and converted to {@code null}/UNKNOWN.
+     * We therefore assert {@code assertNull}: if the result were non-null it would mean the
+     * test environment somehow has a working GMS DB, which is unexpected and should fail loudly.
      */
     @Test
-    public void productionConstructor_buildsNonNullChecker_doesNotThrow() {
+    public void productionConstructor_rootlessEnv_appliedStateIsNull() {
         Context ctx = ApplicationProvider.getApplicationContext();
         TweakAppliedChecker checker = new TweakAppliedChecker(ctx);
         assertNotNull("Production constructor should produce a non-null checker", checker);
 
-        // In the test environment there is no root/DB, so we expect null (UNKNOWN) but no crash.
-        // Use a key from TweakRegistry.ALL_KEYS that has static specs (no dynamic value needed).
+        // In a rootless test environment, isAppliedStrict throws (RootDb not available),
+        // so appliedState must return null (UNKNOWN) — never TRUE or FALSE.
         Boolean result = checker.appliedState("bluetooth_pairing_off");
-        // result may be null (UNKNOWN / no root) or FALSE — just must not throw.
-        // Do not assert TRUE since we have no real DB.
-        assertTrue("Result must be null or false in test environment (no root DB)",
-                result == null || !result);
+        assertNull(
+                "In a rootless test env isAppliedStrict throws -> appliedState must be null (UNKNOWN)",
+                result);
     }
 }

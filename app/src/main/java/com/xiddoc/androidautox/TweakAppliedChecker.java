@@ -2,7 +2,10 @@ package com.xiddoc.androidautox;
 
 import android.content.Context;
 
+import androidx.annotation.WorkerThread;
+
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Stateless, side-effect-free query: "are a tweak's flags actually applied in the DB right now?"
@@ -11,8 +14,11 @@ import java.util.List;
  * The class is fully injectable for off-device testing.  Two seams are injected at construction
  * time:
  * <ul>
- *   <li><b>{@link AppliedProbe}</b> — wraps the real {@link PhixitEngine#isApplied} call (or a
- *       fake in tests).  Isolates the root-process/DB dependency from callers.
+ *   <li><b>{@link AppliedProbe}</b> — wraps the real {@link PhixitEngine#isAppliedStrict} call
+ *       (or a fake in tests).  Isolates the root-process/DB dependency from callers.  The strict
+ *       variant is used so that a temporarily unreadable DB propagates as an exception (→ null /
+ *       UNKNOWN) rather than silently returning {@code false} (→ DISABLED / confirmed-not-applied),
+ *       which would wrongly drive a correctly-applied tweak toward red.
  *   <li><b>{@link SpecResolver}</b> — maps a tweak key to its {@link FlagSpec} list (or a fake).
  *       Wraps {@link TweakRegistry#specsFor} for production, avoiding a hard {@link Context}
  *       dependency in the method body.
@@ -35,7 +41,8 @@ import java.util.List;
  *
  * <h3>Thread safety</h3>
  * The object itself is stateless; all state lives in the injected collaborators.  Concurrency
- * is the caller's responsibility.
+ * is the caller's responsibility.  {@link #appliedState(String)} performs blocking root IPC and
+ * MUST be called off the main thread.
  */
 public final class TweakAppliedChecker {
 
@@ -45,13 +52,14 @@ public final class TweakAppliedChecker {
 
     /**
      * Probe that checks whether a set of flag specs is applied in the DB.
-     * Mirrors {@link PhixitEngine#isApplied(List)}.
+     * Mirrors {@link PhixitEngine#isAppliedStrict(List)}.
      */
     public interface AppliedProbe {
         /**
          * Returns {@code true} if every spec in {@code specs} is confirmed applied.
          *
-         * @throws Exception if the DB is unavailable (no root, AIDL failure, etc.)
+         * @throws Exception if the DB is unavailable (no root, AIDL failure, etc.) —
+         *                   callers must treat this as UNKNOWN, not FALSE
          */
         boolean isApplied(List<FlagSpec> specs) throws Exception;
     }
@@ -81,28 +89,43 @@ public final class TweakAppliedChecker {
     /**
      * Full injection constructor — use this in tests with fake collaborators.
      *
-     * @param probe    reads the DB to determine whether specs are applied
-     * @param resolver maps a tweak key to its list of {@link FlagSpec}s
+     * @param probe    reads the DB to determine whether specs are applied; must not be null
+     * @param resolver maps a tweak key to its list of {@link FlagSpec}s; must not be null
      */
     public TweakAppliedChecker(AppliedProbe probe, SpecResolver resolver) {
-        if (probe == null) throw new NullPointerException("probe must not be null");
-        if (resolver == null) throw new NullPointerException("resolver must not be null");
+        Objects.requireNonNull(probe, "probe must not be null");
+        Objects.requireNonNull(resolver, "resolver must not be null");
         this.probe = probe;
         this.resolver = resolver;
     }
 
     /**
-     * Production convenience constructor.  Wires the real {@link PhixitEngine} (as the probe)
-     * and {@link TweakRegistry#specsFor(Context, String)} (as the resolver).
+     * Production convenience constructor.  Wires {@link PhixitEngine#isAppliedStrict} (as the
+     * probe) and {@link TweakRegistry#specsFor(Context, String)} (as the resolver).
      *
-     * @param ctx any Android {@link Context}; {@code getApplicationContext()} is called internally
-     *            by {@link PhixitEngine}
+     * <p>Using {@code isAppliedStrict} (rather than {@code isApplied}) ensures that a
+     * transiently unreadable DB propagates as an exception → null/UNKNOWN, preventing a
+     * correctly-applied tweak from being shown as red while root/DB is momentarily unavailable.
+     *
+     * @param ctx any Android {@link Context}; {@code getApplicationContext()} is called to
+     *            avoid holding a reference to an Activity; must not be null
+     * @throws NullPointerException if {@code ctx} is null
      */
     public TweakAppliedChecker(Context ctx) {
-        this(
-                specs -> new PhixitEngine(ctx, null).isApplied(specs),
-                key   -> TweakRegistry.specsFor(ctx, key)
-        );
+        this(buildProbe(ctx), buildResolver(ctx));
+    }
+
+    private static AppliedProbe buildProbe(Context ctx) {
+        Objects.requireNonNull(ctx, "ctx must not be null");
+        final Context appCtx = ctx.getApplicationContext();
+        final PhixitEngine engine = new PhixitEngine(appCtx, null);
+        return engine::isAppliedStrict;
+    }
+
+    private static SpecResolver buildResolver(Context ctx) {
+        Objects.requireNonNull(ctx, "ctx must not be null");
+        final Context appCtx = ctx.getApplicationContext();
+        return key -> TweakRegistry.specsFor(appCtx, key);
     }
 
     // -------------------------------------------------------------------------
@@ -118,9 +141,12 @@ public final class TweakAppliedChecker {
      *   <li>{@code null}          — UNKNOWN: specs were null/empty, or the probe threw.
      * </ul>
      *
+     * <p>This method performs blocking root IPC; it MUST be called off the main thread.
+     *
      * @param key tweak identifier (e.g. {@code "bluetooth_pairing_off"})
      * @return tri-state result; never throws
      */
+    @WorkerThread
     public Boolean appliedState(String key) {
         List<FlagSpec> specs;
         try {
@@ -138,7 +164,9 @@ public final class TweakAppliedChecker {
         try {
             return probe.isApplied(specs) ? Boolean.TRUE : Boolean.FALSE;
         } catch (Exception e) {
-            // Probe failure (no root, AIDL error, etc.) -> UNKNOWN.
+            // Probe failure (no root, AIDL error, structurally unreadable DB) -> UNKNOWN.
+            // Critically: we use isAppliedStrict so that "DB not readable" arrives here as
+            // an exception rather than false, preventing false DISABLED results.
             return null;
         }
     }

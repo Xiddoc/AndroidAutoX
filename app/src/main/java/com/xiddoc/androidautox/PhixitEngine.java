@@ -202,6 +202,61 @@ public class PhixitEngine {
         return true;
     }
 
+    /**
+     * Strict variant of {@link #isApplied}: performs the same flag comparison but
+     * RETHROWS on structural unavailability instead of swallowing errors.
+     *
+     * <p>Unlike {@code isApplied}, which catches every exception and returns {@code false}
+     * (so a temporarily unreadable DB looks like "confirmed not applied"), this method
+     * only returns {@code true}/{@code false} when it could actually read and compare the
+     * partition data.  When the DB is structurally unavailable (no root, RootDb not bound,
+     * empty partition list, decode failure) the exception propagates to the caller, which
+     * should treat it as {@code null}/UNKNOWN rather than FALSE.
+     *
+     * <p><b>Use this method from {@link TweakAppliedChecker} so that a transiently
+     * unreadable DB never drives a correctly-applied tweak toward "confirmed gone" (red).
+     * Use {@link #isApplied} from {@link ReapplyJobService} — it already handles errors
+     * conservatively by triggering a re-apply.</b>
+     *
+     * @param specs the flag specs to check; must not be null
+     * @return {@code true} if every spec is confirmed applied in every partition,
+     *         {@code false} if at least one spec is confirmed NOT applied
+     * @throws Exception if the partitions could not be read or decoded (structural
+     *                   unavailability — caller must treat as UNKNOWN, not FALSE)
+     */
+    public boolean isAppliedStrict(List<FlagSpec> specs) throws Exception {
+        LinkedHashMap<String, List<FlagSpec>> byPkg = groupByPkg(specs);
+        for (Map.Entry<String, List<FlagSpec>> e : byPkg.entrySet()) {
+            // Let RootDb.readPartitions throw: no root / service not bound -> UNKNOWN.
+            List<Partition> raw = RootDb.readPartitions(e.getKey());
+            // Empty partition list: DB not readable structurally -> throw as UNKNOWN.
+            if (raw.isEmpty()) {
+                throw new Exception("No partitions returned for package: " + e.getKey());
+            }
+            boolean sawPartition = false;
+            for (Partition p : raw) {
+                if (p.blob == null || p.blob.length == 0) continue;
+                // Let decode failure throw: corrupt/unreadable snapshot -> UNKNOWN.
+                List<PhixitSnapshot.Flag> flags =
+                        PhixitSnapshot.decode(PhixitSnapshot.inflateRaw(p.blob));
+                sawPartition = true;
+                for (FlagSpec s : e.getValue()) {
+                    PhixitSnapshot.Flag f = findFlag(flags, s.name);
+                    if (s.remove) {
+                        if (f != null) return false;
+                    } else if (f == null || !valueEquals(f, s.flag)) {
+                        return false;
+                    }
+                }
+            }
+            // No decodable partition seen -> DB not readable structurally -> UNKNOWN.
+            if (!sawPartition) {
+                throw new Exception("No decodable partitions for package: " + e.getKey());
+            }
+        }
+        return true;
+    }
+
     private static PhixitSnapshot.Flag findFlag(List<PhixitSnapshot.Flag> flags, String name) {
         for (PhixitSnapshot.Flag f : flags) {
             if (!f.numericName && name.equals(f.name)) return f;
