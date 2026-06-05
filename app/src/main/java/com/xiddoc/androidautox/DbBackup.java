@@ -2,6 +2,7 @@ package com.xiddoc.androidautox;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Process;
 import android.util.Log;
 
 import java.io.File;
@@ -16,23 +17,36 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Safety-net backup of a GMS database before {@link PhixitEngine} edits it.
+ * Safety-net backup of a GMS / Gearhead database before this app edits it.
  *
  * <p>Default opted-in: the {@code auto_backup_dbs} preference defaults to {@code true},
- * so a copy of every DB this app touches is stashed in app-private storage before the
+ * so a copy of every DB this app mutates is stashed in app-private storage before the
  * edit. The user can turn it off (see {@link #isEnabled(SharedPreferences)} /
  * {@link #setEnabled(Context, boolean)}); a UI toggle is expected to be wired by the
  * activity owner (TODO: surface in About/settings — this class only provides the pref).
  *
- * <p>Backups land in {@code <filesDir>/db-backups/<dbname>.<UTC-timestamp>.bak} and are
- * pruned to the most recent {@link #DEFAULT_RETENTION} per database. The actual file
- * copy runs in the root process (the DB is GMS-private), so the engine just calls
- * {@link #backupBeforeEdit(String)} and any failure is logged and swallowed — a backup
- * problem must never block the tweak itself.
+ * <p><b>Where it runs.</b> {@link #backupBeforeEdit(String)} is invoked automatically at
+ * the {@link RootDb} mutation choke point ({@code writePartitions} / {@code exec} /
+ * {@code execStatements}) <em>before</em> the edit is delegated to the root service, so
+ * EVERY DB mutation — phenotype partition writes, raw phenotype edits, and CarRemover's
+ * {@code carservicedata.db} delete — gets the safety net. Read-only paths
+ * ({@code query} / {@code readPartitions}) never back up.
+ *
+ * <p><b>What the backup guarantees.</b> The actual copy runs in the root process (the DB
+ * is GMS-private). It first checkpoints the source's WAL into the main file, then copies
+ * the main DB file <em>and</em> any {@code -wal}/{@code -shm}/{@code -journal} sidecars as
+ * an atomically-renamed, fsynced, restorable set, and chowns them back to the app uid so
+ * the app can prune/restore them. Any failure is logged and swallowed — a backup problem
+ * must never block the tweak itself.
+ *
+ * <p>Backups land in {@code <filesDir>/db-backups/<dbname>.<UTC-timestamp-with-millis>.bak}
+ * and are pruned to the most recent {@link #DEFAULT_RETENTION} per database. The millisecond
+ * precision means two edits in the same second get distinct backups (no overwrite).
  *
  * <p>The pure pieces (filename construction, the retention/prune policy, the pref-gating
- * decision) are static and side-effect-free so they can be unit-tested off-device; the
- * only root-touching method is {@link #backupBeforeEdit(String)}.
+ * decision) are static and side-effect-free so they can be unit-tested off-device. The
+ * root-touching copy is injected via {@link Copier} (default {@link RootDb#backupFile})
+ * so {@link #backupBeforeEdit(String)}'s swallow-and-prune behavior is also testable.
  */
 public class DbBackup {
 
@@ -53,27 +67,48 @@ public class DbBackup {
     /** Keep at most this many backups per database; older ones are pruned. */
     public static final int DEFAULT_RETENTION = 5;
 
-    /** UTC timestamp format used in backup filenames (filesystem-safe, sortable). */
-    private static final String TS_PATTERN = "yyyyMMdd'T'HHmmss'Z'";
+    /**
+     * UTC timestamp format used in backup filenames (filesystem-safe, sortable). Includes
+     * milliseconds so two edits within the same second get distinct, non-colliding names.
+     */
+    private static final String TS_PATTERN = "yyyyMMdd'T'HHmmssSSS'Z'";
 
     /**
      * Matches {@code <dbname>.<timestamp>.bak}, capturing the timestamp. The timestamp is
-     * the lexicographically-sortable {@link #TS_PATTERN}, so string order == chronological
-     * order and we don't need to parse dates to rank backups.
+     * the lexicographically-sortable {@link #TS_PATTERN} (8 date digits, 'T', 9 time digits
+     * incl. millis, 'Z'), so string order == chronological order and we don't need to parse
+     * dates to rank backups.
      */
     private static final Pattern BACKUP_NAME =
-            Pattern.compile("^.+\\.(\\d{8}T\\d{6}Z)" + Pattern.quote(BACKUP_SUFFIX) + "$");
+            Pattern.compile("^.+\\.(\\d{8}T\\d{9}Z)" + Pattern.quote(BACKUP_SUFFIX) + "$");
+
+    /**
+     * The root-touching file copy, abstracted for testability. Signature mirrors
+     * {@link RootDb#backupFile(String, String, int, int)}; the default delegates to it.
+     */
+    interface Copier {
+        void copy(String srcPath, String destPath, int uid, int gid) throws Exception;
+    }
+
+    private static final Copier DEFAULT_COPIER = RootDb::backupFile;
 
     private final Context ctx;
     private final int retention;
+    private final Copier copier;
 
     public DbBackup(Context ctx) {
-        this(ctx, DEFAULT_RETENTION);
+        this(ctx, DEFAULT_RETENTION, DEFAULT_COPIER);
     }
 
     public DbBackup(Context ctx, int retention) {
+        this(ctx, retention, DEFAULT_COPIER);
+    }
+
+    /** Test seam: inject a fake {@link Copier} to exercise the swallow/prune logic in a JVM. */
+    DbBackup(Context ctx, int retention, Copier copier) {
         this.ctx = ctx.getApplicationContext();
         this.retention = retention;
+        this.copier = copier != null ? copier : DEFAULT_COPIER;
     }
 
     /** Activity.getPreferences() stores under MainActivity's class name; share that file. */
@@ -164,19 +199,26 @@ public class DbBackup {
      * old backups of that DB to {@link #retention}. Non-fatal by contract: any failure is
      * logged and swallowed (returns {@code false}) so the caller's edit always proceeds.
      *
+     * <p>The backup destination directory is created <em>app-side</em> here (so it is owned
+     * by the app, not by root), and the written backup files are chowned back to the app
+     * uid/gid in the root process so a later prune/restore by the app succeeds.
+     *
      * @return {@code true} if a backup was written; {@code false} if disabled or it failed.
      */
     public boolean backupBeforeEdit(String dbPath) {
         if (!isEnabled()) return false;
         File dir = new File(ctx.getFilesDir(), BACKUP_DIR);
-        // mkdirs() in-process is fine; the dest write itself happens in the root process.
+        // Create the dir app-side (NOT via a root mkdirs) so it stays app-owned.
         dir.mkdirs();
         String dest = backupDestPath(dir, dbPath, System.currentTimeMillis());
+        int uid = Process.myUid();
         try {
-            RootDb.backupFile(dbPath, dest);
+            copier.copy(dbPath, dest, uid, uid);
         } catch (Exception e) {
-            // Surface but do not block the tweak.
-            Log.w(TAG, "DB backup of " + dbPath + " failed (continuing): " + e);
+            // Surface but do not block the tweak. This is the only place a default-on
+            // safety net can fail; logging it (rather than swallowing silently) keeps it
+            // visible in logcat / the streamed logs.
+            Log.w(TAG, "WARNING: DB backup of " + dbPath + " failed (continuing without backup): " + e);
             return false;
         }
         try {

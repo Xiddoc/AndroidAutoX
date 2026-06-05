@@ -76,6 +76,26 @@ public final class RootDb {
         return svc;
     }
 
+    // --- auto-backup choke point ----------------------------------------------
+
+    /**
+     * Central safety-net hook run before EVERY mutating DB call below. Backs up the target
+     * DB (gated by the default-on {@code auto_backup_dbs} pref) so phenotype writes, raw
+     * phenotype edits, AND CarRemover's {@code carservicedata.db} delete are all covered
+     * with no per-call-site code. Read-only methods ({@link #query}, {@link #readPartitions})
+     * deliberately do NOT call this. Non-blocking: {@link DbBackup#backupBeforeEdit} swallows
+     * and logs any failure, so a backup problem never aborts the edit.
+     */
+    private static void autoBackup(String dbPath) {
+        Context ctx = appCtx;
+        if (ctx == null) return; // not initialized (e.g. unit context) -> skip silently
+        try {
+            new DbBackup(ctx).backupBeforeEdit(dbPath);
+        } catch (Throwable t) {
+            Log.w(TAG, "auto-backup of " + dbPath + " errored (continuing): " + t);
+        }
+    }
+
     // --- convenience wrappers (RemoteException -> unchecked) ---
 
     public static List<Partition> readPartitions(String pkg) {
@@ -87,6 +107,8 @@ public final class RootDb {
     }
 
     public static void writePartitions(List<Partition> parts, int servingVersion) {
+        // Mutating -> back up phenotype.db first (default-on; non-blocking).
+        autoBackup(GmsPaths.PHENO_DB);
         try {
             get().writePartitions(parts, servingVersion);
         } catch (Exception e) {
@@ -103,6 +125,8 @@ public final class RootDb {
     }
 
     public static void exec(String dbPath, List<String> statements) {
+        // Mutating -> back up the target DB first (default-on; non-blocking).
+        autoBackup(dbPath);
         try {
             get().execStatements(dbPath, statements);
         } catch (Exception e) {
@@ -141,10 +165,15 @@ public final class RootDb {
         }
     }
 
-    /** Root-process byte copy of {@code srcPath} -> {@code destPath} (DB backup). */
-    public static void backupFile(String srcPath, String destPath) {
+    /**
+     * Root-process consistent, restorable backup of the SQLite DB {@code srcPath} ->
+     * {@code destPath} (main file + WAL/SHM/journal sidecars, checkpointed and atomically
+     * written). When {@code uid >= 0} the written files are chowned to {@code uid}/{@code gid}
+     * so the app can later prune/restore them.
+     */
+    public static void backupFile(String srcPath, String destPath, int uid, int gid) {
         try {
-            get().backupFile(srcPath, destPath);
+            get().backupFile(srcPath, destPath, uid, gid);
         } catch (Exception e) {
             throw new RuntimeException("backupFile failed", e);
         }

@@ -21,12 +21,17 @@ public class PhixitEngine {
     /** Activity.getPreferences() stores under the activity's local class name. */
     public static final String PREFS = "MainActivity";
 
-    public static final String PHENO_DB =
-            "/data/data/com.google.android.gms/databases/phenotype.db";
+    /** @deprecated use {@link GmsPaths#PHENO_DB}; kept so existing references/tests resolve. */
+    @Deprecated
+    public static final String PHENO_DB = GmsPaths.PHENO_DB;
 
-    /** GMS's phenotype cache dir, cleared after an edit so GMS re-reads the DB. */
-    static final String PHENO_CACHE_DIR =
-            "/data/data/com.google.android.gms/files/phenotype";
+    /** @deprecated use {@link GmsPaths#PHENO_CACHE_DIR}. */
+    @Deprecated
+    static final String PHENO_CACHE_DIR = GmsPaths.PHENO_CACHE_DIR;
+
+    /** Max time to wait for GMS to actually die after {@code am force-stop} returns. */
+    private static final long GMS_STOP_TIMEOUT_MS = 3000;
+    private static final long GMS_STOP_POLL_MS = 100;
 
     private final Context ctx;
     private final StringBuilder log;
@@ -59,10 +64,17 @@ public class PhixitEngine {
         boolean wasEnforcing = policy.equalsIgnoreCase("Enforcing");
         if (wasEnforcing) MainActivity.runSuWithCmd("setenforce 0");
         MainActivity.runSuWithCmd("am force-stop com.google.android.gms");
+        // `am force-stop` returns before teardown completes; wait (bounded) for GMS to
+        // actually be gone so the DB isn't read mid-write. The backup taken inside RootDb is
+        // additionally checkpoint-consistent, so this is belt-and-braces.
+        if (!waitForGmsStopped()) {
+            sb.append("  WARN: GMS still running after force-stop timeout; proceeding\n");
+        }
 
-        // Safety net: back up the DB before we touch it (default opted-in). Non-fatal --
-        // a backup failure is logged inside DbBackup and never blocks the tweak.
-        new DbBackup(ctx).backupBeforeEdit(PHENO_DB);
+        // NOTE: the pre-edit safety-net DB backup is no longer taken here. It now happens
+        // automatically at the RootDb choke point (writePartitions/exec) for EVERY DB
+        // mutation, so raw phenotype edits and CarRemover's carservicedata.db edits are
+        // covered too, not just applySpecs. See DbBackup / RootDb.
 
         LinkedHashMap<String, List<FlagSpec>> byPkg = groupByPkg(specs);
 
@@ -137,7 +149,12 @@ public class PhixitEngine {
         }
         MainActivity.runSuWithCmd("restorecon " + PHENO_DB);
         try {
-            RootDb.deleteRecursive(PHENO_CACHE_DIR);
+            if (!RootDb.deleteRecursive(PHENO_CACHE_DIR)) {
+                // Non-fatal: GMS rebuilds the cache, but leftover entries could shadow the
+                // edited snapshot, so surface it.
+                sb.append("  WARN: phenotype cache not fully cleared (")
+                        .append(PHENO_CACHE_DIR).append(")\n");
+            }
         } catch (Exception ex) {
             sb.append("  cache clear ERR: ").append(ex).append("\n");
         }
@@ -146,6 +163,27 @@ public class PhixitEngine {
 
         log.append(sb);
         return ok;
+    }
+
+    /**
+     * Polls (bounded) until GMS has no live pid, so a force-stopped GMS is really gone before
+     * we read/edit its DB. Returns {@code true} once GMS is gone, {@code false} on timeout.
+     * Uses {@code pidof}; an empty result means no process.
+     */
+    private static boolean waitForGmsStopped() {
+        long deadline = System.currentTimeMillis() + GMS_STOP_TIMEOUT_MS;
+        while (true) {
+            String pid = MainActivity.runSuWithCmd("pidof com.google.android.gms")
+                    .getInputStreamLog().trim();
+            if (pid.isEmpty()) return true;
+            if (System.currentTimeMillis() >= deadline) return false;
+            try {
+                Thread.sleep(GMS_STOP_POLL_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
     }
 
     private static LinkedHashMap<String, List<FlagSpec>> groupByPkg(List<FlagSpec> specs) {
