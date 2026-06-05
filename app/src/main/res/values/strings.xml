@@ -64,6 +64,13 @@ Android Auto 5.8 or superior is required.</string>
     <string name="auto_reapply">Keep tweaks applied in background</string>
     <string name="auto_reapply_on">Tweaks will be re-applied automatically if Android Auto reverts them</string>
     <string name="auto_reapply_off">Automatic re-apply disabled</string>
+    <string name="menu_nondestructive_patch">Experimental: non-destructive app patching</string>
+    <string name="nondestructive_patch_on">Non-destructive patching ON: apps will only be re-stamped (not reinstalled). Experimental — may not pass Android Auto validation.</string>
+    <string name="nondestructive_patch_off">Non-destructive patching OFF: apps will be uninstalled and reinstalled (default).</string>
+    <string name="menu_auto_backup_dbs">Back up databases before editing</string>
+    <string name="auto_backup_dbs_on">Database backups ON: a copy is saved before each edit (default).</string>
+    <string name="auto_backup_dbs_off">Database backups OFF: no copy is saved before edits.</string>
+    <string name="patch_apps_lost_intro">Some apps were left uninstalled while patching for Android Auto. Their only remaining copy is the temporary APK listed below — reinstall it (for example: pm install &lt;path&gt;) to recover the app:</string>
     <string name="tab_tweaks">Tweaks</string>
     <string name="tab_logs">Logs</string>
     <string name="welcome_title">Welcome to AndroidAutoX</string>

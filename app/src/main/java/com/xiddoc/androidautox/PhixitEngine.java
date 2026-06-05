@@ -21,8 +21,17 @@ public class PhixitEngine {
     /** Activity.getPreferences() stores under the activity's local class name. */
     public static final String PREFS = "MainActivity";
 
-    public static final String PHENO_DB =
-            "/data/data/com.google.android.gms/databases/phenotype.db";
+    /** @deprecated use {@link GmsPaths#PHENO_DB}; kept so existing references/tests resolve. */
+    @Deprecated
+    public static final String PHENO_DB = GmsPaths.PHENO_DB;
+
+    /** @deprecated use {@link GmsPaths#PHENO_CACHE_DIR}. */
+    @Deprecated
+    static final String PHENO_CACHE_DIR = GmsPaths.PHENO_CACHE_DIR;
+
+    /** Max time to wait for GMS to actually die after {@code am force-stop} returns. */
+    private static final long GMS_STOP_TIMEOUT_MS = 3000;
+    private static final long GMS_STOP_POLL_MS = 100;
 
     private final Context ctx;
     private final StringBuilder log;
@@ -40,14 +49,32 @@ public class PhixitEngine {
     public boolean applySpecs(List<FlagSpec> specs, boolean captureBaseline) {
         StringBuilder sb = new StringBuilder();
 
-        // Capture the db's owner + SELinux mode, force-stop GMS, and drop to permissive
-        // (only if it was enforcing) so the root service can open the private db. All of
-        // this is restored at the end.
-        String owner = MainActivity.runSuWithCmd("stat -c %U:%G " + PHENO_DB).getInputStreamLog().trim();
+        // Capture the db's owner (numeric uid/gid via Os.stat in the root process -- more
+        // robust than parsing `stat -c %U:%G`) + SELinux mode, force-stop GMS, and drop to
+        // permissive (only if it was enforcing) so the root service can open the private db.
+        // All of this is restored at the end.
+        int[] owner;
+        try {
+            owner = RootDb.statOwner(PHENO_DB);
+        } catch (Exception ex) {
+            owner = null; // best-effort; root edits already preserve ownership
+            sb.append("  statOwner ERR: ").append(ex).append("\n");
+        }
         String policy = MainActivity.runSuWithCmd("getenforce").getInputStreamLog().trim();
         boolean wasEnforcing = policy.equalsIgnoreCase("Enforcing");
         if (wasEnforcing) MainActivity.runSuWithCmd("setenforce 0");
         MainActivity.runSuWithCmd("am force-stop com.google.android.gms");
+        // `am force-stop` returns before teardown completes; wait (bounded) for GMS to
+        // actually be gone so the DB isn't read mid-write. The backup taken inside RootDb is
+        // additionally checkpoint-consistent, so this is belt-and-braces.
+        if (!waitForGmsStopped()) {
+            sb.append("  WARN: GMS still running after force-stop timeout; proceeding\n");
+        }
+
+        // NOTE: the pre-edit safety-net DB backup is no longer taken here. It now happens
+        // automatically at the RootDb choke point (writePartitions/exec) for EVERY DB
+        // mutation, so raw phenotype edits and CarRemover's carservicedata.db edits are
+        // covered too, not just applySpecs. See DbBackup / RootDb.
 
         LinkedHashMap<String, List<FlagSpec>> byPkg = groupByPkg(specs);
 
@@ -113,14 +140,50 @@ public class PhixitEngine {
 
         // Restore ownership/SELinux context on the db (root edits keep the owner, but be
         // safe), then make GMS re-read the edited snapshot from the DB and restart fresh.
-        if (owner.contains(":")) MainActivity.runSuWithCmd("chown " + owner + " " + PHENO_DB);
+        if (owner != null) {
+            try {
+                RootDb.chownPath(PHENO_DB, owner[0], owner[1]);
+            } catch (Exception ex) {
+                sb.append("  chownPath ERR: ").append(ex).append("\n");
+            }
+        }
         MainActivity.runSuWithCmd("restorecon " + PHENO_DB);
-        MainActivity.runSuWithCmd("rm -rf /data/data/com.google.android.gms/files/phenotype");
+        try {
+            if (!RootDb.deleteRecursive(PHENO_CACHE_DIR)) {
+                // Non-fatal: GMS rebuilds the cache, but leftover entries could shadow the
+                // edited snapshot, so surface it.
+                sb.append("  WARN: phenotype cache not fully cleared (")
+                        .append(PHENO_CACHE_DIR).append(")\n");
+            }
+        } catch (Exception ex) {
+            sb.append("  cache clear ERR: ").append(ex).append("\n");
+        }
         MainActivity.runSuWithCmd("am force-stop com.google.android.gms");
         if (wasEnforcing) MainActivity.runSuWithCmd("setenforce 1");
 
         log.append(sb);
         return ok;
+    }
+
+    /**
+     * Polls (bounded) until GMS has no live pid, so a force-stopped GMS is really gone before
+     * we read/edit its DB. Returns {@code true} once GMS is gone, {@code false} on timeout.
+     * Uses {@code pidof}; an empty result means no process.
+     */
+    private static boolean waitForGmsStopped() {
+        long deadline = System.currentTimeMillis() + GMS_STOP_TIMEOUT_MS;
+        while (true) {
+            String pid = MainActivity.runSuWithCmd("pidof com.google.android.gms")
+                    .getInputStreamLog().trim();
+            if (pid.isEmpty()) return true;
+            if (System.currentTimeMillis() >= deadline) return false;
+            try {
+                Thread.sleep(GMS_STOP_POLL_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
     }
 
     private static LinkedHashMap<String, List<FlagSpec>> groupByPkg(List<FlagSpec> specs) {

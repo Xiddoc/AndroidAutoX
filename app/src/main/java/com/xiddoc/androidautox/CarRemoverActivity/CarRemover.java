@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 
+import com.xiddoc.androidautox.GmsPaths;
 import com.xiddoc.androidautox.MainActivity;
 import com.xiddoc.androidautox.NotSuccessfulDialog;
 import com.xiddoc.androidautox.R;
@@ -88,8 +89,7 @@ public class CarRemover extends AppCompatActivity {
                 new Thread() {
                     @Override
                     public void run() {
-                        RootDb.exec("/data/data/com.google.android.projection.gearhead/databases/carservicedata.db",
-                                deletes);
+                        RootDb.exec(GmsPaths.CARSERVICE_DB, deletes);
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
@@ -146,8 +146,7 @@ public class CarRemover extends AppCompatActivity {
         new Thread() {
             @Override
             public void run() {
-                final String carDb =
-                        "/data/data/com.google.android.projection.gearhead/databases/carservicedata.db";
+                final String carDb = GmsPaths.CARSERVICE_DB;
                 final String[] carRows =
                         RootDb.query(carDb, "SELECT manufacturer,model FROM allowedcars").split("\\r?\\n");
                 final String[] idRows =

@@ -146,6 +146,11 @@ A CI pipeline using GitHub Actions is being added. It builds and signs the app u
 > platform mandate — the real requirement is committing the override and restarting the consuming
 > processes / projection session).
 
+> Why uninstall/reinstall apps to patch them? See `docs/patch-apps-installer-analysis.md` for the
+> rationale behind the destructive reinstall (re-stamping the Play Store as installer + initiator),
+> the experimental non-destructive `pm set-installer` alternative, and the installing-vs-initiating
+> package caveat that makes set-installer a strictly weaker spoof.
+
 ## Adding a new tweak button
 
 1. In `app/src/main/res/layout/scrollview.xml`, add a `Button` (and its companion status `ImageView`) inside the appropriate section: `GENERAL`, `SCREEN SETUP`, `APPEARANCE`, `VIDEO QUALITY`, or `PRE-ACTIVATE`.
