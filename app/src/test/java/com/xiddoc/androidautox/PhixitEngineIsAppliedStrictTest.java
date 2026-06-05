@@ -79,6 +79,24 @@ public class PhixitEngineIsAppliedStrictTest {
             @Override
             public void execStatements(String dbPath, List<String> statements) {
             }
+
+            @Override
+            public int[] statOwner(String path) {
+                return new int[]{0, 0};
+            }
+
+            @Override
+            public void chownPath(String path, int uid, int gid) {
+            }
+
+            @Override
+            public boolean deleteRecursive(String path) {
+                return true;
+            }
+
+            @Override
+            public void backupFile(String srcPath, String destPath, int uid, int gid) {
+            }
         };
         svcField.set(null, fake);
     }
