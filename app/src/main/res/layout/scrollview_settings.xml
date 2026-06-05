@@ -11,8 +11,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:scrollbarDefaultDelayBeforeFade="3000"
-    android:orientation="vertical">
+    android:scrollbarDefaultDelayBeforeFade="3000">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -23,16 +22,10 @@
 
         <!-- ABOUT -->
         <TextView
+            style="@style/SectionHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="15dp"
-            android:gravity="center"
-            android:textAlignment="center"
-            android:text="@string/settings_header_about"
-            android:textAllCaps="true"
-            android:textStyle="bold"
-            android:textSize="16sp" />
+            android:text="@string/settings_header_about" />
 
         <TextView
             android:id="@+id/settings_about_text"
@@ -51,18 +44,12 @@
             android:focusable="true"
             android:text="@string/translators_button" />
 
-        <!-- SETTINGS -->
+        <!-- GENERAL -->
         <TextView
+            style="@style/SectionHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="15dp"
-            android:gravity="center"
-            android:textAlignment="center"
-            android:text="@string/settings_header_general"
-            android:textAllCaps="true"
-            android:textStyle="bold"
-            android:textSize="16sp" />
+            android:text="@string/settings_header_general" />
 
         <Button
             android:id="@+id/settings_reset"
@@ -118,16 +105,10 @@
             android:visibility="gone">
 
             <TextView
+                style="@style/SectionHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="15dp"
-                android:gravity="center"
-                android:textAlignment="center"
-                android:text="@string/settings_header_developer"
-                android:textAllCaps="true"
-                android:textStyle="bold"
-                android:textSize="16sp" />
+                android:text="@string/settings_header_developer" />
 
             <Button
                 android:id="@+id/settings_devtest"
