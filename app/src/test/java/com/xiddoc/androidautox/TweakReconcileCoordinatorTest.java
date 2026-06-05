@@ -214,4 +214,16 @@ public class TweakReconcileCoordinatorTest {
         org.junit.Assert.assertFalse("FALSE must never resurrect a disabled tweak",
                 store.isEnabled("k"));
     }
+
+    @Test
+    public void keys_returnsRegisteredTargetKeys() {
+        LinkedHashMap<String, TweakReconcileCoordinator.Target> targets = new LinkedHashMap<>();
+        targets.put("a", new TweakReconcileCoordinator.Target("ON", "OFF"));
+        targets.put("b", new TweakReconcileCoordinator.Target(null, null));
+        TweakReconcileCoordinator coordinator =
+                new TweakReconcileCoordinator(targets, checkerOf(new LinkedHashMap<>()), store());
+
+        // The registration-invariant test relies on keys() exposing exactly the registered targets.
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("a", "b")), coordinator.keys());
+    }
 }

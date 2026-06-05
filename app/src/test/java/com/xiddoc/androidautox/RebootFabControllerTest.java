@@ -1,6 +1,8 @@
 package com.xiddoc.androidautox;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.view.View;
@@ -154,5 +156,29 @@ public class RebootFabControllerTest {
 
         assertEquals(container, RebootFabController.resolveFabRoot(container, button));
         assertEquals(button, RebootFabController.resolveFabRoot(null, button));
+    }
+
+    /**
+     * {@code isRebootRevealed} mirrors the reveal flag for state save/restore: it
+     * starts false, flips true on {@link RebootFabController#reveal()}, and tracks
+     * the value passed to {@link RebootFabController#restoreRevealed(boolean)}.
+     */
+    @Test
+    public void isRebootRevealed_tracksRevealAndRestore() {
+        View fab = newFab();
+        CountingRunnable entrance = new CountingRunnable();
+        CountingRunnable glow = new CountingRunnable();
+        RebootFabController c = new RebootFabController(fab, entrance, glow, LOGS, /*initialPage=*/TWEAKS);
+
+        assertFalse("fresh controller has nothing revealed", c.isRebootRevealed());
+
+        c.reveal();
+        assertTrue("reveal() sets the revealed flag", c.isRebootRevealed());
+
+        c.restoreRevealed(false);
+        assertFalse("restoreRevealed(false) clears the flag", c.isRebootRevealed());
+
+        c.restoreRevealed(true);
+        assertTrue("restoreRevealed(true) sets the flag", c.isRebootRevealed());
     }
 }
