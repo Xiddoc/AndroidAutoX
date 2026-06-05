@@ -2,6 +2,7 @@ package com.xiddoc.androidautox;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -199,6 +200,58 @@ public class TweakStateStoreTest {
                 .getBoolean(KEY, false);
         assertTrue("Legacy load() path must see booleans written by TweakStateStore",
                 legacyRead);
+    }
+
+    // -------------------------------------------------------------------------
+    // Null / empty key guards (checkKey)
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void isEnabled_nullKey_throwsIllegalArgumentException() {
+        TweakStateStore store = new TweakStateStore(context);
+        assertThrows(IllegalArgumentException.class, () -> store.isEnabled(null));
+    }
+
+    @Test
+    public void isEnabled_emptyKey_throwsIllegalArgumentException() {
+        TweakStateStore store = new TweakStateStore(context);
+        assertThrows(IllegalArgumentException.class, () -> store.isEnabled(""));
+    }
+
+    @Test
+    public void setEnabled_nullKey_throwsIllegalArgumentException() {
+        TweakStateStore store = new TweakStateStore(context);
+        assertThrows(IllegalArgumentException.class, () -> store.setEnabled(null, true));
+    }
+
+    @Test
+    public void setEnabled_emptyKey_throwsIllegalArgumentException() {
+        TweakStateStore store = new TweakStateStore(context);
+        assertThrows(IllegalArgumentException.class, () -> store.setEnabled("", true));
+    }
+
+    @Test
+    public void isRebootPending_nullKey_throwsIllegalArgumentException() {
+        TweakStateStore store = new TweakStateStore(context);
+        assertThrows(IllegalArgumentException.class, () -> store.isRebootPending(null));
+    }
+
+    @Test
+    public void isRebootPending_emptyKey_throwsIllegalArgumentException() {
+        TweakStateStore store = new TweakStateStore(context);
+        assertThrows(IllegalArgumentException.class, () -> store.isRebootPending(""));
+    }
+
+    @Test
+    public void setRebootPending_nullKey_throwsIllegalArgumentException() {
+        TweakStateStore store = new TweakStateStore(context);
+        assertThrows(IllegalArgumentException.class, () -> store.setRebootPending(null, true));
+    }
+
+    @Test
+    public void setRebootPending_emptyKey_throwsIllegalArgumentException() {
+        TweakStateStore store = new TweakStateStore(context);
+        assertThrows(IllegalArgumentException.class, () -> store.setRebootPending("", true));
     }
 
     // -------------------------------------------------------------------------
