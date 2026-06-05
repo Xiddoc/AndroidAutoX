@@ -1964,6 +1964,10 @@ public class MainActivity extends AppCompatActivity {
         if (auto != null) {
             auto.setChecked(ReapplyScheduler.isAutoReapplyEnabled(getApplicationContext()));
         }
+        MenuItem nondestructive = menu.findItem(R.id.experimental_nondestructive_patch);
+        if (nondestructive != null) {
+            nondestructive.setChecked(isExperimentalNonDestructivePatch(getApplicationContext()));
+        }
         // Dev/PoC actions are hidden unless developer mode is on.
         boolean dev = isDevMode(getApplicationContext());
         MenuItem applyTest = menu.findItem(R.id.phixit_apply_test);
@@ -2018,6 +2022,19 @@ public class MainActivity extends AppCompatActivity {
             case R.id.aa_settings:
                 String packageName = "com.google.android.projection.gearhead";
                 openApp(getApplicationContext(), packageName);
+                break;
+
+            case R.id.experimental_nondestructive_patch:
+                // Opt-in, default-OFF: switch patchforapps() between the destructive reinstall
+                // (default) and the experimental non-destructive pm set-installer path. See
+                // docs/patch-apps-installer-analysis.md for the installing-vs-initiating caveat.
+                boolean ndState = !item.isChecked();
+                item.setChecked(ndState);
+                setExperimentalNonDestructivePatch(ndState);
+                Toast.makeText(getApplicationContext(),
+                        getString(ndState ? R.string.nondestructive_patch_on
+                                : R.string.nondestructive_patch_off),
+                        Toast.LENGTH_SHORT).show();
                 break;
 
             case R.id.phixit_apply_test:
@@ -2095,6 +2112,16 @@ public class MainActivity extends AppCompatActivity {
         // installer-source validation) lives ONLY here -- it must never run on the headless
         // re-apply path. The flag overrides themselves are produced by
         // TweakRegistry.patchedAppsSpecs() and applied via the phixit engine below.
+        //
+        // The destructive uninstall/reinstall is still the DEFAULT. An opt-in, default-OFF
+        // experimental "non-destructive" mode (pm set-installer only) exists so a maintainer
+        // can run the decisive on-device test of whether the ~11 validation-bypass flags
+        // already subsume the installer re-stamp. set-installer is a strictly WEAKER spoof: it
+        // only changes getInstallingPackageName(), NOT the immutable getInitiatingPackageName()
+        // that the destructive reinstall also re-stamps. See
+        // docs/patch-apps-installer-analysis.md.
+        final PatchAppsPolicy.Mode mode = PatchAppsPolicy.modeFor(
+                isExperimentalNonDestructivePatch(getApplicationContext()));
         new Thread() {
             @Override
             public void run() {
@@ -2102,15 +2129,23 @@ public class MainActivity extends AppCompatActivity {
                         getApplicationContext().getSharedPreferences("appsListPref", 0);
                 Map<String, ?> allEntries = appsListPref.getAll();
                 appendText(logs, "--  Apps which will be added to whitelist: --\n");
+                appendText(logs, "--  Patch mode: " + mode + " --\n");
                 for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
-                    appendText(logs, "\t\t- " + entry.getValue() + " (" + entry.getKey() + ")\n");
+                    String pkg = entry.getKey();
+                    appendText(logs, "\t\t- " + entry.getValue() + " (" + pkg + ")\n");
 
-                    String pathResult = runSuWithCmd("pm path " + entry.getKey()).getInputStreamLogWithLabel();
-                    String actualPath = pathResult.substring(pathResult.lastIndexOf(":") + 1);
+                    // Validate the package name BEFORE it is ever interpolated into a root
+                    // command -- this closes the shell-injection vector for the whole loop.
+                    if (!PatchAppsPolicy.isValidPackageName(pkg)) {
+                        appendText(logs, "\t\t  SKIPPED: invalid/unsafe package name\n");
+                        continue;
+                    }
 
-                    appendText(logs , runSuWithCmd("mv " + actualPath + " /data/local/tmp/tmpapk" + entry.getKey() + ".apk").getStreamLogsWithLabels());
-                    appendText(logs , runSuWithCmd("pm uninstall " + entry.getKey()).getStreamLogsWithLabels());
-                    appendText(logs, runSuWithCmd("pm install -t -i \"com.android.vending\" -r" + " /data/local/tmp/tmpapk" + entry.getKey() + ".apk" ).getStreamLogsWithLabels());
+                    if (mode == PatchAppsPolicy.Mode.SET_INSTALLER) {
+                        patchAppSetInstaller(logs, pkg);
+                    } else {
+                        patchAppDestructive(logs, pkg);
+                    }
                 }
 
                 appendText(logs, "\n\n--  restoring Google Play Services   --");
@@ -2130,6 +2165,122 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         }.start();
+    }
+
+    /** SharedPreferences key for the opt-in, default-OFF non-destructive patch mode. */
+    static final String PREF_EXPERIMENTAL_NONDESTRUCTIVE_PATCH =
+            "experimental_nondestructive_patch";
+
+    /**
+     * Reads the experimental non-destructive patch preference (default {@code false}). Stored
+     * in the activity's default {@code getPreferences} file so it lines up with the other
+     * toggles. See {@link PatchAppsPolicy} and docs/patch-apps-installer-analysis.md.
+     */
+    static boolean isExperimentalNonDestructivePatch(Context ctx) {
+        return ctx.getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
+                .getBoolean(PREF_EXPERIMENTAL_NONDESTRUCTIVE_PATCH, false);
+    }
+
+    private void setExperimentalNonDestructivePatch(boolean enabled) {
+        getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_EXPERIMENTAL_NONDESTRUCTIVE_PATCH, enabled)
+                .apply();
+    }
+
+    /**
+     * Experimental, non-destructive per-app patch: only re-stamps the installing package via
+     * {@code pm set-installer}. The app is never uninstalled. {@code pkg} must already be
+     * validated by {@link PatchAppsPolicy#isValidPackageName(String)}.
+     */
+    private void patchAppSetInstaller(final TextView logs, String pkg) {
+        String cmd = "pm set-installer " + pkg + " com.android.vending";
+        com.topjohnwu.superuser.Shell.Result r = runSuWithCmdResult(cmd);
+        appendText(logs, describeResult(cmd, r));
+        if (!shellOk(r)) {
+            appendText(logs, "\n\t\t  WARNING: set-installer failed for " + pkg + "\n");
+        }
+    }
+
+    /**
+     * Default destructive per-app patch: move the base APK aside, uninstall, reinstall with the
+     * Play Store as the installer/initiator. Every step checks its exit code; on any failure the
+     * entry is aborted and a best-effort rollback (reinstall from the saved APK) is attempted so
+     * the app is never left uninstalled. {@code pkg} must already be validated by
+     * {@link PatchAppsPolicy#isValidPackageName(String)}.
+     */
+    private void patchAppDestructive(final TextView logs, String pkg) {
+        // Resolve the APK path(s) via PackageManager instead of parsing "pm path" output -- this
+        // removes the shell parse AND lets us detect split APKs (which the single-base-APK
+        // reinstall would corrupt).
+        ApplicationInfo ai;
+        try {
+            ai = getPackageManager().getApplicationInfo(pkg, 0);
+        } catch (PackageManager.NameNotFoundException e) {
+            appendText(logs, "\t\t  SKIPPED: package not found (" + pkg + ")\n");
+            return;
+        }
+        if (PatchAppsPolicy.isSplitApk(ai.splitSourceDirs)) {
+            // A split APK can't be safely re-stamped by the single-base-APK reinstall; failing
+            // gracefully is far better than corrupting (uninstalling) the app.
+            appendText(logs, "\t\t  SKIPPED: split APK -- cannot safely reinstall (" + pkg + ")\n");
+            return;
+        }
+        String srcApk = ai.sourceDir;
+        if (srcApk == null || srcApk.isEmpty()) {
+            appendText(logs, "\t\t  SKIPPED: no source APK path (" + pkg + ")\n");
+            return;
+        }
+
+        String tmpApk = "/data/local/tmp/tmpapk" + pkg + ".apk";
+
+        // 1. Copy (not move) the APK aside first, so the original stays in place until the copy
+        //    is confirmed -- we only uninstall once the APK is safely saved.
+        String cpCmd = "cp " + quoteShellArg(srcApk) + " " + tmpApk;
+        com.topjohnwu.superuser.Shell.Result cp = runSuWithCmdResult(cpCmd);
+        appendText(logs, describeResult(cpCmd, cp));
+        if (!shellOk(cp)) {
+            appendText(logs, "\n\t\t  ABORTED: could not copy APK aside; app left untouched (" + pkg + ")\n");
+            return;
+        }
+
+        // 2. Uninstall (APK is now safely saved at tmpApk).
+        String unCmd = "pm uninstall " + pkg;
+        com.topjohnwu.superuser.Shell.Result un = runSuWithCmdResult(unCmd);
+        appendText(logs, describeResult(unCmd, un));
+        if (!shellOk(un)) {
+            appendText(logs, "\n\t\t  ABORTED: uninstall failed; app left installed (" + pkg + ")\n");
+            runSuWithCmd("rm -f " + tmpApk);
+            return;
+        }
+
+        // 3. Reinstall, re-stamping the Play Store as installer + initiator.
+        String inCmd = "pm install -t -i \"com.android.vending\" -r " + tmpApk;
+        com.topjohnwu.superuser.Shell.Result in = runSuWithCmdResult(inCmd);
+        appendText(logs, describeResult(inCmd, in));
+        if (!shellOk(in)) {
+            // Best-effort rollback: reinstall the original APK so the app is never left
+            // uninstalled. Keep tmpApk if even the rollback failed, so the user can recover it.
+            appendText(logs, "\n\t\t  install FAILED -- attempting rollback (" + pkg + ")\n");
+            String rbCmd = "pm install -r " + tmpApk;
+            com.topjohnwu.superuser.Shell.Result rb = runSuWithCmdResult(rbCmd);
+            appendText(logs, describeResult(rbCmd, rb));
+            if (shellOk(rb)) {
+                appendText(logs, "\n\t\t  rollback OK; app restored. Removing temp APK.\n");
+                runSuWithCmd("rm -f " + tmpApk);
+            } else {
+                appendText(logs, "\n\t\t  ROLLBACK FAILED -- temp APK kept at " + tmpApk + "\n");
+            }
+            return;
+        }
+
+        // 4. Install succeeded -- only now is it safe to delete the temp APK.
+        runSuWithCmd("rm -f " + tmpApk);
+    }
+
+    /** Wraps a shell argument in single quotes, escaping any embedded single quotes. */
+    private static String quoteShellArg(String arg) {
+        return "'" + arg.replace("'", "'\\''") + "'";
     }
 
     private String gainOwnership(final TextView logs) {
@@ -2812,19 +2963,50 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
                     file.append("\n");
                     total += map.size();
                 }
-                String outFile = filesDir + "/all_flags.txt";
-                try {
-                    java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile);
-                    fos.write(file.toString().getBytes("UTF-8"));
-                    fos.close();
-                } catch (Exception e) {
-                    appendText(logs, "\n  dump write ERR: " + e + "\n");
+                // Write straight to the public Downloads dir via MediaStore -- no root, no
+                // shell cp/chmod (scoped storage; targetSdk 34). Same user-facing result: a
+                // file the user can find in Downloads.
+                boolean wrote = writeToDownloads(getApplicationContext(),
+                        "androidautox_flags.txt", "text/plain", file.toString());
+                if (wrote) {
+                    appendText(logs, "\n\n==== DUMPED " + total +
+                            " flags to Downloads/androidautox_flags.txt ====\n");
+                } else {
+                    appendText(logs, "\n  dump write ERR: could not write to Downloads\n");
                 }
-                runSuWithCmd("cp " + outFile + " /sdcard/Download/androidautox_flags.txt && chmod 644 /sdcard/Download/androidautox_flags.txt");
-                appendText(logs, "\n\n==== DUMPED " + total +
-                        " flags to /sdcard/Download/androidautox_flags.txt ====\n");
             }
         }.start();
+    }
+
+    /**
+     * Writes {@code content} to the public Downloads directory via {@link MediaStore} -- no root
+     * and no shell {@code cp}/{@code chmod} (scoped storage, targetSdk 34). Returns true on
+     * success.
+     */
+    private static boolean writeToDownloads(Context ctx, String displayName,
+                                            String mimeType, String content) {
+        android.content.ContentResolver resolver = ctx.getContentResolver();
+        android.content.ContentValues values = new android.content.ContentValues();
+        values.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, displayName);
+        values.put(android.provider.MediaStore.Downloads.MIME_TYPE, mimeType);
+        values.put(android.provider.MediaStore.Downloads.RELATIVE_PATH,
+                android.os.Environment.DIRECTORY_DOWNLOADS);
+        Uri uri = resolver.insert(
+                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+        if (uri == null) {
+            return false;
+        }
+        try (java.io.OutputStream os = resolver.openOutputStream(uri)) {
+            if (os == null) {
+                resolver.delete(uri, null, null);
+                return false;
+            }
+            os.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return true;
+        } catch (Exception e) {
+            resolver.delete(uri, null, null);
+            return false;
+        }
     }
 
     /**
@@ -2965,6 +3147,46 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
             streamLogs.setErrorStreamLog(String.valueOf(t));
         }
         return streamLogs;
+    }
+
+    /**
+     * Like {@link #runSuWithCmd(String)} but exposes the shell exit code so callers can react
+     * to failures instead of silently ignoring them ({@link #runSuWithCmd(String)} discards the
+     * code, which is fine for fire-and-forget callers but unsafe for the destructive
+     * app-patching loop). The existing signature is intentionally left untouched so its other
+     * callers are unaffected.
+     *
+     * @return the libsu {@link com.topjohnwu.superuser.Shell.Result} (exposes {@code getCode()}
+     *         / {@code isSuccess()}), or {@code null} if the shell itself threw.
+     */
+    public static com.topjohnwu.superuser.Shell.Result runSuWithCmdResult(String cmd) {
+        try {
+            return com.topjohnwu.superuser.Shell.cmd(cmd).exec();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** True iff the shell result is non-null and reported success (exit code 0). */
+    private static boolean shellOk(com.topjohnwu.superuser.Shell.Result r) {
+        return r != null && r.isSuccess();
+    }
+
+    /** Renders a {@link com.topjohnwu.superuser.Shell.Result} for the on-screen log. */
+    private static String describeResult(String cmd, com.topjohnwu.superuser.Shell.Result r) {
+        StreamLogs s = new StreamLogs();
+        s.setOutputStreamLog(cmd);
+        if (r != null) {
+            s.setInputStreamLog(joinLines(r.getOut()));
+            s.setErrorStreamLog(joinLines(r.getErr()));
+        } else {
+            s.setErrorStreamLog("shell threw / no result");
+        }
+        String out = s.getStreamLogsWithLabels();
+        if (r != null && !r.isSuccess()) {
+            out += "\n\t(exit code " + r.getCode() + ")";
+        }
+        return out;
     }
 
     /**

@@ -23,6 +23,12 @@
         android:title="@string/menu_aa_settings" />
 
     <item
+        android:id="@+id/experimental_nondestructive_patch"
+        android:checkable="true"
+        app:showAsAction="never"
+        android:title="@string/menu_nondestructive_patch" />
+
+    <item
         android:id="@+id/phixit_apply_test"
         android:visible="false"
         app:showAsAction="never"
