@@ -93,6 +93,45 @@ twice: real values in `TweakRegistry`, placeholder values in `PhixitTweaks.specs
 revert. They must stay in lockstep or revert silently misses a baseline. Consider a single
 shared name list both derive from.
 
+## 10. `MyAdapter.onBindViewHolder` binds from `getAdapterPosition()` not its `position` arg
+
+`onBindViewHolder(holder, i)` ignores `i` and does `mAppInfo.get(holder.getAdapterPosition())`.
+`getAdapterPosition()` returns `NO_POSITION` (-1) for a holder the RecyclerView hasn't attached
+(e.g. mid-recompute, or if `bindViewHolder` is ever called on a detached holder) -> latent
+`IndexOutOfBoundsException`. It also forces tests to drive a full measure/layout pass instead
+of binding a holder directly. Bind from the `position` parameter instead.
+
+## 11. Two different position sources for the same row (row-click vs checkbox)
+
+The row `OnClickListener` (set in `onCreateViewHolder`) captures the creation-time `i`, while
+the checkbox (`R.id.checkbox_app`) listener uses `getAdapterPosition()`. Two listeners on one
+row resolve their target index two different ways; after any insert/remove/move they can
+disagree. Unify on a single source (prefer `getBindingAdapterPosition()` resolved at click
+time).
+
+## 12. `onClickSaveAppsWhiteList` mixes `apply()` (remove) and `commit()` (add)
+
+The remove branch calls `editor.apply()` (async) and the add branch calls `editor.commit()`
+(sync). Inconsistent durability/threading for the same pref edit; pick one (prefer `apply()`)
+so behavior is uniform.
+
+## 13. Car filter uses a caught `NullPointerException` as control flow
+
+`AppsList.onCreate` reads `packageInfo.metaData.getInt(...)` inside a `try`/`catch
+(NullPointerException)` to skip apps with no metadata, and the catch does `printStackTrace()`
+(log spam for every metadata-less app, which is the common case). Replace with an explicit
+`if (bundle != null)` guard and drop the stack-trace print.
+
+## 14. Per-comparison allocations + duplicated string constants
+
+- `AppInfo.compareTo` rebuilds a ~9-element "known Android-Auto apps" `ArrayList` on every
+  single comparison (O(n log n) allocations during the sort). Hoist it to a
+  `static final Set<String>`.
+- The `"appsListPref"` pref name and the `"com.google.android.gms.car.application"` car marker
+  are string literals duplicated across `AppsList`, `MyAdapter`, and `TweakRegistry` with no
+  shared constant. (Distinct from #8, which is about the flag-name *lists*.) Extract shared
+  constants.
+
 ## 9. Minor
 
 - patchforapps shows two sequential `ProgressDialog`s (reinstall phase, then engine phase) ->
