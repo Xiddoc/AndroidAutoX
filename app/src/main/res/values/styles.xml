@@ -56,6 +56,18 @@
     </style>
 
 
+    <!-- Section header look shared by the tweak/settings tabs: bold, all-caps, centered,
+         16sp with the standard top/bottom margins (matches scrollview.xml's section_one). -->
+    <style name="SectionHeader">
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:layout_marginBottom">15dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textAlignment">center</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
     <style name="AppTheme.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
