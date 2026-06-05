@@ -21,6 +21,130 @@ public final class PatchAppsPolicy {
     }
 
     /**
+     * The Play Store package both patch paths re-stamp as the installer (and, in the
+     * destructive path, the initiating package). Centralised so the destructive reinstall,
+     * the set-installer path, and the enum doc all reference one constant.
+     */
+    public static final String PLAY_STORE_PKG = "com.android.vending";
+
+    /**
+     * Path of the temporary copy of {@code pkg}'s base APK used by the destructive reinstall.
+     * After {@code pm uninstall} this is the ONLY surviving copy of the app, so callers must
+     * confirm the package is reinstalled before deleting it.
+     */
+    public static String tmpApkPath(String pkg) {
+        return "/data/local/tmp/tmpapk" + pkg + ".apk";
+    }
+
+    // --- pm output parsing (pure) ---------------------------------------------
+
+    /**
+     * Decides whether a {@code pm} command (install / uninstall / set-installer) actually
+     * succeeded by SCANNING ITS OUTPUT, not its exit code. {@code pm} is notorious for
+     * printing {@code Failure [INSTALL_FAILED_X]} to stdout while still exiting 0, so an
+     * exit-code check would treat a failed uninstall/install as success and could delete the
+     * only surviving APK copy.
+     *
+     * <p>Success requires at least one output line whose trimmed value is exactly
+     * {@code Success} (case-sensitive, the literal {@code pm} prints). {@code null}, empty,
+     * whitespace-only, and any {@code Failure}/error output are all treated as failure.
+     *
+     * @param outputLines the combined stdout (and/or stderr) lines of the {@code pm} command
+     * @return {@code true} only when an exact {@code Success} token is present
+     */
+    public static boolean pmSucceeded(java.util.List<String> outputLines) {
+        if (outputLines == null) {
+            return false;
+        }
+        for (String line : outputLines) {
+            if (line != null && "Success".equals(line.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // --- shell argument quoting (pure) ----------------------------------------
+
+    /**
+     * Wraps {@code arg} in single quotes for safe shell interpolation, escaping any embedded
+     * single quote with the classic {@code '\''} idiom (close-quote, escaped quote, re-open).
+     * Inside single quotes the shell treats {@code $}, backticks, spaces, etc. literally, so
+     * only the single quote itself needs special handling.
+     *
+     * <p>This is only meant for OS-controlled values (e.g. an APK path PackageManager handed
+     * us); user-selected package names are validated by {@link #isValidPackageName(String)}
+     * before interpolation, but quoting them too is cheap defence-in-depth.
+     */
+    public static String quoteShellArg(String arg) {
+        return "'" + arg.replace("'", "'\\''") + "'";
+    }
+
+    // --- destructive reinstall sequencing (pure) ------------------------------
+
+    /** The ordered steps of the destructive uninstall/reinstall, in the order they run. */
+    public enum Step {
+        /** {@code cp} the base APK aside to {@link #tmpApkPath(String)}. */
+        COPY,
+        /** {@code pm uninstall} the package (the temp APK becomes the only copy). */
+        UNINSTALL,
+        /** {@code pm install} the temp APK, re-stamping the Play Store. */
+        INSTALL,
+        /** Best-effort {@code pm install} of the temp APK to undo a failed {@link #INSTALL}. */
+        ROLLBACK
+    }
+
+    /**
+     * What {@link MainActivity#patchAppDestructive} should do after a {@link Step} reports a
+     * given success/failure. This makes the riskiest branching (where the only APK copy may be
+     * deleted) a pure, unit-tested decision instead of inline conditionals.
+     */
+    public enum NextAction {
+        /** Run the next step in sequence ({@code COPY ok -> UNINSTALL}, {@code UNINSTALL ok -> INSTALL}). */
+        PROCEED,
+        /** Copy failed: nothing was changed; abort and leave the app untouched (no temp APK to keep). */
+        ABORT_APP_UNTOUCHED,
+        /** Uninstall failed: app is still installed; abort and delete the (now-redundant) temp APK. */
+        ABORT_DELETE_TMP,
+        /** Install failed: attempt the {@link Step#ROLLBACK} reinstall before deciding. */
+        ATTEMPT_ROLLBACK,
+        /** Done successfully (install ok, or rollback ok): delete the temp APK once presence is confirmed. */
+        DONE_DELETE_TMP,
+        /** Rollback also failed: KEEP the temp APK so the user can recover the only surviving copy. */
+        FAILED_KEEP_TMP
+    }
+
+    /**
+     * Pure transition for the destructive reinstall: given the step that just ran and whether
+     * it succeeded (already decided by {@link #pmSucceeded} for the {@code pm} steps), returns
+     * the next action. Encodes the safety rules:
+     * <ul>
+     *   <li>copy fails -&gt; app untouched, no temp to keep;</li>
+     *   <li>uninstall fails -&gt; app still installed, drop the temp;</li>
+     *   <li>install fails -&gt; try a rollback;</li>
+     *   <li>install ok / rollback ok -&gt; delete the temp (after confirming the package is back);</li>
+     *   <li>rollback fails -&gt; KEEP the temp (only surviving copy).</li>
+     * </ul>
+     *
+     * <p>The {@code DONE_DELETE_TMP} action is advisory: the caller must still positively
+     * confirm the package is installed (via PackageManager) before any delete.
+     */
+    public static NextAction nextAction(Step step, boolean success) {
+        switch (step) {
+            case COPY:
+                return success ? NextAction.PROCEED : NextAction.ABORT_APP_UNTOUCHED;
+            case UNINSTALL:
+                return success ? NextAction.PROCEED : NextAction.ABORT_DELETE_TMP;
+            case INSTALL:
+                return success ? NextAction.DONE_DELETE_TMP : NextAction.ATTEMPT_ROLLBACK;
+            case ROLLBACK:
+                return success ? NextAction.DONE_DELETE_TMP : NextAction.FAILED_KEEP_TMP;
+            default:
+                throw new IllegalArgumentException("Unknown step: " + step);
+        }
+    }
+
+    /**
      * Android package names are restricted to letters, digits, dots and underscores. This
      * is intentionally stricter than the platform's full grammar (we also accept names that
      * are technically malformed, e.g. a leading dot) because the only job here is to refuse
@@ -47,13 +171,13 @@ public final class PatchAppsPolicy {
     public enum Mode {
         /**
          * Default: move the APK aside, {@code pm uninstall}, then {@code pm install} with
-         * {@code -i "com.android.vending"} so both the installing and initiating package are
+         * {@code -i} {@link #PLAY_STORE_PKG} so both the installing and initiating package are
          * re-stamped to the Play Store. Destructive (the app is briefly uninstalled).
          */
         DESTRUCTIVE_REINSTALL,
         /**
          * Experimental, opt-in: leave the app installed and only run
-         * {@code pm set-installer <pkg> com.android.vending}. This changes
+         * {@code pm set-installer <pkg>} {@link #PLAY_STORE_PKG}. This changes
          * {@code getInstallingPackageName()} but NOT the immutable
          * {@code getInitiatingPackageName()}, so it is a strictly weaker spoof — safe only if
          * Gearhead reads the installing field. See the docs file.

@@ -81,4 +81,116 @@ public class PatchAppsPolicyTest {
         assertTrue(PatchAppsPolicy.isSplitApk(new String[]{"/data/app/base/split_config.en.apk"}));
         assertTrue(PatchAppsPolicy.isSplitApk(new String[]{"a", "b"}));
     }
+
+    // --- pmSucceeded: judge pm by output, not exit code -------------------
+
+    @Test
+    public void pmSucceeded_exactSuccessToken() {
+        assertTrue(PatchAppsPolicy.pmSucceeded(java.util.Collections.singletonList("Success")));
+        // pm sometimes pads with whitespace; the trimmed line must equal "Success".
+        assertTrue(PatchAppsPolicy.pmSucceeded(java.util.Collections.singletonList("  Success  ")));
+    }
+
+    @Test
+    public void pmSucceeded_failureIsFailure() {
+        assertFalse(PatchAppsPolicy.pmSucceeded(
+                java.util.Collections.singletonList("Failure [INSTALL_FAILED_VERSION_DOWNGRADE]")));
+        assertFalse(PatchAppsPolicy.pmSucceeded(
+                java.util.Collections.singletonList("Failure [DELETE_FAILED_INTERNAL_ERROR]")));
+    }
+
+    @Test
+    public void pmSucceeded_mixedLines_successWins() {
+        assertTrue(PatchAppsPolicy.pmSucceeded(
+                java.util.Arrays.asList("Performing Streamed Install", "Success")));
+    }
+
+    @Test
+    public void pmSucceeded_mixedLines_noSuccessTokenIsFailure() {
+        // "Success" embedded in a larger line is NOT an exact token -> failure.
+        assertFalse(PatchAppsPolicy.pmSucceeded(
+                java.util.Arrays.asList("Install Successful", "done")));
+    }
+
+    @Test
+    public void pmSucceeded_emptyNullWhitespace() {
+        assertFalse(PatchAppsPolicy.pmSucceeded(null));
+        assertFalse(PatchAppsPolicy.pmSucceeded(java.util.Collections.<String>emptyList()));
+        assertFalse(PatchAppsPolicy.pmSucceeded(java.util.Arrays.asList("", "   ", "\t")));
+        assertFalse(PatchAppsPolicy.pmSucceeded(java.util.Arrays.asList((String) null)));
+    }
+
+    // --- quoteShellArg: single-quote wrapping + escaping ------------------
+
+    @Test
+    public void quoteShellArg_plain() {
+        assertEquals("'/data/app/base.apk'",
+                PatchAppsPolicy.quoteShellArg("/data/app/base.apk"));
+    }
+
+    @Test
+    public void quoteShellArg_space() {
+        assertEquals("'/data/app/My App.apk'",
+                PatchAppsPolicy.quoteShellArg("/data/app/My App.apk"));
+    }
+
+    @Test
+    public void quoteShellArg_embeddedSingleQuote() {
+        // a'b -> 'a'\''b'  (close, escaped quote, reopen)
+        assertEquals("'a'\\''b'", PatchAppsPolicy.quoteShellArg("a'b"));
+    }
+
+    @Test
+    public void quoteShellArg_dollarAndBacktickAreLiteralInsideQuotes() {
+        assertEquals("'$(reboot)'", PatchAppsPolicy.quoteShellArg("$(reboot)"));
+        assertEquals("'`id`'", PatchAppsPolicy.quoteShellArg("`id`"));
+    }
+
+    // --- PLAY_STORE_PKG / tmpApkPath --------------------------------------
+
+    @Test
+    public void playStorePkg_isVending() {
+        assertEquals("com.android.vending", PatchAppsPolicy.PLAY_STORE_PKG);
+    }
+
+    @Test
+    public void tmpApkPath_format() {
+        assertEquals("/data/local/tmp/tmpapkcom.example.app.apk",
+                PatchAppsPolicy.tmpApkPath("com.example.app"));
+    }
+
+    // --- nextAction: the rollback sequencing outcome tree -----------------
+
+    @Test
+    public void nextAction_copy() {
+        assertEquals(PatchAppsPolicy.NextAction.PROCEED,
+                PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.COPY, true));
+        assertEquals(PatchAppsPolicy.NextAction.ABORT_APP_UNTOUCHED,
+                PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.COPY, false));
+    }
+
+    @Test
+    public void nextAction_uninstall() {
+        assertEquals(PatchAppsPolicy.NextAction.PROCEED,
+                PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.UNINSTALL, true));
+        assertEquals(PatchAppsPolicy.NextAction.ABORT_DELETE_TMP,
+                PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.UNINSTALL, false));
+    }
+
+    @Test
+    public void nextAction_install() {
+        assertEquals(PatchAppsPolicy.NextAction.DONE_DELETE_TMP,
+                PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.INSTALL, true));
+        assertEquals(PatchAppsPolicy.NextAction.ATTEMPT_ROLLBACK,
+                PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.INSTALL, false));
+    }
+
+    @Test
+    public void nextAction_rollback() {
+        assertEquals(PatchAppsPolicy.NextAction.DONE_DELETE_TMP,
+                PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.ROLLBACK, true));
+        // Rollback failed -> KEEP the only surviving copy.
+        assertEquals(PatchAppsPolicy.NextAction.FAILED_KEEP_TMP,
+                PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.ROLLBACK, false));
+    }
 }
