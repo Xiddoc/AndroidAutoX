@@ -5,10 +5,18 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.IBinder;
+import android.os.RemoteException;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.StructStat;
 import android.util.Log;
 
 import com.topjohnwu.superuser.ipc.RootService;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -56,6 +64,17 @@ public class PhixitRootService extends RootService {
     @Override
     public IBinder onBind(Intent intent) {
         return new Impl();
+    }
+
+    /**
+     * Pure guard for {@link Impl#deleteRecursive}: rejects paths that are dangerous to
+     * delete recursively (null/empty/whitespace, or the filesystem root). Extracted as a
+     * static so it can be unit-tested off-device (the service itself can't run in a JVM).
+     */
+    static boolean isUnsafeDeletePath(String path) {
+        if (path == null) return true;
+        String p = path.trim();
+        return p.isEmpty() || p.equals("/");
     }
 
     /** Opens read-write with a rollback journal (not WAL) so GMS never finds a
@@ -171,6 +190,66 @@ public class PhixitRootService extends RootService {
                 } catch (Throwable ignored) {
                 }
                 db.close();
+            }
+        }
+
+        // --- filesystem primitives (replace stat/chown/rm shell-outs) ---
+
+        @Override
+        public int[] statOwner(String path) throws RemoteException {
+            try {
+                StructStat st = Os.stat(path);
+                return new int[]{st.st_uid, st.st_gid};
+            } catch (ErrnoException e) {
+                throw new RemoteException("statOwner(" + path + ") failed: " + e.getMessage());
+            }
+        }
+
+        @Override
+        public void chownPath(String path, int uid, int gid) throws RemoteException {
+            try {
+                Os.chown(path, uid, gid);
+            } catch (ErrnoException e) {
+                throw new RemoteException("chownPath(" + path + ") failed: " + e.getMessage());
+            }
+        }
+
+        @Override
+        public boolean deleteRecursive(String path) throws RemoteException {
+            // Guard against catastrophic deletes: refuse empty/whitespace and the
+            // filesystem root. Callers pass a specific GMS cache dir.
+            if (isUnsafeDeletePath(path)) {
+                throw new RemoteException("deleteRecursive refused unsafe path: '" + path + "'");
+            }
+            return deleteTree(new File(path.trim()));
+        }
+
+        /** Depth-first File walk + delete. Returns true if nothing remains afterwards. */
+        private static boolean deleteTree(File f) {
+            if (!f.exists()) return true; // already gone -> success
+            File[] children = f.isDirectory() ? f.listFiles() : null;
+            if (children != null) {
+                for (File c : children) deleteTree(c);
+            }
+            return f.delete();
+        }
+
+        @Override
+        public void backupFile(String srcPath, String destPath) throws RemoteException {
+            File src = new File(srcPath);
+            File dest = new File(destPath);
+            File parent = dest.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            try (FileInputStream in = new FileInputStream(src);
+                 FileOutputStream out = new FileOutputStream(dest)) {
+                byte[] buf = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(buf)) > 0) {
+                    out.write(buf, 0, n);
+                }
+                out.getFD().sync();
+            } catch (IOException e) {
+                throw new RemoteException("backupFile(" + srcPath + " -> " + destPath + ") failed: " + e.getMessage());
             }
         }
     }

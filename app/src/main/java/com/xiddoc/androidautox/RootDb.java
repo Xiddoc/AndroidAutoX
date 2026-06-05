@@ -113,4 +113,40 @@ public final class RootDb {
     public static void exec(String dbPath, String statement) {
         exec(dbPath, Arrays.asList(statement));
     }
+
+    /** {st_uid, st_gid} for {@code path} (root-process {@code Os.stat}). */
+    public static int[] statOwner(String path) {
+        try {
+            return get().statOwner(path);
+        } catch (Exception e) {
+            throw new RuntimeException("statOwner failed", e);
+        }
+    }
+
+    /** Restores ownership of {@code path} (root-process {@code Os.chown}). */
+    public static void chownPath(String path, int uid, int gid) {
+        try {
+            get().chownPath(path, uid, gid);
+        } catch (Exception e) {
+            throw new RuntimeException("chownPath failed", e);
+        }
+    }
+
+    /** Recursively deletes {@code path} in the root process (replaces {@code rm -rf}). */
+    public static boolean deleteRecursive(String path) {
+        try {
+            return get().deleteRecursive(path);
+        } catch (Exception e) {
+            throw new RuntimeException("deleteRecursive failed", e);
+        }
+    }
+
+    /** Root-process byte copy of {@code srcPath} -> {@code destPath} (DB backup). */
+    public static void backupFile(String srcPath, String destPath) {
+        try {
+            get().backupFile(srcPath, destPath);
+        } catch (Exception e) {
+            throw new RuntimeException("backupFile failed", e);
+        }
+    }
 }

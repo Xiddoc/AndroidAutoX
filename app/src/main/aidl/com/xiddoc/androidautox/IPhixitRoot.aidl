@@ -24,4 +24,21 @@ interface IPhixitRoot {
     // Each element must be a single statement; a CREATE TRIGGER ... BEGIN ... END
     // counts as one element.
     void execStatements(String dbPath, in List<String> statements);
+
+    // Returns {st_uid, st_gid} for path via Os.stat (replaces parsing `stat -c %U:%G`).
+    // Numeric ids are more robust than name parsing and round-trip cleanly to chownPath.
+    int[] statOwner(String path);
+
+    // Os.chown(path, uid, gid) -- restores ownership after a root-process DB edit
+    // (replaces shelling out to `chown`).
+    void chownPath(String path, int uid, int gid);
+
+    // Recursively deletes the file/dir at path (replaces `rm -rf`). Used to clear the
+    // phenotype cache dir. The implementation guards against empty/root paths.
+    boolean deleteRecursive(String path);
+
+    // Byte-for-byte copy of srcPath -> destPath inside the root process, so a GMS-private
+    // DB can be read and written to an app-controlled backup location. Parent dirs of
+    // destPath must already exist (the app creates them in its own files dir).
+    void backupFile(String srcPath, String destPath);
 }
