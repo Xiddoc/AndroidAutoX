@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 
+import com.xiddoc.androidautox.GearheadDbQueries;
 import com.xiddoc.androidautox.GmsPaths;
 import com.xiddoc.androidautox.MainActivity;
 import com.xiddoc.androidautox.NotSuccessfulDialog;
@@ -83,7 +84,7 @@ public class CarRemover extends AppCompatActivity {
                 final java.util.List<String> deletes = new java.util.ArrayList<String>();
                 Map<String, ?> allEntries = accountsPrefs.getAll();
                 for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
-                    deletes.add("DELETE FROM allowedcars WHERE vehicleidclient='" + entry.getKey() + "'");
+                    deletes.add(GearheadDbQueries.deleteCarById(entry.getKey()));
                 }
 
                 new Thread() {
@@ -148,9 +149,9 @@ public class CarRemover extends AppCompatActivity {
             public void run() {
                 final String carDb = GmsPaths.CARSERVICE_DB;
                 final String[] carRows =
-                        RootDb.query(carDb, "SELECT manufacturer,model FROM allowedcars").split("\\r?\\n");
+                        GearheadDbQueries.splitLines(RootDb.query(carDb, GearheadDbQueries.SELECT_CARS));
                 final String[] idRows =
-                        RootDb.query(carDb, "SELECT vehicleidclient FROM allowedcars").split("\\r?\\n");
+                        GearheadDbQueries.splitLines(RootDb.query(carDb, GearheadDbQueries.SELECT_CAR_IDS));
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {

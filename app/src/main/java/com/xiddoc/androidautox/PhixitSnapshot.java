@@ -1,7 +1,7 @@
 package com.xiddoc.androidautox;
 
 import java.io.ByteArrayOutputStream;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.DataFormatException;
@@ -186,8 +186,11 @@ public final class PhixitSnapshot {
             while (!inflater.finished()) {
                 int n = inflater.inflate(buffer);
                 if (n == 0) {
-                    if (inflater.finished() || inflater.needsDictionary()) break;
-                    if (inflater.needsInput()) break; // no more input available
+                    // Raw (nowrap) inflate produces no output only when it is
+                    // finished or has run out of input; either way no further
+                    // progress is possible, so stop. (needsDictionary() cannot
+                    // occur for a raw stream.)
+                    break;
                 }
                 out.write(buffer, 0, n);
             }
@@ -280,13 +283,9 @@ public final class PhixitSnapshot {
 
         String readString() {
             int len = (int) readVarint();
-            try {
-                String s = new String(buf, pos, len, "UTF-8");
-                pos += len;
-                return s;
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
-            }
+            String s = new String(buf, pos, len, StandardCharsets.UTF_8);
+            pos += len;
+            return s;
         }
 
         byte[] readBytes() {
@@ -316,12 +315,7 @@ public final class PhixitSnapshot {
         }
 
         void writeString(String s) {
-            byte[] bytes;
-            try {
-                bytes = s.getBytes("UTF-8");
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
-            }
+            byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
             writeVarint(bytes.length);
             out.write(bytes, 0, bytes.length);
         }

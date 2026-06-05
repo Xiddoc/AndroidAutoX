@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
 import androidx.annotation.ColorRes;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
@@ -80,19 +79,18 @@ public class BottomDialog {
 
     @UiThread
     public void show() {
-        if (mBuilder != null && mBuilder.bottomDialog != null)
-            mBuilder.bottomDialog.show();
+        // mBuilder is final and bottomDialog is always set to a fresh Dialog by
+        // initBottomDialog() in the constructor (it never returns null).
+        mBuilder.bottomDialog.show();
     }
 
     @UiThread
     public void dismiss() {
-        if (mBuilder != null && mBuilder.bottomDialog != null)
-            mBuilder.bottomDialog.dismiss();
+        mBuilder.bottomDialog.dismiss();
     }
 
     public void setOnDismissListener(DialogInterface.OnDismissListener onDismissListener) {
-        if (mBuilder != null && mBuilder.bottomDialog != null)
-            mBuilder.bottomDialog.setOnDismissListener(onDismissListener);
+        mBuilder.bottomDialog.setOnDismissListener(onDismissListener);
     }
 
     @UiThread
@@ -166,19 +164,14 @@ public class BottomDialog {
             }
 
             if (builder.btn_colorPositiveBackground == 0) {
-                TypedValue v = new TypedValue();
-                boolean hasColorPrimary = builder.context.getTheme().resolveAttribute(com.github.javiersantos.bottomdialogs.R.attr.colorPrimary, v, true);
-                builder.btn_colorPositiveBackground = !hasColorPrimary ? v.data : ContextCompat.getColor(builder.context, com.github.javiersantos.bottomdialogs.R.color.colorPrimary);
+                builder.btn_colorPositiveBackground = resolvePositiveBackgroundColor(builder.context);
             }
 
             Drawable buttonBackground = UtilsLibrary.createButtonBackgroundDrawable(builder.context, builder.btn_colorPositiveBackground);
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-                vPositive.setBackground(buttonBackground);
-            } else {
-                // noinspection deprecation
-                vPositive.setBackgroundDrawable(buttonBackground);
-            }
+            // minSdk is 31, so setBackground (API 16+) is always available; the
+            // pre-JELLY_BEAN setBackgroundDrawable fallback was dead code.
+            vPositive.setBackground(buttonBackground);
         }
 
         if (builder.btn_negative != null) {
@@ -202,12 +195,42 @@ public class BottomDialog {
         bottomDialog.setContentView(view);
         bottomDialog.setCancelable(builder.isCancelable);
 
-        if (bottomDialog.getWindow() != null) {
-            bottomDialog.getWindow().setLayout(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            bottomDialog.getWindow().setGravity(Gravity.BOTTOM);
-        }
+        // A freshly constructed Dialog always has a non-null Window.
+        bottomDialog.getWindow().setLayout(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        bottomDialog.getWindow().setGravity(Gravity.BOTTOM);
 
         return bottomDialog;
+    }
+
+    /**
+     * Resolves the default positive-button background color: the theme's
+     * {@code colorPrimary} if defined, otherwise the library's fallback color.
+     * Extracted so both the "attribute present" and "attribute absent" paths are
+     * unit-testable (the test JVM's theme always resolves the attribute).
+     */
+    static int resolvePositiveBackgroundColor(Context context) {
+        TypedValue v = new TypedValue();
+        boolean hasColorPrimary = context.getTheme().resolveAttribute(
+                com.github.javiersantos.bottomdialogs.R.attr.colorPrimary, v, true);
+        return pickPositiveBackgroundColor(context, hasColorPrimary, v.data);
+    }
+
+    /**
+     * Selection step of {@link #resolvePositiveBackgroundColor}: when the theme
+     * defines {@code colorPrimary} use the library color, otherwise fall back to
+     * the raw resolved {@code TypedValue} data. Not pure -- the "attribute present"
+     * branch calls {@link ContextCompat#getColor} -- but it has no theme dependency,
+     * so it is split out to make both branches unit-testable without a (final,
+     * un-mockable) {@code Resources.Theme}.
+     *
+     * <p>Note: this mapping (attribute present -&gt; library color; absent -&gt; raw
+     * {@code TypedValue.data}) mirrors the original/upstream BottomDialogs semantics;
+     * it is preserved as-is rather than asserted to be the obviously-correct mapping.
+     */
+    static int pickPositiveBackgroundColor(Context context, boolean hasColorPrimary, int typedValueData) {
+        return !hasColorPrimary
+                ? typedValueData
+                : ContextCompat.getColor(context, com.github.javiersantos.bottomdialogs.R.color.colorPrimary);
     }
 
     public static class Builder {

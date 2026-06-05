@@ -36,6 +36,7 @@ import java.util.Objects;
 import java.util.prefs.PreferenceChangeListener;
 
 import com.xiddoc.androidautox.AppInfo;
+import com.xiddoc.androidautox.GearheadDbQueries;
 import com.xiddoc.androidautox.MainActivity;
 import com.xiddoc.androidautox.MyAdapter;
 import com.xiddoc.androidautox.R;
@@ -129,9 +130,9 @@ public class AccountsChooser extends AppCompatActivity {
             @Override
             public void run() {
                 String getAccounts = RootDb.query(
-                        "/data/data/com.google.android.gms/databases/phenotype.db",
-                        "SELECT DISTINCT user FROM ApplicationTags WHERE user != '' ORDER BY user ASC");
-                final String[] users = getAccounts.split("\\r?\\n");
+                        GearheadDbQueries.PHENOTYPE_DB,
+                        GearheadDbQueries.SELECT_ACCOUNTS);
+                final String[] users = GearheadDbQueries.splitLines(getAccounts);
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {

@@ -27,8 +27,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import com.xiddoc.androidautox.Utils.Version;
-
 import static com.xiddoc.androidautox.MainActivity.runSuWithCmd;
 
 public class SplashActivity extends AppCompatActivity {
@@ -174,7 +172,7 @@ public class SplashActivity extends AppCompatActivity {
         Log.v("com.xiddoc.androidautox", "Engaging countdown");
         new CountDownTimer(5000, 10) {
             public void onTick(long millisUntilFinished) {
-                int secondsRemaining = (int) ( 1 + (millisUntilFinished/1000));
+                int secondsRemaining = UpdateChecker.countdownSeconds(millisUntilFinished);
                 continueButton.setText(getString(R.string.proceed) + " (" + secondsRemaining + ")");
             }
 
@@ -198,7 +196,7 @@ public class SplashActivity extends AppCompatActivity {
         disableWarningButton.setEnabled(false);
         new CountDownTimer(10000, 10) {
             public void onTick(long millisUntilFinished) {
-                int secondsRemaining = (int) ( 1 + (millisUntilFinished/1000));
+                int secondsRemaining = UpdateChecker.countdownSeconds(millisUntilFinished);
                 disableWarningButton.setText(getString(R.string.disable_startup_warning) + " (" + secondsRemaining + ")");
             }
 
@@ -357,17 +355,31 @@ public class SplashActivity extends AppCompatActivity {
                     public void onResponse(JSONObject response) {
                         try {
                             String fetchedVersion = response.getString("tag_name");
-                            Version newCheck = new Version(fetchedVersion.substring(1));
-                            Version actualCheck = null;
-                            try {
-                                actualCheck = new Version(actualVersion);
-                                if (actualCheck.compareTo(newCheck) == -1) {
-                                    newVersionName = fetchedVersion.substring(1);
-                                }
-                            } catch (IllegalArgumentException e) {
-                                Toast.makeText(SplashActivity.this, "Debug build: could not check latest version", Toast.LENGTH_LONG).show();
-                                newVersionName = null;
-                                e.printStackTrace();
+                            UpdateChecker.Result result =
+                                    UpdateChecker.evaluate(actualVersion, fetchedVersion);
+                            switch (result.outcome) {
+                                case UPDATE_AVAILABLE:
+                                    // A strictly newer release: surface it via the banner.
+                                    newVersionName = result.newVersionName;
+                                    break;
+                                case UP_TO_DATE:
+                                    // Already current: no banner, no toast.
+                                    newVersionName = null;
+                                    break;
+                                case INVALID_CURRENT_VERSION:
+                                    // Unparseable installed version (e.g. a debug build).
+                                    Toast.makeText(SplashActivity.this, "Debug build: could not check latest version", Toast.LENGTH_LONG).show();
+                                    newVersionName = null;
+                                    break;
+                                case INVALID_FETCHED_VERSION:
+                                default:
+                                    // Missing/malformed release tag: preserve the original
+                                    // behaviour where the bad tag propagated uncaught (the
+                                    // inline new Version(tag.substring(1)) blew up before any
+                                    // toast path ran). An IllegalArgumentException is not a
+                                    // JSONException, so it escapes onResponse exactly as before.
+                                    newVersionName = null;
+                                    throw new IllegalArgumentException("Invalid fetched version");
                             }
 
 

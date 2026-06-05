@@ -221,17 +221,22 @@ public class DbBackup {
             Log.w(TAG, "WARNING: DB backup of " + dbPath + " failed (continuing without backup): " + e);
             return false;
         }
-        try {
-            pruneOldBackups(dir, dbName(dbPath));
-        } catch (Exception e) {
-            Log.w(TAG, "Pruning old backups for " + dbPath + " failed: " + e);
-        }
+        // Prune is non-fatal by contract: it logs and swallows its own failures (including a
+        // failed directory listing) so a prune problem never undoes the just-written backup.
+        pruneOldBackups(dir, dbName(dbPath));
         return true;
     }
 
     /** Deletes everything {@link #selectForPruning} flags for {@code dbName} in {@code dir}. */
     private void pruneOldBackups(File dir, String dbName) {
-        String[] names = dir.list();
+        String[] names;
+        try {
+            names = dir.list();
+        } catch (Exception e) {
+            // e.g. a SecurityException from list(); pruning is best-effort -- log and bail.
+            Log.w(TAG, "Listing backups in " + dir + " for prune failed: " + e);
+            return;
+        }
         if (names == null) return;
         List<String> all = new ArrayList<>();
         for (String n : names) {

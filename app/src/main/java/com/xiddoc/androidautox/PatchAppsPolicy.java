@@ -138,9 +138,9 @@ public final class PatchAppsPolicy {
             case INSTALL:
                 return success ? NextAction.DONE_DELETE_TMP : NextAction.ATTEMPT_ROLLBACK;
             case ROLLBACK:
-                return success ? NextAction.DONE_DELETE_TMP : NextAction.FAILED_KEEP_TMP;
             default:
-                throw new IllegalArgumentException("Unknown step: " + step);
+                // ROLLBACK is the only remaining Step (closed enum); default == ROLLBACK.
+                return success ? NextAction.DONE_DELETE_TMP : NextAction.FAILED_KEEP_TMP;
         }
     }
 
