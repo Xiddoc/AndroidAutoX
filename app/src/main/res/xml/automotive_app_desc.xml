@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Automotive app descriptor for AndroidAutoX.
+
+  Declares that this app uses the Jetpack Car App template rendering pipeline
+  (as opposed to the older media or messaging car-app categories). The
+  "template" capability is required by AutoXCarAppService (NAVIGATION category).
+
+  See: https://developer.android.com/training/cars/apps
+-->
+<automotiveApp>
+    <uses name="template"/>
+</automotiveApp>
