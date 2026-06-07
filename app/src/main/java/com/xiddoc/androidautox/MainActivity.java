@@ -1995,18 +1995,6 @@ public class MainActivity extends AppCompatActivity {
                     setOnLongClickListener(b, R.string.settings_aa_desc);
                     break;
                 }
-                case NONDESTRUCTIVE_PATCH: {
-                    Button b = findViewById(R.id.settings_ndpatch);
-                    // Opt-in, default-OFF: switch patchforapps() between the destructive
-                    // reinstall (default) and the experimental non-destructive
-                    // pm set-installer path. See docs/patch-apps-installer-analysis.md.
-                    bindToggle(b, R.string.settings_ndpatch_label,
-                            () -> isExperimentalNonDestructivePatch(getApplicationContext()),
-                            this::setExperimentalNonDestructivePatch,
-                            R.string.nondestructive_patch_on, R.string.nondestructive_patch_off, null);
-                    setOnLongClickListener(b, R.string.settings_ndpatch_desc);
-                    break;
-                }
                 case AUTO_BACKUP_DBS: {
                     Button b = findViewById(R.id.settings_backup);
                     // Default-ON safety net: a copy of every GMS DB is stashed before an edit.
@@ -2157,20 +2145,11 @@ public class MainActivity extends AppCompatActivity {
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
                 getString(R.string.tweak_loading), true);
 
-        // The app uninstall/reinstall loop (re-signing the APKs through pm so they pass
-        // installer-source validation) lives ONLY here -- it must never run on the headless
-        // re-apply path. The flag overrides themselves are produced by
-        // TweakRegistry.patchedAppsSpecs() and applied via the phixit engine below.
-        //
-        // The destructive uninstall/reinstall is still the DEFAULT. An opt-in, default-OFF
-        // experimental "non-destructive" mode (pm set-installer only) exists so a maintainer
-        // can run the decisive on-device test of whether the ~11 validation-bypass flags
-        // already subsume the installer re-stamp. set-installer is a strictly WEAKER spoof: it
-        // only changes getInstallingPackageName(), NOT the immutable getInitiatingPackageName()
-        // that the destructive reinstall also re-stamps. See
-        // docs/patch-apps-installer-analysis.md.
-        final PatchAppsPolicy.Mode mode = PatchAppsPolicy.modeFor(
-                isExperimentalNonDestructivePatch(getApplicationContext()));
+        // Apps are patched NON-DESTRUCTIVELY: pm set-installer re-stamps the installing package
+        // to the Play Store without ever uninstalling the app, so no user data is lost. This
+        // installer loop lives ONLY here -- it must never run on the headless re-apply path. The
+        // flag overrides themselves are produced by TweakRegistry.patchedAppsSpecs() and applied
+        // via the phixit engine below. See docs/patch-apps-installer-analysis.md.
         new Thread() {
             @Override
             public void run() {
@@ -2178,11 +2157,6 @@ public class MainActivity extends AppCompatActivity {
                         getApplicationContext().getSharedPreferences("appsListPref", 0);
                 Map<String, ?> allEntries = appsListPref.getAll();
                 appendText(logs, "--  Apps which will be added to whitelist: --\n");
-                appendText(logs, "--  Patch mode: " + mode + " --\n");
-                // Collects any package left uninstalled/un-restored, paired with the temp-APK
-                // path that holds the only surviving copy, so we can surface the data-loss to the
-                // user after the loop (a loss buried in a scrolling log is effectively invisible).
-                final java.util.List<String> lostPackages = new java.util.ArrayList<>();
                 for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
                     String pkg = entry.getKey();
                     appendText(logs, "\t\t- " + entry.getValue() + " (" + pkg + ")\n");
@@ -2194,20 +2168,7 @@ public class MainActivity extends AppCompatActivity {
                         continue;
                     }
 
-                    if (mode == PatchAppsPolicy.Mode.SET_INSTALLER) {
-                        patchAppSetInstaller(logs, pkg);
-                    } else {
-                        String lost = patchAppDestructive(logs, pkg);
-                        if (lost != null) {
-                            lostPackages.add(lost);
-                        }
-                    }
-                }
-
-                // Surface any apps left uninstalled/un-restored as a dialog -- these are
-                // data-loss situations the user must act on (recover the temp APK).
-                if (!lostPackages.isEmpty()) {
-                    showLostPackagesDialog(lostPackages);
+                    patchAppSetInstaller(logs, pkg);
                 }
 
                 appendText(logs, "\n\n--  restoring Google Play Services   --");
@@ -2229,37 +2190,15 @@ public class MainActivity extends AppCompatActivity {
         }.start();
     }
 
-    /** SharedPreferences key for the opt-in, default-OFF non-destructive patch mode. */
-    static final String PREF_EXPERIMENTAL_NONDESTRUCTIVE_PATCH =
-            "experimental_nondestructive_patch";
-
     /**
-     * Reads the experimental non-destructive patch preference (default {@code false}). Stored
-     * in the shared {@link PhixitEngine#PREFS} file (the same explicitly-named file used by
-     * {@link DevModeStore} and {@link DbBackup}) so all the app toggles live together.
-     * See {@link PatchAppsPolicy} and docs/patch-apps-installer-analysis.md.
-     */
-    static boolean isExperimentalNonDestructivePatch(Context ctx) {
-        return ctx.getSharedPreferences(PhixitEngine.PREFS, Context.MODE_PRIVATE)
-                .getBoolean(PREF_EXPERIMENTAL_NONDESTRUCTIVE_PATCH, false);
-    }
-
-    private void setExperimentalNonDestructivePatch(boolean enabled) {
-        getSharedPreferences(PhixitEngine.PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(PREF_EXPERIMENTAL_NONDESTRUCTIVE_PATCH, enabled)
-                .apply();
-    }
-
-    /**
-     * Experimental, non-destructive per-app patch: only re-stamps the installing package via
-     * {@code pm set-installer}. The app is never uninstalled, so this only changes
-     * {@code getInstallingPackageName()} -- NOT the immutable {@code getInitiatingPackageName()}
-     * the destructive reinstall also re-stamps -- making it a strictly weaker spoof. {@code pkg}
-     * must already be validated by {@link PatchAppsPolicy#isValidPackageName(String)}.
+     * Non-destructive per-app patch: re-stamps the installing package via {@code pm set-installer}
+     * to the Play Store. The app is never uninstalled, so no user data is lost. This changes
+     * {@code getInstallingPackageName()} but NOT the immutable {@code getInitiatingPackageName()};
+     * see docs/patch-apps-installer-analysis.md for that caveat. {@code pkg} must already be
+     * validated by {@link PatchAppsPolicy#isValidPackageName(String)}.
      */
     private void patchAppSetInstaller(final TextView logs, String pkg) {
-        // Existence guard (mirrors the destructive path): skip cleanly if the package is gone.
+        // Existence guard: skip cleanly if the package is gone.
         if (!isPackageInstalled(pkg)) {
             appendText(logs, "\t\t  SKIPPED: package not found (" + pkg + ")\n");
             return;
@@ -2271,115 +2210,6 @@ public class MainActivity extends AppCompatActivity {
         if (!pmResultOk(r)) {
             appendText(logs, "\n\t\t  WARNING: set-installer failed for " + pkg + "\n");
         }
-    }
-
-    /**
-     * Default destructive per-app patch: copy the base APK aside, uninstall, reinstall with the
-     * Play Store as the installer/initiator. Because {@code pm} exits 0 even when it prints
-     * {@code Failure}, every {@code pm} step is judged by its OUTPUT ({@link #pmResultOk}), and
-     * the temp APK -- the only surviving copy after uninstall -- is deleted ONLY after positively
-     * confirming via PackageManager that the package is installed. The sequencing decision (when
-     * to proceed / rollback / keep or drop the temp) is delegated to the pure, unit-tested
-     * {@link PatchAppsPolicy#nextAction}. {@code pkg} must already be validated by
-     * {@link PatchAppsPolicy#isValidPackageName(String)}.
-     *
-     * @return {@code null} on success/safe-abort, or a human-readable "pkg -> tmpApk" loss
-     *         descriptor when the app was left uninstalled with only the temp APK surviving.
-     */
-    private String patchAppDestructive(final TextView logs, String pkg) {
-        // Resolve the APK path(s) via PackageManager instead of parsing "pm path" output -- this
-        // removes the shell parse AND lets us detect split APKs (which the single-base-APK
-        // reinstall would corrupt).
-        ApplicationInfo ai;
-        try {
-            ai = getPackageManager().getApplicationInfo(pkg, 0);
-        } catch (PackageManager.NameNotFoundException e) {
-            appendText(logs, "\t\t  SKIPPED: package not found (" + pkg + ")\n");
-            return null;
-        }
-        if (PatchAppsPolicy.isSplitApk(ai.splitSourceDirs)) {
-            // A split APK can't be safely re-stamped by the single-base-APK reinstall; failing
-            // gracefully is far better than corrupting (uninstalling) the app.
-            appendText(logs, "\t\t  SKIPPED: split APK -- cannot safely reinstall (" + pkg + ")\n");
-            return null;
-        }
-        String srcApk = ai.sourceDir;
-        if (srcApk == null || srcApk.isEmpty()) {
-            appendText(logs, "\t\t  SKIPPED: no source APK path (" + pkg + ")\n");
-            return null;
-        }
-
-        // Quote every non-validated interpolated value (srcApk + tmpApk path) for the shell;
-        // pkg itself is already validated, but quoting OS-controlled paths is defence-in-depth.
-        String tmpApk = PatchAppsPolicy.tmpApkPath(pkg);
-        String qTmp = PatchAppsPolicy.quoteShellArg(tmpApk);
-
-        // 1. Copy (not move) the APK aside first, so the original stays in place until the copy
-        //    is confirmed -- we only uninstall once the APK is safely saved.
-        String cpCmd = "cp " + PatchAppsPolicy.quoteShellArg(srcApk) + " " + qTmp;
-        com.topjohnwu.superuser.Shell.Result cp = runSuWithCmdResult(cpCmd);
-        appendText(logs, describeResult(cpCmd, cp));
-        if (PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.COPY, shellOk(cp))
-                == PatchAppsPolicy.NextAction.ABORT_APP_UNTOUCHED) {
-            appendText(logs, "\n\t\t  ABORTED: could not copy APK aside; app left untouched (" + pkg + ")\n");
-            return null;
-        }
-
-        // 2. Uninstall (APK is now safely saved at tmpApk). pm exits 0 on failure, so judge by output.
-        String unCmd = "pm uninstall " + pkg;
-        com.topjohnwu.superuser.Shell.Result un = runSuWithCmdResult(unCmd);
-        appendText(logs, describeResult(unCmd, un));
-        if (PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.UNINSTALL, pmResultOk(un))
-                == PatchAppsPolicy.NextAction.ABORT_DELETE_TMP) {
-            appendText(logs, "\n\t\t  ABORTED: uninstall failed; app left installed (" + pkg + ")\n");
-            runSuWithCmd("rm -f " + qTmp);
-            return null;
-        }
-
-        // 3. Reinstall, re-stamping the Play Store as installer + initiator.
-        String inCmd = "pm install -t -i \"" + PatchAppsPolicy.PLAY_STORE_PKG + "\" -r " + qTmp;
-        com.topjohnwu.superuser.Shell.Result in = runSuWithCmdResult(inCmd);
-        appendText(logs, describeResult(inCmd, in));
-        PatchAppsPolicy.NextAction afterInstall =
-                PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.INSTALL, pmResultOk(in));
-        if (afterInstall == PatchAppsPolicy.NextAction.DONE_DELETE_TMP) {
-            return finishDestructive(logs, pkg, tmpApk, qTmp);
-        }
-
-        // 4. Install failed -> best-effort rollback (reinstall the saved APK).
-        appendText(logs, "\n\t\t  install FAILED -- attempting rollback (" + pkg + ")\n");
-        String rbCmd = "pm install -r " + qTmp;
-        com.topjohnwu.superuser.Shell.Result rb = runSuWithCmdResult(rbCmd);
-        appendText(logs, describeResult(rbCmd, rb));
-        PatchAppsPolicy.NextAction afterRollback =
-                PatchAppsPolicy.nextAction(PatchAppsPolicy.Step.ROLLBACK, pmResultOk(rb));
-        if (afterRollback == PatchAppsPolicy.NextAction.DONE_DELETE_TMP) {
-            return finishDestructive(logs, pkg, tmpApk, qTmp);
-        }
-
-        // Rollback also failed: KEEP the temp APK (only surviving copy) and report the loss.
-        appendText(logs, "\n\t\t  ROLLBACK FAILED -- temp APK kept at " + tmpApk + "\n");
-        return pkg + " -> " + tmpApk;
-    }
-
-    /**
-     * Confirms the package is actually installed via PackageManager (NOT pm output) before
-     * deleting the temp APK -- the only surviving copy after uninstall, so the delete is
-     * irreversible. Deletes only when confirmed; otherwise keeps the temp APK and reports a loss.
-     *
-     * @return {@code null} when the package is present and the temp APK was deleted; a loss
-     *         descriptor ("pkg -> tmpApk") when the package is absent and the temp APK was kept.
-     */
-    private String finishDestructive(final TextView logs, String pkg, String tmpApk, String qTmp) {
-        if (isPackageInstalled(pkg)) {
-            appendText(logs, "\n\t\t  confirmed installed; removing temp APK (" + pkg + ")\n");
-            runSuWithCmd("rm -f " + qTmp);
-            return null;
-        }
-        // pm claimed success but the package isn't actually there -- never delete the only copy.
-        appendText(logs, "\n\t\t  WARNING: " + pkg + " reported success but is NOT installed -- "
-                + "temp APK kept at " + tmpApk + "\n");
-        return pkg + " -> " + tmpApk;
     }
 
     /** True iff {@code pkg} is currently installed (authoritative, unlike pm stdout). */
@@ -2405,33 +2235,6 @@ public class MainActivity extends AppCompatActivity {
         // pm may write Success/Failure to either stream; check both.
         return PatchAppsPolicy.pmSucceeded(r.getOut())
                 || PatchAppsPolicy.pmSucceeded(r.getErr());
-    }
-
-    /**
-     * Surfaces apps left uninstalled (only the temp APK survives) to the user via the project's
-     * {@link NotSuccessfulDialog} convention, on the main thread. Each entry names the package
-     * and its {@code /data/local/tmp/tmpapk<pkg>.apk} recovery path.
-     */
-    private void showLostPackagesDialog(final java.util.List<String> lostPackages) {
-        final StringBuilder sb = new StringBuilder();
-        sb.append(getString(R.string.patch_apps_lost_intro)).append("\n\n");
-        for (String loss : lostPackages) {
-            sb.append("  - ").append(loss).append("\n");
-        }
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
-            @Override
-            public void run() {
-                if (isFinishing() || isDestroyed()) {
-                    return;
-                }
-                DialogFragment d = new NotSuccessfulDialog();
-                Bundle b = new Bundle();
-                b.putString("tweak", "patch_apps_lost");
-                b.putString("log", sb.toString());
-                d.setArguments(b);
-                d.show(getSupportFragmentManager(), "NotSuccessfulDialog");
-            }
-        });
     }
 
     private String gainOwnership(final TextView logs) {
@@ -3320,11 +3123,6 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
             android.util.Log.w("AndroidAutoX", "runSuWithCmdResult failed for: " + cmd, t);
             return null;
         }
-    }
-
-    /** True iff the shell result is non-null and reported success (exit code 0). */
-    private static boolean shellOk(com.topjohnwu.superuser.Shell.Result r) {
-        return r != null && r.isSuccess();
     }
 
     /** Renders a {@link com.topjohnwu.superuser.Shell.Result} for the on-screen log. */

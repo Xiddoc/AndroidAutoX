@@ -32,7 +32,6 @@ public class SettingActionTest {
                 SettingAction.RESET_TWEAKS,
                 SettingAction.AUTO_REAPPLY,
                 SettingAction.AA_SETTINGS,
-                SettingAction.NONDESTRUCTIVE_PATCH,
                 SettingAction.AUTO_BACKUP_DBS,
                 SettingAction.PHIXIT_APPLY_TEST,
                 SettingAction.PHIXIT_DUMP_ALL,
@@ -56,7 +55,6 @@ public class SettingActionTest {
                 SettingAction.RESET_TWEAKS,
                 SettingAction.AUTO_REAPPLY,
                 SettingAction.AA_SETTINGS,
-                SettingAction.NONDESTRUCTIVE_PATCH,
                 SettingAction.AUTO_BACKUP_DBS,
                 SettingAction.DEV_MODE_TOGGLE);
         assertEquals(expected, SettingAction.visibleActions(false));
