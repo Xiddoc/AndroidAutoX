@@ -50,6 +50,11 @@ public class PhixitEngineTest {
     private List<Partition> written;
     private boolean writeThrows;
 
+    /** Captured args of the last RootDb.exec(dbPath, statements) call (Heterodyne clear). */
+    private String execDbPath;
+    private List<String> execStatements;
+    private boolean execThrows;
+
     /** Owner returned by the mocked {@link RootDb#statOwner(String)} (null = unknown). */
     private int[] statOwner;
     private static final int statOwnerUid = 10001;
@@ -77,6 +82,9 @@ public class PhixitEngineTest {
         log = new StringBuilder();
         written = null;
         writeThrows = false;
+        execDbPath = null;
+        execStatements = null;
+        execThrows = false;
         statOwnerThrows = false;
         chownThrows = false;
         deleteRecursiveResult = true;
@@ -111,6 +119,15 @@ public class PhixitEngineTest {
                 .thenAnswer(inv -> {
                     if (writeThrows) throw new RuntimeException("write boom");
                     written = inv.getArgument(0);
+                    return null;
+                });
+        // RootDb.exec(dbPath, List<String>) is the choke point the engine uses to clear the
+        // Heterodyne committed-config bookkeeping after a count-changing edit. Capture it.
+        rootStatic.when(() -> RootDb.exec(Mockito.anyString(), Mockito.anyList()))
+                .thenAnswer(inv -> {
+                    if (execThrows) throw new RuntimeException("exec boom");
+                    execDbPath = inv.getArgument(0);
+                    execStatements = inv.getArgument(1);
                     return null;
                 });
 
@@ -367,6 +384,167 @@ public class PhixitEngineTest {
         assertEquals("A", prefs.getString(
                 PhixitEngine.baselineKey(FlagSpec.PKG_GEARHEAD, "New__flag"), null));
         assertEquals(2, decodeWritten(0).size());
+    }
+
+    // --- Heterodyne committed-config invalidation (issue #25) ------------------
+
+    @Test
+    public void applySpecs_addingFlag_clearsHeterodyneSyncState() {
+        // Adding a brand-new flag changes the partition's flag count, which is exactly
+        // what trips GMS's Heterodyne "conflicting flags / expected count" check. The
+        // engine must therefore clear the committed-config bookkeeping for the package.
+        suOut.put("getenforce", "Permissive");
+        store.put(FlagSpec.PKG_GEARHEAD, new ArrayList<Partition>(Arrays.asList(
+                partition(1, boolFlag("Other__flag", true)))));
+
+        boolean ok = engine().applySpecs(
+                Arrays.asList(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "New__flag", true)), false);
+
+        assertTrue(ok);
+        // exec was called against the phenotype DB with the clear statements for gearhead.
+        assertEquals(PhixitEngine.PHENO_DB, execDbPath);
+        assertEquals(HeterodyneSyncState.clearSyncSql(
+                        Arrays.asList(FlagSpec.PKG_GEARHEAD)),
+                execStatements);
+        assertTrue(log.toString().contains("Heterodyne sync state clear attempted"));
+    }
+
+    @Test
+    public void applySpecs_removingFlag_clearsHeterodyneSyncState() {
+        // Dropping a flag also changes the count -> sync state must be cleared.
+        suOut.put("getenforce", "Permissive");
+        store.put(FlagSpec.PKG_GEARHEAD, new ArrayList<Partition>(Arrays.asList(
+                partition(1, boolFlag("Drop__me", true), boolFlag("Keep__me", true)))));
+
+        boolean ok = engine().applySpecs(
+                Arrays.asList(FlagSpec.remove(FlagSpec.PKG_GEARHEAD, "Drop__me")), false);
+
+        assertTrue(ok);
+        assertEquals(PhixitEngine.PHENO_DB, execDbPath);
+        assertTrue(log.toString().contains("Heterodyne sync state clear attempted"));
+    }
+
+    @Test
+    public void applySpecs_sameCountSwap_stillClearsHeterodyneSyncState() {
+        // Remove one flag and add another in the SAME partition apply: the net flag count
+        // is unchanged (1 -> 1), but the flag NAME set changed, which still trips
+        // Heterodyne. The membership-based detector must fire the clear here (a bare
+        // count check would miss this).
+        suOut.put("getenforce", "Permissive");
+        store.put(FlagSpec.PKG_GEARHEAD, new ArrayList<Partition>(Arrays.asList(
+                partition(1, boolFlag("Drop__me", true)))));
+
+        boolean ok = engine().applySpecs(Arrays.asList(
+                FlagSpec.remove(FlagSpec.PKG_GEARHEAD, "Drop__me"),
+                FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "Add__me", true)), false);
+
+        assertTrue(ok);
+        // net count is unchanged...
+        assertEquals(1, decodeWritten(0).size());
+        // ...but the clear still fires because the flag-name set changed.
+        assertEquals(PhixitEngine.PHENO_DB, execDbPath);
+        assertEquals(HeterodyneSyncState.clearSyncSql(
+                        Arrays.asList(FlagSpec.PKG_GEARHEAD)),
+                execStatements);
+        assertTrue(log.toString().contains("Heterodyne sync state clear attempted"));
+    }
+
+    @Test
+    public void applySpecs_twoPackagesChange_clearsBothInOnePass() {
+        // Two packages each get a flag-set change and both write successfully; the clear
+        // must run once with statements covering BOTH packages.
+        suOut.put("getenforce", "Permissive");
+        store.put(FlagSpec.PKG_GEARHEAD, new ArrayList<Partition>(Arrays.asList(
+                partition(1, boolFlag("Gear__old", true)))));
+        store.put(FlagSpec.PKG_CAR, new ArrayList<Partition>(Arrays.asList(
+                partition(2, boolFlag("Car__old", true)))));
+
+        boolean ok = engine().applySpecs(Arrays.asList(
+                FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "Gear__new", true),
+                FlagSpec.bool(FlagSpec.PKG_CAR, "Car__new", true)), false);
+
+        assertTrue(ok);
+        assertEquals(PhixitEngine.PHENO_DB, execDbPath);
+        assertEquals(HeterodyneSyncState.clearSyncSql(
+                        Arrays.asList(FlagSpec.PKG_GEARHEAD, FlagSpec.PKG_CAR)),
+                execStatements);
+        assertTrue(log.toString().contains("Heterodyne sync state clear attempted"));
+    }
+
+    @Test
+    public void applySpecs_valueOnlyEdit_doesNotClearHeterodyneSyncState() {
+        // Changing an existing flag's value keeps the count stable, so there is no
+        // Heterodyne mismatch risk and no sync clear should be issued.
+        suOut.put("getenforce", "Permissive");
+        store.put(FlagSpec.PKG_GEARHEAD, new ArrayList<Partition>(Arrays.asList(
+                partition(1, longFlag("Sys__t", 5L)))));
+
+        boolean ok = engine().applySpecs(
+                Arrays.asList(FlagSpec.lng(FlagSpec.PKG_GEARHEAD, "Sys__t", 99L)), false);
+
+        assertTrue(ok);
+        rootStatic.verify(() -> RootDb.exec(Mockito.anyString(), Mockito.anyList()),
+                Mockito.never());
+        assertFalse(log.toString().contains("Heterodyne sync state clear attempted"));
+    }
+
+    @Test
+    public void applySpecs_heterodyneClearThrows_isSwallowed_andApplySucceeds() {
+        // A failure clearing the sync state is non-fatal: the flag edit already landed.
+        suOut.put("getenforce", "Permissive");
+        execThrows = true;
+        store.put(FlagSpec.PKG_GEARHEAD, new ArrayList<Partition>(Arrays.asList(
+                partition(1, boolFlag("Other__flag", true)))));
+
+        boolean ok = engine().applySpecs(
+                Arrays.asList(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "New__flag", true)), false);
+
+        assertTrue(ok);
+        assertTrue(log.toString().contains("Heterodyne sync clear ERR"));
+    }
+
+    @Test
+    public void applySpecs_addingFlagButWriteFails_skipsHeterodyneClear() {
+        // When the partition write itself fails, the engine must NOT attempt the sync-state
+        // clear (it would key off a write that never happened).
+        suOut.put("getenforce", "Permissive");
+        writeThrows = true;
+        store.put(FlagSpec.PKG_GEARHEAD, new ArrayList<Partition>(Arrays.asList(
+                partition(1, boolFlag("Other__flag", true)))));
+
+        boolean ok = engine().applySpecs(
+                Arrays.asList(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "New__flag", true)), false);
+
+        assertFalse(ok);
+        rootStatic.verify(() -> RootDb.exec(Mockito.anyString(), Mockito.anyList()),
+                Mockito.never());
+    }
+
+    @Test
+    public void applySpecs_onePackageWriteSucceeds_clearsEvenWhenAnotherPackageFailed() {
+        // Issue #25, risk #3 (gating bug): the clear must be gated on the WRITE succeeding,
+        // not on the global `ok`. Here gearhead's count-changing edit is written, but a
+        // second package fails to decode (ok=false). The previous code gated the clear on
+        // `ok` and would skip it -- leaving gearhead in exactly the crash condition. The
+        // fix gates on the write outcome, so gearhead is still healed.
+        suOut.put("getenforce", "Permissive");
+        store.put(FlagSpec.PKG_GEARHEAD, new ArrayList<Partition>(Arrays.asList(
+                partition(1, boolFlag("Other__flag", true)))));
+        // A corrupt (undecodable) blob for the second package -> decode failure -> ok=false.
+        store.put(FlagSpec.PKG_CAR, new ArrayList<Partition>(Arrays.asList(
+                new Partition(2, new byte[]{1, 2, 3}))));
+
+        boolean ok = engine().applySpecs(Arrays.asList(
+                FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "New__flag", true),
+                FlagSpec.bool(FlagSpec.PKG_CAR, "Whatever__flag", true)), false);
+
+        assertFalse("a package failed to decode -> overall not ok", ok);
+        // ...but gearhead's successful count-changing write is still healed.
+        assertEquals(PhixitEngine.PHENO_DB, execDbPath);
+        assertEquals(HeterodyneSyncState.clearSyncSql(
+                        Arrays.asList(FlagSpec.PKG_GEARHEAD)),
+                execStatements);
+        assertTrue(log.toString().contains("Heterodyne sync state clear attempted"));
     }
 
     @Test

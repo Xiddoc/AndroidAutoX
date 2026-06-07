@@ -93,4 +93,9 @@ public final class RootSqlText {
         }
         return out;
     }
+
+    /** Quotes {@code s} as a SQL string literal, doubling embedded single-quotes. */
+    public static String sqlLiteral(String s) {
+        return "'" + s.replace("'", "''") + "'";
+    }
 }
