@@ -317,6 +317,79 @@ public class CoordinateTranslatorTest {
     // TranslatedPoint — toString
     // ------------------------------------------------------------------
 
+    // ------------------------------------------------------------------
+    // translate(x, y) — non-square map (axis independence end-to-end)
+    // ------------------------------------------------------------------
+
+    @Test
+    public void translate_nonSquareMap_axesScaleIndependently() {
+        // carW=100, carH=200; virtW=200, virtH=100 → scaleX=2, scaleY=0.5.
+        // If an impl swapped X/Y axes this assertion would fail.
+        CoordinateTranslator t = new CoordinateTranslator(100, 200, 200, 100);
+        CoordinateTranslator.TranslatedPoint p = t.translate(50f, 50f);
+        assertEquals(100f, p.getX(), DELTA); // 50 * 2
+        assertEquals(25f,  p.getY(), DELTA); // 50 * 0.5
+    }
+
+    // ------------------------------------------------------------------
+    // Clamping — extreme inputs
+    // ------------------------------------------------------------------
+
+    @Test
+    public void translateX_floatMaxValue_clampedToVirtWidth() {
+        CoordinateTranslator t = new CoordinateTranslator(1280, 720, 1280, 720);
+        assertEquals(1280f, t.translateX(Float.MAX_VALUE), DELTA);
+    }
+
+    @Test
+    public void translateY_floatMaxValue_clampedToVirtHeight() {
+        CoordinateTranslator t = new CoordinateTranslator(1280, 720, 1280, 720);
+        assertEquals(720f, t.translateY(Float.MAX_VALUE), DELTA);
+    }
+
+    @Test
+    public void translateX_nan_propagatesNaN() {
+        // NaN is not clamped: Math.min/Math.max propagate NaN. Documented behavior —
+        // callers are expected never to feed NaN coordinates.
+        CoordinateTranslator t = new CoordinateTranslator(1280, 720, 1280, 720);
+        assertTrue(Float.isNaN(t.translateX(Float.NaN)));
+    }
+
+    @Test
+    public void translateY_nan_propagatesNaN() {
+        CoordinateTranslator t = new CoordinateTranslator(1280, 720, 1280, 720);
+        assertTrue(Float.isNaN(t.translateY(Float.NaN)));
+    }
+
+    // ------------------------------------------------------------------
+    // clamp(x, y) — clamps virtual-space coords without scaling
+    // ------------------------------------------------------------------
+
+    @Test
+    public void clamp_inBounds_passesThrough() {
+        // Even with a non-identity scale, clamp() does NOT scale — inputs are virtual-space.
+        CoordinateTranslator t = new CoordinateTranslator(100, 100, 400, 200);
+        CoordinateTranslator.TranslatedPoint p = t.clamp(123f, 45f);
+        assertEquals(123f, p.getX(), DELTA);
+        assertEquals(45f,  p.getY(), DELTA);
+    }
+
+    @Test
+    public void clamp_belowZero_clampedToZero() {
+        CoordinateTranslator t = new CoordinateTranslator(100, 100, 400, 200);
+        CoordinateTranslator.TranslatedPoint p = t.clamp(-10f, -20f);
+        assertEquals(0f, p.getX(), DELTA);
+        assertEquals(0f, p.getY(), DELTA);
+    }
+
+    @Test
+    public void clamp_aboveMax_clampedToVirtBounds() {
+        CoordinateTranslator t = new CoordinateTranslator(100, 100, 400, 200);
+        CoordinateTranslator.TranslatedPoint p = t.clamp(9999f, 9999f);
+        assertEquals(400f, p.getX(), DELTA);
+        assertEquals(200f, p.getY(), DELTA);
+    }
+
     @Test
     public void translatedPoint_toString_containsCoordinates() {
         CoordinateTranslator.TranslatedPoint pt = new CoordinateTranslator.TranslatedPoint(12.5f, 34.0f);

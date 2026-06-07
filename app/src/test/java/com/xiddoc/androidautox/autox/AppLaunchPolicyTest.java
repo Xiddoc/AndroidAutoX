@@ -137,12 +137,12 @@ public class AppLaunchPolicyTest {
     // LaunchRequest.of — validation: displayId
     // ------------------------------------------------------------------
 
-    @Test(expected = IllegalStateException.class)
+    @Test(expected = IllegalArgumentException.class)
     public void launchRequest_of_displayIdZero_throws() {
         AppLaunchPolicy.LaunchRequest.of("com.example.app", 0);
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test(expected = IllegalArgumentException.class)
     public void launchRequest_of_displayIdNegative_throws() {
         AppLaunchPolicy.LaunchRequest.of("com.example.app", -5);
     }

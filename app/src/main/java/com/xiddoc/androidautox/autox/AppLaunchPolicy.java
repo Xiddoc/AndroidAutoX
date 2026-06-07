@@ -110,8 +110,8 @@ public final class AppLaunchPolicy {
          * @param packageName non-null, non-blank Android package name.
          * @param displayId   virtual display id; must be &gt; 0.
          * @return a validated, immutable {@link LaunchRequest}.
-         * @throws IllegalArgumentException if {@code packageName} is null or blank.
-         * @throws IllegalStateException    if {@code displayId} is &le; 0.
+         * @throws IllegalArgumentException if {@code packageName} is null or blank, or if
+         *                                  {@code displayId} is &le; 0.
          */
         public static LaunchRequest of(String packageName, int displayId) {
             if (packageName == null || packageName.trim().isEmpty()) {
@@ -119,7 +119,7 @@ public final class AppLaunchPolicy {
                         "packageName must be non-null and non-blank");
             }
             if (displayId <= 0) {
-                throw new IllegalStateException(
+                throw new IllegalArgumentException(
                         "displayId must be > 0 (primary display 0 is never a valid AutoX target); "
                                 + "got: " + displayId);
             }

@@ -169,6 +169,20 @@ public class GestureSpecTest {
     }
 
     // ------------------------------------------------------------------
+    // equals — transitive
+    // ------------------------------------------------------------------
+
+    @Test
+    public void equals_transitive() {
+        GestureSpec a = GestureSpec.swipe(2, 10f, 20f, 30f, 40f, 500L);
+        GestureSpec b = GestureSpec.swipe(2, 10f, 20f, 30f, 40f, 500L);
+        GestureSpec c = GestureSpec.swipe(2, 10f, 20f, 30f, 40f, 500L);
+        assertTrue(a.equals(b));
+        assertTrue(b.equals(c));
+        assertTrue(a.equals(c));
+    }
+
+    // ------------------------------------------------------------------
     // equals — null and different type
     // ------------------------------------------------------------------
 
@@ -287,6 +301,16 @@ public class GestureSpecTest {
         assertTrue(s.contains("400.0"));
         assertTrue(s.contains("150"));
         assertTrue(s.startsWith("GestureSpec{"));
+    }
+
+    @Test
+    public void swipe_toString_zeroDistance_stillContainsDurationMs() {
+        // Pin the SWIPE toString branch by value even when start == end coords.
+        GestureSpec g = GestureSpec.swipe(1, 50f, 50f, 50f, 50f, 200L);
+        String s = g.toString();
+        assertTrue(s.contains("SWIPE"));
+        assertTrue(s.contains("durationMs="));
+        assertTrue(s.contains("200"));
     }
 
     @Test

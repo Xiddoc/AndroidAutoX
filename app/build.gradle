@@ -273,7 +273,7 @@ def jacocoExclusions = [
         '**/AutoXForegroundService*.*', // foreground Service (wake lock, notification)
         '**/VirtualDisplayController*.*', // DisplayManager.createVirtualDisplay wrapper
         '**/AppLauncher*.*',         // ActivityOptions.setLaunchDisplayId wrapper
-        '**/GestureInjector*.*',     // injection interface (no executable lines, excluded for safety)
+        '**/GestureInjector.*',      // injection interface (no executable lines, excluded for safety)
         '**/ReflectiveGestureInjector*.*', // reflection-based InputManager injection seam
 ]
 

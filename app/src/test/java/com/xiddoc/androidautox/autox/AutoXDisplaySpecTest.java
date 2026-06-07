@@ -100,6 +100,20 @@ public class AutoXDisplaySpecTest {
         assertTrue(b.equals(a));
     }
 
+    // ------------------------------------------------------------------
+    // equals — transitive
+    // ------------------------------------------------------------------
+
+    @Test
+    public void equals_transitive() {
+        AutoXDisplaySpec a = new AutoXDisplaySpec(800, 600, 160);
+        AutoXDisplaySpec b = new AutoXDisplaySpec(800, 600, 160);
+        AutoXDisplaySpec c = new AutoXDisplaySpec(800, 600, 160);
+        assertTrue(a.equals(b));
+        assertTrue(b.equals(c));
+        assertTrue(a.equals(c));
+    }
+
     @Test
     public void equals_symmetric_whenNotEqual() {
         AutoXDisplaySpec a = new AutoXDisplaySpec(800, 600, 160);
