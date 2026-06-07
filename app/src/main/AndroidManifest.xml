@@ -7,6 +7,14 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
+    <!-- AutoX virtual-display projection: keep the service alive while projecting -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+    <!-- AutoX: PARTIAL_WAKE_LOCK to prevent CPU suspension during projection -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Car App: required to use navigation templates in the Android Auto host -->
+    <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES"/>
+
     <application
         android:name=".AaxApp"
         android:allowBackup="true"
@@ -18,6 +26,15 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme.NoActionBar">
+
+        <!-- Car App: minimum Car API level required by AutoXCarAppService -->
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1"/>
+        <!-- Car App: descriptor that tells the Android Auto host this app uses templates -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc"/>
         <activity
             android:name=".SplashActivity"
             android:exported="true">
@@ -68,6 +85,28 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- AutoX Car App service: discovered by the Android Auto host as a
+             NAVIGATION-category car app. exported=true is required so the host
+             (a separate process) can bind to this service. -->
+        <service
+            android:name=".autox.AutoXCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService"/>
+                <category android:name="androidx.car.app.category.NAVIGATION"/>
+            </intent-filter>
+        </service>
+
+        <!-- AutoX foreground service: holds a PARTIAL_WAKE_LOCK and a foreground
+             notification while the projection session is active.
+             foregroundServiceType=connectedDevice is required on Android 12+ for
+             services that run while connected to an external device (the car head unit).
+             exported=false: not accessible from other apps. -->
+        <service
+            android:name=".autox.AutoXForegroundService"
+            android:foregroundServiceType="connectedDevice"
+            android:exported="false"/>
 
     </application>
 

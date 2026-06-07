@@ -210,4 +210,10 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <!-- Settings tab: developer-mode toggle toasts -->
     <string name="settings_devmode_on">Developer mode enabled</string>
     <string name="settings_devmode_off">Developer mode disabled</string>
+
+    <!-- AutoX virtual-display foreground service notification -->
+    <string name="autox_notification_channel_name">AutoX Projection</string>
+    <string name="autox_notification_channel_desc">Shown while AndroidAutoX is projecting an app onto the car display</string>
+    <string name="autox_notification_title">AutoX projection active</string>
+    <string name="autox_notification_text">An app is being projected onto your car display via AndroidAutoX</string>
 </resources>
