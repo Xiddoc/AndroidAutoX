@@ -130,6 +130,41 @@ public class AutoXTargetAppTest {
         new AutoXTargetApp("com. example", "label");
     }
 
+    @Test(expected = IllegalArgumentException.class)
+    public void constructor_midSegmentSpace_throws() {
+        // A space AFTER the first char of a segment is not a valid Java identifier part.
+        new AutoXTargetApp("com.ex ample", "label");
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void constructor_midSegmentHyphen_throws() {
+        // A hyphen mid-segment is not a valid Java identifier part.
+        new AutoXTargetApp("com.ex-ample", "label");
+    }
+
+    // ------------------------------------------------------------------
+    // Validation: positive — mid-segment digits/underscores are accepted
+    // ------------------------------------------------------------------
+
+    @Test
+    public void constructor_midSegmentDigit_isAccepted() {
+        AutoXTargetApp app = new AutoXTargetApp("com.foo2.bar", "Foo2");
+        assertEquals("com.foo2.bar", app.packageName);
+    }
+
+    @Test
+    public void constructor_realWorldPackageWithDigit_isAccepted() {
+        // com.android.vending is the Play Store package; trailing-digit segments are common.
+        AutoXTargetApp app = new AutoXTargetApp("com.android.vending", "Play Store");
+        assertEquals("com.android.vending", app.packageName);
+    }
+
+    @Test
+    public void constructor_midSegmentUnderscore_isAccepted() {
+        AutoXTargetApp app = new AutoXTargetApp("com.foo_bar.baz", null);
+        assertEquals("com.foo_bar.baz", app.packageName);
+    }
+
     // ------------------------------------------------------------------
     // equals — reflexive
     // ------------------------------------------------------------------

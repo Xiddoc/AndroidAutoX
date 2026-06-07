@@ -17,10 +17,13 @@ import java.util.Objects;
  *   <li>Must be non-null and non-empty.</li>
  *   <li>Must contain at least one {@code '.'} (so a bare identifier like {@code "foo"}
  *       is rejected).</li>
- *   <li>Every dot-separated segment must be non-empty and must start with a character
- *       that is a valid Java identifier start ({@link Character#isJavaIdentifierStart})
- *       — this rejects leading/trailing dots, doubled dots, numeric-leading segments,
- *       and whitespace inside the name.</li>
+ *   <li>Every dot-separated segment must be non-empty (rejecting leading/trailing dots and
+ *       doubled dots), its first character must be a valid Java identifier start
+ *       ({@link Character#isJavaIdentifierStart}), and every remaining character must be a
+ *       valid Java identifier part ({@link Character#isJavaIdentifierPart}). This rejects
+ *       numeric-leading segments and any whitespace, hyphen, or other punctuation inside a
+ *       segment, while still accepting digits and underscores after the first character
+ *       (e.g. {@code "com.foo2.bar"} and {@code "com.android.vending"} are valid).</li>
  * </ul>
  * The rule is intentionally simple: it is a plausibility check, not a full RFC
  * validator. A valid Android package name is a superset of what passes here.
@@ -44,8 +47,9 @@ public final class AutoXTargetApp {
      *
      * @param packageName the Android package name (e.g. {@code "com.instagram.android"});
      *                    must be non-null, non-empty, contain at least one {@code '.'},
-     *                    and have every dot-separated segment start with a valid Java
-     *                    identifier character.
+     *                    and have every dot-separated segment be non-empty with a valid Java
+     *                    identifier start character followed only by valid Java identifier
+     *                    part characters.
      * @param label       a human-readable name; if {@code null} or blank the package name
      *                    is used as the label.
      * @throws IllegalArgumentException if {@code packageName} fails the validation rules.
@@ -81,8 +85,16 @@ public final class AutoXTargetApp {
             if (!Character.isJavaIdentifierStart(segment.charAt(0))) {
                 throw new IllegalArgumentException(
                         "each segment of packageName must start with a valid Java identifier "
-                                + "character; bad segment: \"" + segment
+                                + "start character; bad segment: \"" + segment
                                 + "\" in \"" + packageName + "\"");
+            }
+            for (int i = 1; i < segment.length(); i++) {
+                if (!Character.isJavaIdentifierPart(segment.charAt(i))) {
+                    throw new IllegalArgumentException(
+                            "each segment of packageName must contain only valid Java identifier "
+                                    + "part characters after the first; bad segment: \"" + segment
+                                    + "\" in \"" + packageName + "\"");
+                }
             }
         }
     }
