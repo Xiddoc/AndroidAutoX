@@ -456,6 +456,117 @@ alive exactly while a virtual display is active, not for the whole app session.
 | `ConnectionStateMachine` | Pure state machine (no Android imports) | 100% required |
 | `ReconnectBackoff` | Pure backoff calculator (no Android imports) | 100% required |
 
+## WS5 — IME + Speech-to-Text on the virtual display
+
+### §2.3 IME / STT handshake
+
+When a user focuses a text field in the guest app running on the AutoX virtual display,
+Android's `WindowManagerService` (WMS) must route the IME window and input-connection
+events to that display. This requires three prerequisites, all of which AutoX configures:
+
+#### 1. Trusted display (prerequisite for IME admission)
+
+The virtual display must be created with
+`VirtualDisplayConfig.FLAG_TRUSTED` (`VIRTUAL_DISPLAY_FLAG_TRUSTED`, value `1024`).
+An *untrusted* display is silently ignored by WMS for both IME routing and system-decors
+rendering, regardless of the Secure settings values below. The trusted flag is set by
+`VirtualDisplayController.defaultFlags()`.
+
+#### 2. Per-display `shouldShowSystemDecors` flag
+
+WMS checks `Settings.Secure` key `display_should_show_system_decors_<displayId>`. When
+the value is `1`, the system renders system-UI layers (status bar, nav bar, IME frame)
+onto the display. AutoX must set this key **before** attempting to show the IME, because
+the IME frame layer is a system-UI layer itself. Without it, the software keyboard window
+is never admitted to the display surface.
+
+#### 3. Per-display `shouldShowIme` flag
+
+WMS checks `Settings.Secure` key `display_should_show_ime_<displayId>`. When the value is
+`1`, WMS routes IME windows to this display and forwards `InputConnection` events — including
+speech-to-text text injections — to the focused window on the display.
+
+#### Full handshake sequence
+
+```
+Guest app text field focused (on VirtualDisplay)
+    │
+    ▼  WMS checks per-display flags
+    │
+    │  shouldShowSystemDecors_<id> == 1  ─── (written by ImeDisplaySettingsApplier)
+    │  shouldShowIme_<id>          == 1  ─── (written by ImeDisplaySettingsApplier)
+    │  display is TRUSTED               ─── (VirtualDisplayController.defaultFlags())
+    ▼
+WMS routes IME window to VirtualDisplay
+    │
+    ▼  IME renders keyboard on VirtualDisplay surface
+    │  frames flow back to car head-unit via Car App SDK SurfaceCallback
+    ▼
+User types / speaks
+    │
+    │  (typed keys)
+    │       ──▶  KeyEvent injected into VirtualDisplay focused window
+    │
+    │  (STT: speech recognised by Android STT engine)
+    │       ──▶  text committed into InputConnection of focused EditText on VirtualDisplay
+    ▼
+Guest app EditText receives text
+```
+
+#### Focus routing note
+
+Tap (touch) events injected via `GestureInjector.inject(GestureSpec.tap(...))` cause
+`WindowManagerService` to update input focus on the virtual display, which in turn
+triggers `InputMethodManager` to show the IME. The per-display flags above are the
+*gating* condition; the IME does not pop up merely because the flags are set — a focused
+focusable view on the display (caused by a tap gesture) is still required to trigger
+`InputMethodManager#showSoftInput`.
+
+#### STT text delivery
+
+When the user dictates text, Android's `SpeechRecognizer` / `InputMethodService` delivers
+the recognised string by committing it into the active `InputConnection`. Because WMS
+routes input connections to the focused window on the virtual display (via the
+`shouldShowIme` flag), the STT text lands directly in the guest app's `EditText`
+without any additional wiring in AutoX.
+
+#### Apply / Revert lifecycle
+
+`ImeDisplaySettingsSpec.forDisplay(displayId)` builds the spec.
+`ImeDisplaySettingsApplier.readPriorAndApply(spec)` reads the prior values (to support
+clean revert), then writes `VALUE_ENABLED` (1) for both keys in apply order
+(system-decors first, then IME). On session teardown (virtual display released),
+`ImeDisplaySettingsApplier.revert(specWithPriors)` restores the prior values in
+reverse order (IME first, then system-decors).
+
+#### WS4 provider seam
+
+Both keys are protected by `WRITE_SECURE_SETTINGS` (a signature-level permission).
+`ImeDisplaySettingsApplier` writes them via the `SystemSettingsProvider` interface
+(WS4 seam), which is backed at runtime by either a root-reflection implementation
+(`RootSystemSettingsProvider`) or an LSPosed hook (`AutoXXposedModule`) that relaxes the
+permission check inside `system_server`.
+
+`cmd window set-display-settings` is a documented adb/shell fallback for debugging only
+— AutoX does **not** use it at runtime. The `SystemSettingsProvider` seam is the sole
+implementation path.
+
+#### TODO — call-site wiring (excluded glue)
+
+The `ImeDisplaySettingsApplier` is pure logic and fully tested, but it must be wired into
+the excluded framework-glue classes at session start/stop:
+
+- **`AutoXScreen.onSurfaceAvailable`** (excluded): after `VirtualDisplayController` creates
+  the trusted virtual display and returns its `displayId`, construct an
+  `ImeDisplaySettingsApplier` with the live `SystemSettingsProvider` (injected via
+  `AutoXSession` or `AutoXCarAppService`) and call `readPriorAndApply(spec)`. Store the
+  returned `specWithPriors` on the session state.
+- **`AutoXScreen.onSurfaceDestroyed`** (excluded): retrieve the stored `specWithPriors` and
+  call `applier.revert(specWithPriors)` to restore the prior settings.
+
+These wiring points are in `AutoXScreen` (excluded from coverage gate) and therefore
+require human or device validation rather than unit tests.
+
 ## Key files
 
 | Path | Role |
