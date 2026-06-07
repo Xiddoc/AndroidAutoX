@@ -98,6 +98,16 @@ public class TweakRegistryTest {
         for (FlagSpec s : l) assertEquals(FlagSpec.PKG_CAR, s.pkg);
     }
 
+    @Test
+    public void uxPrototypeSpecs_threadsUrlIntoFlag() {
+        List<FlagSpec> l = TweakRegistry.uxPrototypeSpecs("https://foo.bar/page");
+        assertEquals("UxPrototype__enabled", l.get(0).name);
+        assertEquals(PhixitSnapshot.TYPE_BOOL_TRUE, l.get(0).flag.type);
+        assertEquals("UxPrototype__url", l.get(1).name);
+        assertEquals(PhixitSnapshot.TYPE_STRING, l.get(1).flag.type);
+        assertEquals("https://foo.bar/page", l.get(1).flag.stringValue);
+    }
+
     // --- specsFor: every dynamic branch + default delegation ---------------
 
     @Test
@@ -139,6 +149,21 @@ public class TweakRegistryTest {
         List<FlagSpec> l = TweakRegistry.specsFor(ctx, "aa_patched_apps");
         assertNotNull(l);
         assertEquals("app_white_list", l.get(0).name);
+    }
+
+    @Test
+    public void specsFor_uxPrototypeReadsSavedUrlPref() {
+        mainPrefs.edit().putString("uxprototype_url", "https://saved.example/x").apply();
+        List<FlagSpec> l = TweakRegistry.specsFor(ctx, "uxprototype_tweak");
+        assertEquals("UxPrototype__url", l.get(1).name);
+        assertEquals("https://saved.example/x", l.get(1).flag.stringValue);
+    }
+
+    @Test
+    public void specsFor_uxPrototypeDefaultsToEmptyUrl_whenUnset() {
+        List<FlagSpec> l = TweakRegistry.specsFor(ctx, "uxprototype_tweak");
+        assertEquals("UxPrototype__url", l.get(1).name);
+        assertEquals("", l.get(1).flag.stringValue);
     }
 
     @Test

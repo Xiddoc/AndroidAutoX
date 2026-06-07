@@ -720,7 +720,7 @@ public class MainActivity extends AppCompatActivity {
 
 
                                     try {
-                                        uxprototypeTweak(new URL(readURL.getText().toString()));
+                                        uxprototypeTweak(new URL(url));
                                         uxprototypeDialog.dismiss();
                                     } catch (MalformedURLException e) {
                                         e.printStackTrace();
@@ -2057,6 +2057,13 @@ public class MainActivity extends AppCompatActivity {
         editor.apply();
     }
 
+    public void saveString(final String value, String key) {
+        SharedPreferences sharedPreferences = getPreferences(getContext().MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(key, value);
+        editor.apply();
+    }
+
     public boolean load(String key) {
         SharedPreferences sharedPreferences = getPreferences(Context.MODE_PRIVATE);
         return sharedPreferences.getBoolean(key, false);
@@ -2455,8 +2462,14 @@ public class MainActivity extends AppCompatActivity {
         applyPhixitTweak("kill_telemetry", telemetryStatus, disableTelemetryButton, getString(R.string.telemetry_string));
     }
 
-    public void uxprototypeTweak(URL URL) {
-        applyPhixitTweak("uxprototype_tweak", uxprototypeTweakStatus, disableTelemetryButton, getString(R.string.uxprototype_tweak));
+    public void uxprototypeTweak(URL url) {
+        // Thread the user-entered URL through the dynamic-value path so it lands in the
+        // UxPrototype__url flag (instead of a placeholder). Persist it so the headless
+        // re-apply job can reconstruct the same value.
+        String urlString = url.toString();
+        saveString(urlString, "uxprototype_url");
+        applyPhixitTweakSpecs("uxprototype_tweak", TweakRegistry.uxPrototypeSpecs(urlString),
+                uxprototypeTweakStatus, uxprototypeButton, getString(R.string.uxprototype_tweak));
     }
 
     public void setHunDuration(View view, final int value) {
