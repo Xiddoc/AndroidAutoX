@@ -2,6 +2,7 @@
 <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:card_view="http://schemas.android.com/apk/res-auto"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="5dp"
@@ -52,7 +53,7 @@
             android:paddingTop="2dp"
             android:paddingBottom="2dp"
             android:fontFamily="@font/raleway_semibold"
-            android:text="NATIVE"
+            tools:text="NATIVE"
             android:textColor="@color/text_primary"
             android:textSize="11sp" />
 
