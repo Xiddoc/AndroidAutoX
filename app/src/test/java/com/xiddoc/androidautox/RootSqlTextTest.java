@@ -148,4 +148,14 @@ public class RootSqlTextTest {
         List<String> out = RootSqlText.normalizeBatch(Arrays.asList("A", "B;"));
         assertEquals(Arrays.asList("A", "B"), out);
     }
+
+    // ------------------------------------------------------------------
+    // sqlLiteral
+    // ------------------------------------------------------------------
+
+    @Test
+    public void sqlLiteral_doublesEmbeddedQuotes() {
+        assertEquals("'plain'", RootSqlText.sqlLiteral("plain"));
+        assertEquals("'O''Brien'", RootSqlText.sqlLiteral("O'Brien"));
+    }
 }

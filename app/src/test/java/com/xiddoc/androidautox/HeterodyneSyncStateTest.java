@@ -11,7 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Pure-logic tests for {@link HeterodyneSyncState}: the count-change detector and the
+ * Pure-logic tests for {@link HeterodyneSyncState}: the flag-set-change detector and the
  * committed-config invalidation SQL builder used to keep GMS's Phenotype Heterodyne
  * sync coherent after this app rewrites {@code param_partitions.flags_content}.
  */
@@ -20,40 +20,67 @@ public class HeterodyneSyncStateTest {
     private PhixitSnapshot.Flag flag(String name) {
         PhixitSnapshot.Flag f = new PhixitSnapshot.Flag();
         f.name = name;
+        f.numericName = false;
         f.type = PhixitSnapshot.TYPE_BOOL_TRUE;
         return f;
     }
 
-    // --- countChanged(int, int) ------------------------------------------------
-
-    @Test
-    public void countChanged_ints_trueWhenDifferent_falseWhenSame() {
-        assertTrue(HeterodyneSyncState.countChanged(440, 453));
-        assertTrue(HeterodyneSyncState.countChanged(453, 440));
-        assertFalse(HeterodyneSyncState.countChanged(453, 453));
-        assertFalse(HeterodyneSyncState.countChanged(0, 0));
+    private PhixitSnapshot.Flag numericFlag(String name) {
+        PhixitSnapshot.Flag f = new PhixitSnapshot.Flag();
+        f.name = name;
+        f.numericName = true;
+        f.type = PhixitSnapshot.TYPE_BOOL_TRUE;
+        return f;
     }
 
-    // --- countChanged(List, List) ---------------------------------------------
+    // --- flagSetChanged --------------------------------------------------------
 
     @Test
-    public void countChanged_lists_detectsAddAndRemove_andEqualSize() {
+    public void flagSetChanged_detectsAddAndRemove() {
         List<PhixitSnapshot.Flag> one = Arrays.asList(flag("a"));
         List<PhixitSnapshot.Flag> two = Arrays.asList(flag("a"), flag("b"));
-        // added a flag -> changed
-        assertTrue(HeterodyneSyncState.countChanged(one, two));
-        // removed a flag -> changed
-        assertTrue(HeterodyneSyncState.countChanged(two, one));
-        // same size (value-only edit) -> unchanged
-        assertFalse(HeterodyneSyncState.countChanged(one, Arrays.asList(flag("z"))));
+        // added a flag name -> changed
+        assertTrue(HeterodyneSyncState.flagSetChanged(one, two));
+        // removed a flag name -> changed
+        assertTrue(HeterodyneSyncState.flagSetChanged(two, one));
     }
 
     @Test
-    public void countChanged_lists_nullsTreatedAsEmpty() {
-        assertFalse(HeterodyneSyncState.countChanged(null, null));
-        assertFalse(HeterodyneSyncState.countChanged(null, new ArrayList<PhixitSnapshot.Flag>()));
-        assertTrue(HeterodyneSyncState.countChanged(null, Arrays.asList(flag("a"))));
-        assertTrue(HeterodyneSyncState.countChanged(Arrays.asList(flag("a")), null));
+    public void flagSetChanged_sameCountSwap_isTrue() {
+        // remove flag A, add flag B in the same edit: net count unchanged but the flag
+        // NAME set changed, which still trips Heterodyne. A bare count check would miss this.
+        List<PhixitSnapshot.Flag> before = Arrays.asList(flag("a"));
+        List<PhixitSnapshot.Flag> after = Arrays.asList(flag("b"));
+        assertTrue(HeterodyneSyncState.flagSetChanged(before, after));
+    }
+
+    @Test
+    public void flagSetChanged_valueOnlyEdit_isFalse() {
+        // Same set of names (a, b) before and after -> a pure value edit, no set change.
+        List<PhixitSnapshot.Flag> before = Arrays.asList(flag("a"), flag("b"));
+        List<PhixitSnapshot.Flag> after = Arrays.asList(flag("b"), flag("a"));
+        assertFalse(HeterodyneSyncState.flagSetChanged(before, after));
+    }
+
+    @Test
+    public void flagSetChanged_numericNameDifferences_ignored() {
+        // Numeric-named flags don't participate in the name set (mirroring applySpecToList /
+        // findFlag), so adding/removing/swapping them must NOT register as a change.
+        List<PhixitSnapshot.Flag> before = Arrays.asList(flag("a"), numericFlag("7"));
+        List<PhixitSnapshot.Flag> after = Arrays.asList(flag("a"), numericFlag("99"));
+        assertFalse(HeterodyneSyncState.flagSetChanged(before, after));
+
+        // A real name change is still caught even when numeric noise is present.
+        List<PhixitSnapshot.Flag> changed = Arrays.asList(flag("b"), numericFlag("99"));
+        assertTrue(HeterodyneSyncState.flagSetChanged(before, changed));
+    }
+
+    @Test
+    public void flagSetChanged_nullsTreatedAsEmpty() {
+        assertFalse(HeterodyneSyncState.flagSetChanged(null, null));
+        assertFalse(HeterodyneSyncState.flagSetChanged(null, new ArrayList<PhixitSnapshot.Flag>()));
+        assertTrue(HeterodyneSyncState.flagSetChanged(null, Arrays.asList(flag("a"))));
+        assertTrue(HeterodyneSyncState.flagSetChanged(Arrays.asList(flag("a")), null));
     }
 
     // --- clearSyncSql ----------------------------------------------------------
@@ -73,18 +100,24 @@ public class HeterodyneSyncStateTest {
     public void clearSyncSql_singlePackage_emitsThreeNonDestructiveDeletes() {
         List<String> sql = HeterodyneSyncState.clearSyncSql(
                 Arrays.asList(FlagSpec.PKG_GEARHEAD));
+        // The exact table/column names are inferred and expected to change after on-device
+        // verification, so we assert the behavioural invariants rather than the literal SQL.
         assertEquals(3, sql.size());
         String lit = "'" + FlagSpec.PKG_GEARHEAD + "'";
-        // Modern linkage (static_config_packages, the table param_partitions joins through).
-        assertEquals("DELETE FROM committed_configurations WHERE static_config_package_id IN "
-                        + "(SELECT static_config_package_id FROM static_config_packages WHERE name=" + lit + ")",
-                sql.get(0));
-        // Alternate linkage fallback.
-        assertEquals("DELETE FROM committed_configurations WHERE config_package IN "
-                        + "(SELECT id FROM config_packages WHERE name=" + lit + ")",
-                sql.get(1));
-        // Legacy flat table.
-        assertEquals("DELETE FROM Configurations WHERE packageName=" + lit, sql.get(2));
+        boolean referencesStaticConfigPackages = false;
+        for (String s : sql) {
+            assertTrue("each statement is a DELETE FROM: " + s, s.startsWith("DELETE FROM"));
+            assertTrue("each statement embeds the quote-doubled package literal: " + s,
+                    s.contains(lit));
+            assertFalse("must not touch param_partitions: " + s, s.contains("param_partitions"));
+            assertFalse("must not force a re-fetch: " + s, s.contains("last_fetch"));
+            assertFalse("must not reset fetch timestamps: " + s, s.contains("last_update_time"));
+            if (s.contains("static_config_packages")) referencesStaticConfigPackages = true;
+        }
+        // The modern-linkage statement is the one meaningful linkage (the table this app
+        // already joins param_partitions through), so keep that single check.
+        assertTrue("a statement references the static_config_packages linkage",
+                referencesStaticConfigPackages);
     }
 
     @Test
@@ -110,11 +143,5 @@ public class HeterodyneSyncStateTest {
         // gearhead statements come first (insertion order), then car
         assertTrue(sql.get(2).contains(FlagSpec.PKG_GEARHEAD));
         assertTrue(sql.get(5).contains(FlagSpec.PKG_CAR));
-    }
-
-    @Test
-    public void sqlLiteral_doublesEmbeddedQuotes() {
-        assertEquals("'plain'", HeterodyneSyncState.sqlLiteral("plain"));
-        assertEquals("'O''Brien'", HeterodyneSyncState.sqlLiteral("O'Brien"));
     }
 }

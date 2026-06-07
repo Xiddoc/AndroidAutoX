@@ -66,7 +66,8 @@ persistent process with no UI.
 
 ## 3. The fix (implemented)
 
-After a **count-changing** edit, **drop the stale Heterodyne committed-config bookkeeping for the affected
+After a **flag-set-changing** edit (a flag name added or removed — including a same-count *swap* of one
+name for another), **drop the stale Heterodyne committed-config bookkeeping for the affected
 package(s)** so GMS rebuilds a self-consistent expected count from the configuration that is *now on disk*
 (our edit) on its next sync — instead of validating our count-drifted snapshot against a stale expected
 count. This is the DB-side analogue of the phenotype **file**-cache clear the engine already performs
@@ -100,27 +101,34 @@ pass, as it already does against the ~24h reset.)
 `applySpecs` collects every package's partitions into a single `toWrite` and persists them in one
 `RootDb.writePartitions` call. The clear is now gated on **that write succeeding** (`writeOk`), not on the
 global `ok` flag. The global `ok` also goes false when *another* package fails to read/decode; gating the
-clear on it would skip healing a package whose count-changing blob *did* commit — leaving exactly the crash
-condition. Gating on the write outcome heals every successfully-written count-changed package regardless of
-unrelated per-package failures.
+clear on it would skip healing a package whose flag-set-changing blob *did* commit — leaving exactly the
+crash condition. Gating on the write outcome heals every successfully-written flag-set-changed package
+regardless of unrelated per-package failures.
 
 ### Where the logic lives (unit-testable, in the coverage gate)
 
 New pure class **`HeterodyneSyncState`** (no Android imports; 100% line+branch covered):
 
-- `countChanged(before, after)` / `countChanged(int, int)` — did the edit change a partition's flag count
-  (flag added/removed), i.e. could it trip Heterodyne? A value-only edit returns `false`.
+- `flagSetChanged(before, after)` — did the edit change a partition's flag-**name** set (a name added or
+  removed), i.e. could it trip Heterodyne? This is membership-based, not a bare count check, so it also
+  catches a same-count *swap* (remove flag A, add flag B in one edit) that leaves the count unchanged but
+  still changes the validated flag set. Only non-numeric flag names participate (mirroring how
+  `applySpecToList`/`findFlag` ignore numeric-named entries). A value-only edit (same names, changed values)
+  returns `false`.
 - `clearSyncSql(packages)` — the ordered, de-duplicated committed-config `DELETE`s that invalidate the stale
-  expected-count bookkeeping for the affected packages. Per package it deletes from `committed_configurations`
-  keyed two ways for cross-version tolerance — via the **verified** `static_config_packages` linkage this app
-  already uses to locate a package's `param_partitions`, and via an alternate `config_packages` linkage —
-  plus the legacy flat `Configurations` table keyed by package name.
+  expected-count bookkeeping for the affected packages. Per package it emits **three** statements for
+  cross-version tolerance: one keyed via the `static_config_packages` linkage this app already uses to locate
+  a package's `param_partitions` (only *that linkage* is verified — the `committed_configurations` table it
+  deletes from is itself inferred), one via an alternate `config_packages` linkage, and one against the legacy
+  flat `Configurations` table keyed by package name.
 
-`PhixitEngine.applySpecs(...)` tracks, per partition, whether the flag **count** changed
-(`HeterodyneSyncState.countChanged(countBefore, flags.size())`). If any did and the write succeeded, it runs
-`HeterodyneSyncState.clearSyncSql(...)` through `RootDb.exec(PHENO_DB, ...)` — best-effort: a failure is
-logged and never fails the apply (the flag edit already landed), and it is skipped entirely when the write
-failed or when nothing count-changed.
+`PhixitEngine.applySpecs(...)` tracks, per partition, whether the flag **set** changed by snapshotting the
+flag names before the edit and comparing with `HeterodyneSyncState.flagSetChanged(before, flags)`. If any did
+and the write succeeded, it runs `HeterodyneSyncState.clearSyncSql(...)` through `RootDb.exec(PHENO_DB, ...)`
+— best-effort: a failure is logged and never fails the apply (the flag edit already landed), and it is
+skipped entirely when the write failed or when nothing flag-set-changed. Because the lenient executor may
+skip every statement on a build whose table names differ, the log says the clear was *attempted* rather than
+claiming it took effect.
 
 ### Why the clear SQL is safe across GMS versions
 
@@ -129,8 +137,9 @@ targeted tables may not exist on a given device. `RootDb.exec` runs through the 
 executor (`PhixitRootService.execStatements`, mirroring `sqlite3 -batch` with no `.bail`): a statement
 against a missing table is logged and skipped, the rest of the batch still runs. The statements are
 `DELETE`s that are harmless no-ops when the row/table is absent, so on a build missing a table we simply
-clear the ones present — we never corrupt the DB and never throw. Package names are emitted as quote-doubled
-SQL string literals; Phenotype config-package names are reverse-DNS identifiers, so this is belt-and-braces.
+clear the ones present — we never corrupt the DB and never throw. Package names are embedded via
+`RootSqlText.sqlLiteral(...)` — a SQL string literal with embedded single-quotes doubled — which is the
+escaping these string-built statements receive.
 
 ## 4. Residual risk (be honest)
 
@@ -153,8 +162,9 @@ SQL string literals; Phenotype config-package names are reverse-DNS identifiers,
 
 - `./gradlew assembleDebug` — passes.
 - `./gradlew testDebugUnitTest` — passes (new `HeterodyneSyncStateTest`; extended `PhixitEngineTest` covering
-  add-clears, remove-clears, value-only-skips, clear-throws-swallowed, write-fails-skips-clear, and the
-  gating-bug regression where one package's write succeeds while another fails to decode).
+  add-clears, remove-clears, same-count-swap-clears, value-only-skips, two-packages-clear-in-one-pass,
+  clear-throws-swallowed, write-fails-skips-clear, and the gating-bug regression where one package's write
+  succeeds while another fails to decode).
 - `./gradlew jacocoTestCoverageVerification` — 100% line+branch maintained (`HeterodyneSyncState` and the new
   `PhixitEngine` branches are in scope and fully covered).
 - **Still needs on-device confirmation:** that the Heterodyne crash no longer reproduces, the committed-config

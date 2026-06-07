@@ -20,18 +20,21 @@ import java.util.Set;
  *   Expected flag count N, but was M.</pre>
  * and GMS crashes silently in the background.
  *
- * <p>{@link PhixitEngine#applySpecs} can change a partition's real flag count: it
+ * <p>{@link PhixitEngine#applySpecs} can change a partition's real flag <em>set</em>: it
  * <em>adds</em> a brand-new flag when the flag name isn't already present in the
- * partition (and, on revert, <em>drops</em> flags). That makes the on-disk count drift
- * from the committed-config metadata Heterodyne validates against — the exact trigger
+ * partition (and, on revert, <em>drops</em> flags). That makes the reconstructed flag set
+ * drift from the committed-config metadata Heterodyne validates against — the exact trigger
  * for the "conflicting flags" exception. A pure value edit (changing an existing flag's
- * value in place) keeps the count stable and is therefore safe.
+ * value in place) keeps the set stable and is therefore safe.
  *
  * <h2>The fix</h2>
  * <ol>
- *   <li>{@link #countChanged(List, List)} reports whether a single partition's edit
- *       changed its flag count — i.e. whether it could trip Heterodyne. Callers use
- *       this to do the committed-config invalidation only when it is actually needed.</li>
+ *   <li>{@link #flagSetChanged(List, List)} reports whether a single partition's edit
+ *       changed its flag-<em>name</em> set — i.e. whether it could trip Heterodyne.
+ *       Membership-based (not a bare size check) so it also catches a same-count
+ *       <em>swap</em> (remove flag A, add flag B in the same edit), which leaves the count
+ *       unchanged but still changes the flag set Heterodyne validates. Callers use this to
+ *       do the committed-config invalidation only when it is actually needed.</li>
  *   <li>{@link #clearSyncSql(Iterable)} returns the SQL that drops Heterodyne's stale
  *       committed-config bookkeeping (and therefore the stale expected flag count) for
  *       the affected packages, so the next sync re-derives a self-consistent count from
@@ -69,27 +72,30 @@ public final class HeterodyneSyncState {
     }
 
     /**
-     * True when applying the edit changed the partition's flag count, i.e. a flag was
-     * added or removed (the situation that makes the on-disk count drift from the
-     * committed-config count Heterodyne expects). A pure value edit — same number of
-     * flags before and after — returns {@code false}.
+     * True when applying the edit changed the partition's flag-<em>name</em> set, i.e. a
+     * flag name was added or removed (the situation that makes the reconstructed flag set
+     * drift from the committed-config metadata Heterodyne expects). Membership-based, so it
+     * catches both a net add/remove <em>and</em> a same-count swap (remove flag A, add flag
+     * B), which a bare count check would miss. A pure value edit — same set of names before
+     * and after — returns {@code false}.
      *
-     * <p>{@code null} lists are treated as empty (size 0).
+     * <p>Only non-numeric flag names participate (matching how
+     * {@link PhixitEngine#applySpecToList}/{@code findFlag} ignore {@code numericName}
+     * entries). {@code null} lists are treated as empty.
      */
-    public static boolean countChanged(List<PhixitSnapshot.Flag> before,
-                                       List<PhixitSnapshot.Flag> after) {
-        int b = before == null ? 0 : before.size();
-        int a = after == null ? 0 : after.size();
-        return countChanged(b, a);
+    public static boolean flagSetChanged(List<PhixitSnapshot.Flag> before,
+                                         List<PhixitSnapshot.Flag> after) {
+        return !nameSet(before).equals(nameSet(after));
     }
 
-    /**
-     * Count-only overload: true when the flag count differs before vs. after the edit.
-     * Used by {@link PhixitEngine} which already has the sizes to hand and need not
-     * retain the pre-edit flag list.
-     */
-    public static boolean countChanged(int beforeCount, int afterCount) {
-        return beforeCount != afterCount;
+    /** Collects the non-numeric flag names of {@code flags} ({@code null} = empty set). */
+    private static Set<String> nameSet(List<PhixitSnapshot.Flag> flags) {
+        Set<String> names = new LinkedHashSet<String>();
+        if (flags == null) return names;
+        for (PhixitSnapshot.Flag f : flags) {
+            if (!f.numericName) names.add(f.name);
+        }
+        return names;
     }
 
     /**
@@ -112,10 +118,9 @@ public final class HeterodyneSyncState {
      * server re-fetch, so the applied tweak is preserved (issue #25, risk #1). Every
      * statement is a no-op when its table/rows are absent on the running GMS build
      * (executed leniently), so this degrades gracefully across schema versions. Package
-     * names are bound as SQL string literals with embedded single-quotes doubled;
-     * Phenotype config-package names are reverse-DNS identifiers (letters, digits, dots,
-     * underscores) so no exotic escaping is required, but the quote-doubling keeps the
-     * statements well-formed regardless.
+     * names are embedded via {@link RootSqlText#sqlLiteral(String)} (a SQL string literal
+     * with embedded single-quotes doubled) — the escaping these string-built statements
+     * receive.
      *
      * @param packages the affected Phenotype config-package names (e.g.
      *                  {@code com.google.android.projection.gearhead}); {@code null}
@@ -130,7 +135,7 @@ public final class HeterodyneSyncState {
         for (String pkg : packages) {
             if (pkg == null) continue;
             if (!seen.add(pkg)) continue;
-            String lit = sqlLiteral(pkg);
+            String lit = RootSqlText.sqlLiteral(pkg);
             // Modern linkage: the table this app already joins param_partitions through.
             out.add("DELETE FROM committed_configurations WHERE static_config_package_id IN "
                     + "(SELECT static_config_package_id FROM static_config_packages WHERE name=" + lit + ")");
@@ -141,10 +146,5 @@ public final class HeterodyneSyncState {
             out.add("DELETE FROM Configurations WHERE packageName=" + lit);
         }
         return out;
-    }
-
-    /** Quotes {@code s} as a SQL string literal, doubling embedded single-quotes. */
-    static String sqlLiteral(String s) {
-        return "'" + s.replace("'", "''") + "'";
     }
 }
