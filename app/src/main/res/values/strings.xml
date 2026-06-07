@@ -206,4 +206,13 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="autox_notification_channel_desc">Shown while AndroidAutoX is projecting an app onto the car display</string>
     <string name="autox_notification_title">AutoX projection active</string>
     <string name="autox_notification_text">An app is being projected onto your car display via AndroidAutoX</string>
+
+    <!-- AutoX section header + tweak buttons (WS1) -->
+    <string name="section_autox">AutoX projection</string>
+    <string name="autox_button_enable">Enable AutoX projection</string>
+    <string name="autox_button_disable">Disable AutoX projection</string>
+    <string name="autox_pick_target">Pick target app</string>
+    <string name="autox_tutorial">AutoX projects any app onto the car head-unit display via an isolated virtual display. Enable it here, then pick a target app to project. Requires Android Auto Developer Mode to be ON (see docs/autox-dev-testing.md).</string>
+    <string name="autox_target_set">Target: %1$s</string>
+    <string name="autox_no_target">No target app selected</string>
 </resources>
