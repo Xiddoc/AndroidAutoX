@@ -6,6 +6,8 @@ import android.util.Log;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 
+import com.xiddoc.androidautox.autox.provider.InputProvider;
+
 import java.lang.reflect.Method;
 
 /**
@@ -35,10 +37,20 @@ import java.lang.reflect.Method;
  *
  * <p><b>Use {@link GestureInjector} as the injection type in all non-framework code.</b>
  * Swap this implementation for a stub in tests.
+ *
+ * <h2>WS4 provider seam</h2>
+ * <p>This class now also implements the WS4 {@link InputProvider} seam. {@link #inject}
+ * satisfies both interfaces unchanged; {@link #isInjectionHonored()} reports the last
+ * observed success of a real injection so the provider-selection layer can detect when
+ * {@code injectInputEvent} is silently dropped (root reflection on a hardened device) and
+ * fall back / degrade instead of assuming success.
  */
-public final class ReflectiveGestureInjector implements GestureInjector {
+public final class ReflectiveGestureInjector implements GestureInjector, InputProvider {
 
     private static final String TAG = "AndroidAutoX";
+
+    /** Last observed result of a real injection; drives {@link #isInjectionHonored()}. */
+    private volatile boolean lastInjectionAccepted;
 
     /**
      * {@code InputManagerCompat.INJECT_INPUT_EVENT_MODE_ASYNC} — the mode constant
@@ -107,14 +119,31 @@ public final class ReflectiveGestureInjector implements GestureInjector {
             return false;
         }
         try {
-            return dispatchGesture(spec);
+            boolean accepted = dispatchGesture(spec);
+            lastInjectionAccepted = accepted;
+            return accepted;
         } catch (SecurityException e) {
             Log.w(TAG, "inject: INJECT_EVENTS permission denied; dropping gesture " + spec, e);
+            lastInjectionAccepted = false;
             return false;
         } catch (Exception e) {
             Log.w(TAG, "inject: unexpected error dispatching gesture " + spec, e);
+            lastInjectionAccepted = false;
             return false;
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Reports {@code true} only after a real {@link #inject} call was accepted by the
+     * input subsystem. Until the first successful injection (or if the reflection target
+     * was never resolved) this returns {@code false}, so the selection layer treats the
+     * provider as unproven rather than assuming the privilege is present.
+     */
+    @Override
+    public boolean isInjectionHonored() {
+        return injectInputEvent != null && lastInjectionAccepted;
     }
 
     // ------------------------------------------------------------------
