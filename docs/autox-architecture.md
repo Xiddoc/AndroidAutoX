@@ -141,11 +141,76 @@ The AutoX glue layer uses only standard Android / Jetpack APIs:
 The only shell-adjacent path is `ReflectiveGestureInjector`, and even there the
 invocation is a Java native-API call, not a `Runtime.exec` with a shell string.
 
+## WS4 — privileged-provider seam (root-reflection vs LSPosed)
+
+WS4 abstracts every privileged action AutoX needs behind small **provider interfaces**
+(`autox/provider/`), so later workstreams depend on the seam, not on *how* the privilege
+is obtained. Two implementations sit behind the seam:
+
+- **Root reflection** — best-effort use of `@hide` framework APIs from a rooted /
+  platform-signed process (`ReflectiveGestureInjector`, `RootSystemSettingsProvider`,
+  `RootDisplayProvider`). These DETECT and REPORT when a privileged operation silently
+  fails (e.g. `VIRTUAL_DISPLAY_FLAG_TRUSTED` stripped, `injectInputEvent` dropped) via
+  capability flags rather than throwing.
+- **LSPosed module** — hooks in `system_server` that relax the trusted-display,
+  input-injection, per-display IME / system-decor and launch-on-display checks at the
+  source (`autox/provider/lsposed/AutoXXposedModule`). It reads the app's commands over
+  `XSharedPreferences` using the pure `IpcCommand` schema, picks targets from the per-SDK
+  `HookTargetTable`, and **fails closed** — every hook body is try/caught so nothing ever
+  throws out of `system_server`.
+
+### Provider interfaces (the contract later workstreams depend on)
+
+| Interface | Purpose | Depended on by |
+|---|---|---|
+| `InputProvider` | inject gestures to a display + `isInjectionHonored()` | WS3 |
+| `DisplayProvider` | create/resize/release virtual display + `isTrustedDisplayHonored()` | projection |
+| `SystemSettingsProvider` | `putGlobalInt`/`getGlobalInt`/`putSecureInt`/`getSecureInt` → `SettingsResult` | WS3/WS5 |
+| `AudioRouter` | `setUidAffinity`/`clearUidAffinity` | WS6 |
+
+### Pure (100%-tested) vs excluded-glue split
+
+| Class | Layer | Coverage |
+|---|---|---|
+| `SettingsResult`, `ProviderCapabilities` | Pure value/result objects | 100% required |
+| `ProviderSelectionPolicy` | Pure decision: caps → `LSPOSED`/`ROOT_REFLECTION`/`DEGRADED` + reason | 100% required |
+| `IpcCommand` | Pure app↔module wire schema (encode/decode over XSharedPreferences) | 100% required |
+| `HookDescriptor`, `HookTargetSet`, `HookTargetTable` | Pure per-SDK (31–34) hook-target table + resolver (incl. unknown-SDK branch) | 100% required |
+| `CapabilityDecider`, `TrustedFlagPolicy` | Pure capability-from-probe + trusted-flag math | 100% required |
+| `InputProvider`/`DisplayProvider`/`SystemSettingsProvider`/`AudioRouter` | Pure interfaces (no executable lines) | n/a |
+| `RootSystemSettingsProvider`, `RootDisplayProvider` | Settings/DisplayManager framework plumbing | Excluded |
+| `ReflectiveGestureInjector` | now also implements `InputProvider` | Excluded |
+| `AutoXXposedModule`, `TrustedFlagBridge`, `InputInjectionBridge` | LSPosed/Xposed `system_server` reflection | Excluded |
+
+### Selection policy
+
+`ProviderSelectionPolicy.select(ProviderCapabilities)` is total and exhaustively tested:
+LSPosed-active → `LSPOSED`; else if a privileged path exists (root or platform signature)
+AND trusted-display AND input-injection are honored → `ROOT_REFLECTION`; otherwise
+`DEGRADED` (with a specific reason: no path / trusted not honored / injection dropped).
+
+### Xposed API dependency
+
+`de.robv.android.xposed:api:82` is added **compileOnly** (repo `https://api.xposed.info/`);
+LSPosed provides those classes at runtime in `system_server`, so they are never bundled.
+If the artifact can't be resolved offline, `-PuseXposedStub=true` swaps in a thin local
+compileOnly stub source set (`app/src/xposedStub/java`) so the glue still compiles; the
+resulting APK is identical. The module is declared via manifest `xposedmodule` /
+`xposedminversion` / `xposeddescription` / `xposedscope` (scope `android` = system_server)
+meta-data plus `assets/xposed_init` naming `AutoXXposedModule`.
+
+> Real LSPosed/device acceptance (trusted display + input injection actually working on a
+> head unit) is pending human validation; WS4 is verified here by unit tests + compilation.
+
 ## Key files
 
 | Path | Role |
 |---|---|
 | `app/src/main/java/com/xiddoc/androidautox/autox/` | All AutoX classes |
+| `app/src/main/java/com/xiddoc/androidautox/autox/provider/` | WS4 provider seam (pure interfaces + policy/schema/table) |
+| `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/` | WS4 LSPosed module glue (excluded) |
+| `app/src/xposedStub/java/` | Local compileOnly Xposed API stub (offline `-PuseXposedStub=true` fallback) |
+| `app/src/main/assets/xposed_init` | LSPosed module entry-class pointer |
 | `app/src/main/res/xml/automotive_app_desc.xml` | Car app descriptor (template capability) |
-| `app/src/main/AndroidManifest.xml` | Service / permission declarations |
+| `app/src/main/AndroidManifest.xml` | Service / permission / LSPosed module declarations |
 | `app/build.gradle` (`jacocoExclusions`) | Coverage gate exclusion list |

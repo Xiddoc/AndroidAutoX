@@ -12,9 +12,23 @@ allprojects {
         maven {
             url 'https://jitpack.io'
         }
+        // Xposed/LSPosed API (de.robv.android.xposed:api) — used compileOnly only; the
+        // classes are provided at runtime by the LSPosed framework, never bundled.
+        maven {
+            url 'https://api.xposed.info/'
+        }
         mavenCentral()
     }
 }
+
+// WS4: the Xposed/LSPosed API jar (de.robv.android.xposed:api:82) is compileOnly — the
+// LSPosed framework provides these classes at runtime in system_server, so they must
+// NOT be bundled into the APK. If the artifact cannot be resolved in an offline sandbox,
+// pass -PuseXposedStub=true to compile the module glue against the thin local stub
+// source set (src/xposedStub/java) instead. The stub is compileOnly too, so the built
+// APK is byte-for-byte identical either way.
+def useXposedStub = project.hasProperty('useXposedStub') &&
+        project.property('useXposedStub').toString().toBoolean()
 
 android {
 
@@ -106,6 +120,13 @@ android {
         buildConfig true
         // AIDL is also off by default in AGP 8; the root SQLite bridge (IPhixitRoot) needs it.
         aidl true
+    }
+
+    // WS4: when the real Xposed API artifact can't be resolved, -PuseXposedStub=true
+    // folds the local compileOnly stub (src/xposedStub/java) into the main source set so
+    // the LSPosed glue still compiles. Nothing from the stub is bundled (compileOnly).
+    if (useXposedStub) {
+        sourceSets.main.java.srcDirs += 'src/xposedStub/java'
     }
 
     testOptions {
@@ -203,6 +224,13 @@ dependencies {
     // NavigationTemplate — used by the AutoX virtual-display projection layer.
     implementation 'androidx.car.app:app:1.4.0'
 
+    // WS4 LSPosed module API. compileOnly: the de.robv.android.xposed.* classes are
+    // supplied at runtime by the LSPosed framework inside system_server and must never
+    // be packaged into the APK. When -PuseXposedStub=true the real artifact is swapped
+    // for the local stub source set (src/xposedStub/java), also compile-only.
+    if (!useXposedStub) {
+        compileOnly 'de.robv.android.xposed:api:82'
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -275,6 +303,16 @@ def jacocoExclusions = [
         '**/AppLauncher*.*',         // ActivityOptions.setLaunchDisplayId wrapper
         '**/GestureInjector.*',      // injection interface (no executable lines, excluded for safety)
         '**/ReflectiveGestureInjector*.*', // reflection-based InputManager injection seam
+
+        // --- WS4 privileged-provider seam ---
+        // Pure-logic provider classes are NOT excluded and must stay at 100%:
+        // SettingsResult, ProviderCapabilities, ProviderSelectionPolicy, IpcCommand,
+        // HookDescriptor, HookTargetSet, HookTargetTable, CapabilityDecider,
+        // TrustedFlagPolicy, and the provider interfaces' contracts (exercised via stubs).
+        // Excluded below: ONLY irreducible Android/Xposed glue.
+        '**/provider/RootSystemSettingsProvider*.*', // Settings.Global/Secure plumbing (framework)
+        '**/provider/RootDisplayProvider*.*',        // DisplayManager.createVirtualDisplay + trusted-flag probe (framework)
+        '**/provider/lsposed/**',                    // LSPosed/Xposed hook glue (system_server reflection, no off-device test)
 ]
 
 // Debug-variant javac output (and kotlin, if any is ever added) form the class

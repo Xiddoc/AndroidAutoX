@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- WS4: LSPosed module scope. "android" is system_server, where the AutoX
+         privileged hooks (trusted display, input injection, per-display IME /
+         system decors, launch-on-display) are installed. -->
+    <string-array name="xposed_scope" translatable="false">
+        <item>android</item>
+    </string-array>
+</resources>

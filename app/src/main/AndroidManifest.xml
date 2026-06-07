@@ -35,6 +35,26 @@
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc"/>
+
+        <!-- WS4 LSPosed module declaration. The hook entry class is named in
+             assets/xposed_init. xposedscope targets system_server (package "android")
+             so the privileged hooks (trusted display, input injection, per-display IME /
+             system decors, launch-on-display) run there. The classes are provided by
+             LSPosed at runtime (compileOnly), never bundled. -->
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true"/>
+        <meta-data
+            android:name="xposeddescription"
+            android:value="@string/xposed_module_description"/>
+        <!-- LSPosed/Xposed framework API level this module requires. -->
+        <meta-data
+            android:name="xposedminversion"
+            android:value="93"/>
+        <!-- Process scope this module hooks. -->
+        <meta-data
+            android:name="xposedscope"
+            android:resource="@array/xposed_scope"/>
         <activity
             android:name=".SplashActivity"
             android:exported="true">

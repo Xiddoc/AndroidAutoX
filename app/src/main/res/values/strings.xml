@@ -215,4 +215,7 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="autox_tutorial">AutoX projects any app onto the car head-unit display via an isolated virtual display. Enable it here, then pick a target app to project. Requires Android Auto Developer Mode to be ON (see docs/autox-dev-testing.md).</string>
     <string name="autox_target_set">Target: %1$s</string>
     <string name="autox_no_target">No target app selected</string>
+
+    <!-- WS4: LSPosed module description shown in the LSPosed manager. -->
+    <string name="xposed_module_description">Honors trusted virtual displays, cross-display input injection, per-display IME/system-decors and launch-on-display for AndroidAutoX projection.</string>
 </resources>
