@@ -52,6 +52,8 @@ public final class TweakRegistry {
                 return wifiBitrateSpecs(sp.getFloat("wifi_bitrate_value", 0));
             case "aa_patched_apps":
                 return patchedAppsSpecs(ctx);
+            case "uxprototype_tweak":
+                return uxPrototypeSpecs(sp.getString("uxprototype_url", ""));
             default:
                 return PhixitTweaks.specs(key);
         }
@@ -95,6 +97,17 @@ public final class TweakRegistry {
         l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless", 12000000 * value));
         l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless_hevc", 2000000 * value));
         return l;
+    }
+
+    /**
+     * Flags for the "custom shortcut" (UxPrototype) tweak. The URL value is dynamic:
+     * it is the URL the user typed when they applied the tweak, persisted to the
+     * {@code uxprototype_url} pref so the headless re-apply job can reconstruct it.
+     * Delegates to {@link PhixitTweaks#specs(String, String)} so the static flag table
+     * (enabled bool + url string) stays in one place.
+     */
+    public static List<FlagSpec> uxPrototypeSpecs(String url) {
+        return PhixitTweaks.specs("uxprototype_tweak", url);
     }
 
     /**

@@ -13,8 +13,24 @@ public final class PhixitTweaks {
 
     private PhixitTweaks() {}
 
+    /**
+     * Placeholder value used for {@code UxPrototype__url} when no real URL is supplied
+     * (the no-arg {@link #specs(String)} path, used by revert which keys on pkg+name and
+     * ignores the value). The real user-entered URL is threaded in via the dynamic-value
+     * path ({@link TweakRegistry#uxPrototypeSpecs(String)} / {@link #specs(String, String)}).
+     */
+    public static final String UX_URL_PLACEHOLDER = "";
+
     /** Returns the flag specs for a tweak key, or null if not a registry tweak. */
     public static List<FlagSpec> specs(String key) {
+        return specs(key, UX_URL_PLACEHOLDER);
+    }
+
+    /**
+     * As {@link #specs(String)} but threads {@code uxUrl} into the {@code uxprototype_tweak}
+     * {@code UxPrototype__url} string flag. Other tweaks ignore {@code uxUrl}.
+     */
+    public static List<FlagSpec> specs(String key, String uxUrl) {
         List<FlagSpec> l = new ArrayList<FlagSpec>();
         switch (key) {
             case "aa_message_autoread":
@@ -226,7 +242,7 @@ public final class PhixitTweaks {
                 break;
             case "uxprototype_tweak":
                 l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "UxPrototype__enabled", true));
-                l.add(FlagSpec.str(FlagSpec.PKG_GEARHEAD, "UxPrototype__url", "+ URL +"));
+                l.add(FlagSpec.str(FlagSpec.PKG_GEARHEAD, "UxPrototype__url", uxUrl));
                 break;
             case "aa_inertial_scroll":
                 l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "SystemUi__inertial_scrolling_enabled", true));
