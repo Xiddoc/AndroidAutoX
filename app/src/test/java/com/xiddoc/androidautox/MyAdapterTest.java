@@ -2,6 +2,7 @@ package com.xiddoc.androidautox;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -49,6 +50,8 @@ public class MyAdapterTest {
         context = RuntimeEnvironment.getApplication();
         // Start from a clean prefs slate.
         context.getSharedPreferences("appsListPref", 0).edit().clear().commit();
+        // Reset the one-time UI-hint flag so each test starts with the hint un-shown.
+        context.getSharedPreferences("uiHintsPref", 0).edit().clear().commit();
 
         items = new ArrayList<>();
         // Alpha is NEEDS_BRIDGE (default) and unchecked; Beta is NATIVE_AUTO and checked.
@@ -149,13 +152,17 @@ public class MyAdapterTest {
 
         assertEquals(context.getString(R.string.badge_needs_bridge), badge0.getText().toString());
         assertEquals(ContextCompat.getColor(context, R.color.status_red), colorOf(badge0));
+        assertEquals(ContextCompat.getColor(context, R.color.text_primary),
+                badge0.getCurrentTextColor());
 
         assertEquals(context.getString(R.string.badge_native_auto), badge1.getText().toString());
         assertEquals(ContextCompat.getColor(context, R.color.status_green), colorOf(badge1));
+        assertEquals(ContextCompat.getColor(context, R.color.text_primary),
+                badge1.getCurrentTextColor());
     }
 
     @Test
-    public void onBindViewHolder_mirrorShim_bindsYellowMirrorBadge() {
+    public void onBindViewHolder_mirrorShim_bindsYellowMirrorBadgeWithDarkText() {
         ArrayList<AppInfo> mirrorItems = new ArrayList<>();
         mirrorItems.add(new AppInfo("Mir", "ru.inceptive.screentwoauto", false, Category.MIRROR_SHIM));
         MyAdapter mirrorAdapter = new MyAdapter(mirrorItems, new RecyclerView(context));
@@ -165,6 +172,13 @@ public class MyAdapterTest {
                 .itemView.findViewById(R.id.app_badge);
         assertEquals(context.getString(R.string.badge_mirror_shim), badge.getText().toString());
         assertEquals(ContextCompat.getColor(context, R.color.status_yellow), colorOf(badge));
+        // The MIRROR badge uses a dark text color for contrast on its light amber
+        // background — distinct from the near-white text the other badges use.
+        assertEquals(ContextCompat.getColor(context, R.color.brand_navy_dark),
+                badge.getCurrentTextColor());
+        assertNotEquals("MIRROR badge text must differ from the other badges",
+                ContextCompat.getColor(context, R.color.text_primary),
+                badge.getCurrentTextColor());
     }
 
     @Test
@@ -181,16 +195,36 @@ public class MyAdapterTest {
         assertEquals(R.color.status_red, MyAdapter.badgeColorRes(Category.NEEDS_BRIDGE));
     }
 
+    @Test
+    public void badgeTextColorRes_mirrorIsDark_othersArePrimary() {
+        // MIRROR uses a dark text color (legible on amber); the rest stay near-white.
+        assertEquals(R.color.brand_navy_dark, MyAdapter.badgeTextColorRes(Category.MIRROR_SHIM));
+        assertEquals(R.color.text_primary, MyAdapter.badgeTextColorRes(Category.NATIVE_AUTO));
+        assertEquals(R.color.text_primary, MyAdapter.badgeTextColorRes(Category.NEEDS_BRIDGE));
+    }
+
     // -----------------------------------------------------------------------
     // NEEDS_BRIDGE hint toast branch
     // -----------------------------------------------------------------------
 
     @Test
-    public void rowClick_onNeedsBridgeItem_showsHintToast() {
-        // Alpha (row 0) is NEEDS_BRIDGE and unchecked -> toggling ON fires the hint.
-        holderAt(0).itemView.performClick();
+    public void rowClick_onNeedsBridgeItem_showsHintToast_firstTimeOnly() {
+        // FIRST NEEDS_BRIDGE toggle-on (flag unset -> show): the hint fires and is the
+        // latest toast (it is posted AFTER the "added" toast).
+        holderAt(0).itemView.performClick(); // ON
+        assertEquals("first NEEDS_BRIDGE toggle-on shows the one-time hint",
+                context.getString(R.string.badge_needs_bridge_hint),
+                org.robolectric.shadows.ShadowToast.getTextOfLatestToast());
+        // The flag must now be persisted so the hint never shows again.
+        assertTrue(context.getSharedPreferences("uiHintsPref", 0)
+                .getBoolean("needs_bridge_hint_shown", false));
 
-        assertEquals(context.getString(R.string.badge_needs_bridge_hint),
+        // Toggle OFF (remove), then SECOND toggle-on (flag set -> skip): the hint must
+        // NOT fire again; the latest toast is the plain "added" toast, not the hint.
+        holderAt(0).itemView.performClick(); // OFF
+        holderAt(0).itemView.performClick(); // ON again
+        assertEquals("second NEEDS_BRIDGE toggle-on must NOT re-show the hint",
+                context.getString(R.string.added_app_action) + "com.example.alpha",
                 org.robolectric.shadows.ShadowToast.getTextOfLatestToast());
     }
 

@@ -67,6 +67,7 @@ public class MyAdapter extends RecyclerView.Adapter {
         Category category = appInfo.getCategory();
         badge.setText(badge.getContext().getString(badgeStringRes(category)));
         badge.setBackgroundColor(ContextCompat.getColor(badge.getContext(), badgeColorRes(category)));
+        badge.setTextColor(ContextCompat.getColor(badge.getContext(), badgeTextColorRes(category)));
 
         ((MyViewHolder) viewHolder).mCheckboxApp.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -102,6 +103,18 @@ public class MyAdapter extends RecyclerView.Adapter {
         }
     }
 
+    /**
+     * Badge text color resource for a compatibility category. The MIRROR badge sits
+     * on a light amber background, so it uses a dark text color for legible contrast;
+     * the others keep near-white text on their darker green/red backgrounds.
+     */
+    static int badgeTextColorRes(Category category) {
+        if (category == Category.MIRROR_SHIM) {
+            return R.color.brand_navy_dark;
+        }
+        return R.color.text_primary;
+    }
+
     private void onClickSaveAppsWhiteList (View v, int position) {
         SharedPreferences appsListPref = v.getContext().getSharedPreferences("appsListPref", 0);
         SharedPreferences.Editor editor = appsListPref.edit();
@@ -116,7 +129,14 @@ public class MyAdapter extends RecyclerView.Adapter {
             mAppInfo.get(position).setIsChecked(true);
             Toast.makeText(v.getContext(), v.getContext().getString(R.string.added_app_action) + mAppInfo.get(position).getPackageName(), Toast.LENGTH_SHORT).show();
             if (mAppInfo.get(position).getCategory() == Category.NEEDS_BRIDGE) {
-                Toast.makeText(v.getContext(), v.getContext().getString(R.string.badge_needs_bridge_hint), Toast.LENGTH_SHORT).show();
+                // Show the "won't render natively" hint at most once per install. The
+                // flag lives in a SEPARATE prefs file (not appsListPref, whose keys ARE
+                // the whitelisted package names) so it cannot corrupt the whitelist.
+                SharedPreferences uiHints = v.getContext().getSharedPreferences("uiHintsPref", 0);
+                if (!uiHints.getBoolean("needs_bridge_hint_shown", false)) {
+                    Toast.makeText(v.getContext(), v.getContext().getString(R.string.badge_needs_bridge_hint), Toast.LENGTH_SHORT).show();
+                    uiHints.edit().putBoolean("needs_bridge_hint_shown", true).apply();
+                }
             }
         }
     }
