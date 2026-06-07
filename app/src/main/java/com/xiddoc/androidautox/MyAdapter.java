@@ -2,6 +2,7 @@ package com.xiddoc.androidautox;
 
 import android.content.SharedPreferences;
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -10,6 +11,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.rm.rmswitch.RMSwitch;
+import com.xiddoc.androidautox.AppCompatibilityClassifier.Category;
 
 import java.util.ArrayList;
 
@@ -20,12 +22,14 @@ public class MyAdapter extends RecyclerView.Adapter {
     private class MyViewHolder extends RecyclerView.ViewHolder {
         public TextView mName;
         public TextView mPackageName;
+        public TextView mBadge;
         public RMSwitch mCheckboxApp;
 
         public MyViewHolder(View pItem) {
             super(pItem);
             mName = pItem.findViewById(R.id.app_name);
             mPackageName = pItem.findViewById(R.id.app_package_name);
+            mBadge = pItem.findViewById(R.id.app_badge);
             mCheckboxApp = pItem.findViewById(R.id.checkbox_app);
         }
     }
@@ -59,6 +63,11 @@ public class MyAdapter extends RecyclerView.Adapter {
         ((MyViewHolder) viewHolder).mPackageName.setText(appInfo.getPackageName());
         ((MyViewHolder) viewHolder).mCheckboxApp.setChecked(appInfo.getIsChecked());
 
+        TextView badge = ((MyViewHolder) viewHolder).mBadge;
+        Category category = appInfo.getCategory();
+        badge.setText(badge.getContext().getString(badgeStringRes(category)));
+        badge.setBackgroundColor(ContextCompat.getColor(badge.getContext(), badgeColorRes(category)));
+
         ((MyViewHolder) viewHolder).mCheckboxApp.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -67,6 +76,30 @@ public class MyAdapter extends RecyclerView.Adapter {
                 notifyItemChanged(viewHolder.getAdapterPosition());
             }
         });
+    }
+
+    /** Badge label string resource for a compatibility category. */
+    static int badgeStringRes(Category category) {
+        switch (category) {
+            case NATIVE_AUTO:
+                return R.string.badge_native_auto;
+            case MIRROR_SHIM:
+                return R.string.badge_mirror_shim;
+            default:
+                return R.string.badge_needs_bridge;
+        }
+    }
+
+    /** Badge background color resource for a compatibility category. */
+    static int badgeColorRes(Category category) {
+        switch (category) {
+            case NATIVE_AUTO:
+                return R.color.status_green;
+            case MIRROR_SHIM:
+                return R.color.status_yellow;
+            default:
+                return R.color.status_red;
+        }
     }
 
     private void onClickSaveAppsWhiteList (View v, int position) {
@@ -82,6 +115,9 @@ public class MyAdapter extends RecyclerView.Adapter {
             editor.commit();
             mAppInfo.get(position).setIsChecked(true);
             Toast.makeText(v.getContext(), v.getContext().getString(R.string.added_app_action) + mAppInfo.get(position).getPackageName(), Toast.LENGTH_SHORT).show();
+            if (mAppInfo.get(position).getCategory() == Category.NEEDS_BRIDGE) {
+                Toast.makeText(v.getContext(), v.getContext().getString(R.string.badge_needs_bridge_hint), Toast.LENGTH_SHORT).show();
+            }
         }
     }
 

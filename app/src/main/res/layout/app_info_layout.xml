@@ -41,6 +41,21 @@
 
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/app_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:layout_marginEnd="6dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:fontFamily="@font/raleway_semibold"
+            android:text="NATIVE"
+            android:textColor="@color/text_primary"
+            android:textSize="11sp" />
+
         <com.rm.rmswitch.RMSwitch
             android:layout_weight="3"
             android:id="@+id/checkbox_app"

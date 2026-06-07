@@ -98,6 +98,10 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="rebooting_action">Rebooting…</string>
     <string name="added_app_action">"Added: "</string>
     <string name="removed_app_action">Removed\u0020</string>
+    <string name="badge_native_auto">NATIVE</string>
+    <string name="badge_mirror_shim">MIRROR</string>
+    <string name="badge_needs_bridge">NEEDS BRIDGE</string>
+    <string name="badge_needs_bridge_hint">Won\'t render natively on Android Auto yet — whitelisted only.</string>
     <string name="root_access_warning">Root access denied. Please allow root access.</string>
     <string name="requesting_root">Requesting root access…</string>
     <string name="request_root_again">Request again</string>
