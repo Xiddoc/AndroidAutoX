@@ -270,6 +270,82 @@ meta-data plus `assets/xposed_init` naming `AutoXXposedModule`.
 > Real LSPosed/device acceptance (trusted display + input injection actually working on a
 > head unit) is pending human validation; WS4 is verified here by unit tests + compilation.
 
+## WS6 — Audio routing (per-UID device affinity)
+
+When a guest app is projected onto the car head-unit via a `VirtualDisplay`, its audio
+output must also be directed to the car's audio channel (BT A2DP or USB bus), not to the
+phone speaker. WS6 implements this through a pure-policy / thin-applier / root-reflection-impl
+stack, consistent with the testable-logic vs excluded-glue split established in WS4.
+
+### Routing model
+
+Android exposes per-UID audio device affinity via `@hide` APIs on `AudioManager`:
+- `setPreferredDeviceForUid(int uid, AudioDeviceInfo device)` (API 31+)
+- `removePreferredDeviceForUid(int uid)` (API 31+)
+
+These are signature-guarded (`MODIFY_AUDIO_ROUTING`). From a root / platform-signed
+process the calls succeed and pin all audio produced by `uid` to the nominated device,
+leaving every other app's audio (including the phone call stack and the user's music
+player) completely unaffected.
+
+### Class structure
+
+```
+AudioRoutePolicy  (pure, 100%-tested)
+  decide(uid, CarAudioDevice{BT_A2DP|USB|NONE}, deviceAddress)
+  → RouteDecision {
+        applyStep:  SetAffinity(uid, addr)  |  NoRoute(reason)
+        revertStep: ClearAffinity(uid)      |  NoRoute(reason)
+    }
+
+AudioRouteApplier  (pure, 100%-tested — uses a fake AudioRouter in tests)
+  apply(RouteDecision, AudioRouter)   → delegates SetAffinity → setUidAffinity()
+  revert(RouteDecision, AudioRouter)  → delegates ClearAffinity → clearUidAffinity()
+
+AudioRouter  (interface, provider seam — WS4)
+  setUidAffinity(uid, deviceAddress)  → boolean
+  clearUidAffinity(uid)               → boolean
+
+RootAudioRouter  (excluded glue — AudioManager reflection, needs device)
+  implements AudioRouter via setPreferredDeviceForUid / removePreferredDeviceForUid
+  fails closed (returns false, never throws) on any reflection / permission error
+```
+
+### Decision rules (AudioRoutePolicy)
+
+1. **Invalid UID** (`uid <= 0`) → `NoRoute` (both apply and revert steps).
+2. **NONE device** → `NoRoute` (no car audio sink available).
+3. **Null / blank address** → `NoRoute` (device address is required to locate the sink).
+4. **Valid UID + BT_A2DP or USB + non-blank address** → `SetAffinity` apply / `ClearAffinity` revert.
+
+### Revert-on-disable guarantee
+
+`AudioRouteApplier.revert(decision, router)` is called when AutoX is disabled or the
+projection session ends. The `ClearAffinity` revert step releases the binding so the
+guest app's audio returns to default routing immediately — no device restart required.
+If routing was never applied (NoRoute decision), `revert` returns `false` without
+touching the AudioManager, so the phone's audio state is never disturbed.
+
+### Phone playback unaffected
+
+The per-UID affinity is scoped exclusively to the projected app's UID. All other UIDs
+(phone call audio, media player, in-call audio) retain their default routing. The
+`AudioRouter` interface provides no mechanism to route audio for any UID other than the
+one supplied in the `RouteDecision`, so unintended side-effects are architecturally
+impossible at the applier layer.
+
+### Testable-logic vs excluded-glue split (WS6)
+
+| Class | Layer | Coverage |
+|---|---|---|
+| `AudioRoutePolicy` | Pure logic (no Android imports) — enum + decision + value objects | 100% required |
+| `AudioRouteApplier` | Pure logic — dispatches RouteStep to AudioRouter | 100% required |
+| `AudioRouter` | Interface — no executable lines | n/a |
+| `RootAudioRouter` | AudioManager + hidden-API reflection (framework, needs device) | Excluded |
+
+> Device acceptance (projected app audio plays on car channel; phone unaffected; binding
+> reverts on disable) is pending human validation on a real head unit with root access.
+
 ## Key files
 
 | Path | Role |
