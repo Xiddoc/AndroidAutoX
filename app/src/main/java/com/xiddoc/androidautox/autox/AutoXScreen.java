@@ -358,10 +358,13 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         if (displayController != null) {
             displayController.release();
             displayController = null;
-            // Stop the foreground service: its lifecycle is tied to an active display.
-            getCarContext().stopService(
-                    new Intent(getCarContext(), AutoXForegroundService.class));
         }
+        // Stop the foreground service unconditionally (stopService is idempotent — a no-op if
+        // the service is not running). Doing this even when displayController was already null
+        // guarantees the wake-lock-holding service can never outlive the surface, e.g. if the
+        // display failed to create but the service had already started.
+        getCarContext().stopService(
+                new Intent(getCarContext(), AutoXForegroundService.class));
         carSpec = null;
         currentSurface = null;
     }

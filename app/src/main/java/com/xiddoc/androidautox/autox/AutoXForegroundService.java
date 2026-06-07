@@ -25,8 +25,10 @@ import com.xiddoc.androidautox.R;
  *       in {@link #onDestroy()}.</li>
  *   <li>Posts a foreground notification (required for {@code foregroundServiceType=
  *       specialUse} on Android 12+) so the system does not kill the service.</li>
- *   <li>Returns {@link #START_STICKY} from {@link #onStartCommand} so Android restarts
- *       the service automatically if it is killed by the OOM killer.</li>
+ *   <li>Returns {@link #START_NOT_STICKY} from {@link #onStartCommand}: this service is
+ *       tied to an active projection surface, so a system-initiated restart with a
+ *       {@code null} intent (no surface) must NOT silently re-acquire the 4-hour wake lock.
+ *       On such a null-intent restart the service stops itself immediately.</li>
  * </ul>
  *
  * <h2>What this service does NOT do</h2>
@@ -90,10 +92,17 @@ public final class AutoXForegroundService extends Service {
 
     @Override
     public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
-        // START_STICKY: if the system kills the service, it will be restarted
-        // automatically with a null intent so the wake lock and foreground state
-        // are re-established.
-        return START_STICKY;
+        // The service's lifetime is tied to the projection surface (started from
+        // AutoXScreen.createDisplay, stopped from releaseDisplay). A null intent means the
+        // system restarted us after a kill with no surface to project — re-acquiring the
+        // 4-hour wake lock here would leak it. Stop immediately in that case.
+        if (intent == null) {
+            Log.d(TAG, "AutoXForegroundService: null-intent restart (no surface) — self-stopping");
+            stopSelf(startId);
+            return START_NOT_STICKY;
+        }
+        // START_NOT_STICKY: do not auto-recreate this surface-tied service after a kill.
+        return START_NOT_STICKY;
     }
 
     /**

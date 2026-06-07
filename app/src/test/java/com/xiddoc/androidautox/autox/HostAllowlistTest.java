@@ -464,6 +464,38 @@ public class HostAllowlistTest {
     }
 
     // ------------------------------------------------------------------
+    // canonicalDigestForCarAppSdk
+    // ------------------------------------------------------------------
+
+    @Test
+    public void canonical_fromColonUpper_isColonLower() {
+        String out = HostAllowlist.canonicalDigestForCarAppSdk(HostAllowlist.GEARHEAD_SHA256);
+        org.junit.Assert.assertNotNull(out);
+        // 95 chars: 64 hex + 31 colons.
+        assertEquals(95, out.length());
+        assertEquals(out.toLowerCase(java.util.Locale.US), out); // already lowercase
+        assertTrue(out.contains(":"));
+        // Round-trips back to the same normalized digest.
+        assertEquals(HostAllowlist.normalizeDigest(HostAllowlist.GEARHEAD_SHA256),
+                HostAllowlist.normalizeDigest(out));
+    }
+
+    @Test
+    public void canonical_fromPlainHex_addsColonsAndLowercases() {
+        String plain = "F0FD6C5B410F25CB25C3B53346C8972FAE30F8EE7411DF910480AD6B2D60DB83";
+        String out = HostAllowlist.canonicalDigestForCarAppSdk(plain);
+        assertEquals("f0:fd:6c:5b:41:0f:25:cb:25:c3:b5:33:46:c8:97:2f:"
+                + "ae:30:f8:ee:74:11:df:91:04:80:ad:6b:2d:60:db:83", out);
+    }
+
+    @Test
+    public void canonical_invalidDigest_returnsNull() {
+        assertNull(HostAllowlist.canonicalDigestForCarAppSdk(null));
+        assertNull(HostAllowlist.canonicalDigestForCarAppSdk("nothex"));
+        assertNull(HostAllowlist.canonicalDigestForCarAppSdk("ABCD")); // wrong length
+    }
+
+    // ------------------------------------------------------------------
     // Helper
     // ------------------------------------------------------------------
 

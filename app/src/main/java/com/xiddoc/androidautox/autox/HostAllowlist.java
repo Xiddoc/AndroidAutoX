@@ -90,8 +90,10 @@ public final class HostAllowlist {
         public final String packageName;
 
         /**
-         * Immutable list of accepted SHA-256 digests for this package (colon-separated
-         * uppercase hex, 95 characters each, as produced by {@code keytool -printcert}).
+         * Immutable list of accepted SHA-256 digests for this package. Each digest may be
+         * either plain 64-character hex or colon-separated hex (the 95-character
+         * {@code keytool -printcert} form), in any case; {@link #normalizeDigest(String)}
+         * canonicalizes both before comparison.
          */
         public final List<String> sha256Digests;
 
@@ -242,6 +244,47 @@ public final class HostAllowlist {
             }
         }
         return AllowResult.REJECTED_UNKNOWN_PACKAGE;
+    }
+
+    // ------------------------------------------------------------------
+    // Car App SDK canonical digest form
+    // ------------------------------------------------------------------
+
+    /**
+     * Converts a SHA-256 digest into the canonical form expected by the Jetpack Car App
+     * SDK's {@code HostValidator.Builder#addAllowedHost(String, String)}: <b>colon-separated
+     * lowercase hex</b> (32 bytes → 64 hex chars → 95 characters with 31 colons), e.g.
+     * {@code "f0:fd:6c:..."}.
+     *
+     * <p>Our stored digests are colon-separated <em>uppercase</em> hex (as produced by
+     * {@code keytool -printcert}). Passing that verbatim to {@code addAllowedHost} can fail to
+     * match because the Car App SDK compares the connecting host's computed fingerprint, which
+     * is lowercase. This method first {@link #normalizeDigest(String) normalizes} the input
+     * (strip colons, validate 64 hex chars), then re-inserts colons and lowercases.
+     *
+     * <p>// TODO(device-verify): confirm the exact string form {@code addAllowedHost} matches
+     * against on a real device / Car App SDK 1.4.0 (colon-separated lowercase vs plain
+     * lowercase). The normalization + matching live in pure code so the format can be adjusted
+     * here once verified, without touching glue.
+     *
+     * @param digest a SHA-256 digest in plain or colon-separated hex, any case
+     * @return the colon-separated lowercase canonical form, or {@code null} if {@code digest}
+     *         is not a valid 32-byte hex string
+     */
+    public static String canonicalDigestForCarAppSdk(String digest) {
+        String normalized = normalizeDigest(digest); // 64-char uppercase plain hex, or null
+        if (normalized == null) {
+            return null;
+        }
+        String lower = normalized.toLowerCase(Locale.US);
+        StringBuilder sb = new StringBuilder(95);
+        for (int i = 0; i < lower.length(); i += 2) {
+            if (i > 0) {
+                sb.append(':');
+            }
+            sb.append(lower, i, i + 2);
+        }
+        return sb.toString();
     }
 
     // ------------------------------------------------------------------

@@ -56,7 +56,16 @@ public final class AutoXCarAppService extends CarAppService {
                 // addAllowedHost(packageName, sha256Digest): registers one package+digest
                 // pair.  Called once per digest to support key-rotation entries that list
                 // multiple fingerprints for the same host package.
-                builder.addAllowedHost(entry.packageName, digest);
+                //
+                // The stored digest is colon-separated UPPERCASE hex (keytool form); the Car
+                // App SDK matches against the connecting host's computed (lowercase)
+                // fingerprint, so we register the pure-computed canonical form instead of the
+                // raw stored value. A digest that fails to canonicalize is skipped (it can
+                // never legitimately match) rather than registered verbatim.
+                String canonical = HostAllowlist.canonicalDigestForCarAppSdk(digest);
+                if (canonical != null) {
+                    builder.addAllowedHost(entry.packageName, canonical);
+                }
             }
         }
         return builder.build();
