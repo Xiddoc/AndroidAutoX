@@ -26,11 +26,12 @@ public final class TweakRegistry {
             "coolwalk_daynight_tweak", "aa_battery_outline", "aa_activate_coolwalk",
             "aa_deactivate_coolwalk", "aa_material_you", "aa_activate_assistant_tips",
             "aa_activate_declinesms", "aa_new_seekbar", "bluetooth_pairing_off",
-            "kill_telemetry", "uxprototype_tweak", "aa_inertial_scroll", "aa_vertical_bar",
+            "kill_telemetry", "aa_inertial_scroll", "aa_vertical_bar",
             // special
             "battery_saver_warning",
             // dynamic (value from saved pref)
             "aa_hun_ms", "aa_media_hun", "aa_bitrate_usb", "aa_bitrate_wireless",
+            "uxprototype_tweak",
             // dynamic (whitelist from appsListPref); the re-apply job re-asserts the
             // flags only -- it never reinstalls apps (that stays in patchforapps()).
             "aa_patched_apps",
@@ -52,6 +53,8 @@ public final class TweakRegistry {
                 return wifiBitrateSpecs(sp.getFloat("wifi_bitrate_value", 0));
             case "aa_patched_apps":
                 return patchedAppsSpecs(ctx);
+            case "uxprototype_tweak":
+                return uxPrototypeSpecs(sp.getString("uxprototype_url", ""));
             default:
                 return PhixitTweaks.specs(key);
         }
@@ -95,6 +98,17 @@ public final class TweakRegistry {
         l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless", 12000000 * value));
         l.add(FlagSpec.dbl(FlagSpec.PKG_CAR, "VideoEncoderParamsFeature__bitrate_720p_wireless_hevc", 2000000 * value));
         return l;
+    }
+
+    /**
+     * Flags for the "custom shortcut" (UxPrototype) tweak. The URL value is dynamic:
+     * it is the URL the user typed when they applied the tweak, persisted to the
+     * {@code uxprototype_url} pref so the headless re-apply job can reconstruct it.
+     * Delegates to {@link PhixitTweaks#specs(String, String)} so the static flag table
+     * (enabled bool + url string) stays in one place.
+     */
+    public static List<FlagSpec> uxPrototypeSpecs(String url) {
+        return PhixitTweaks.specs("uxprototype_tweak", url);
     }
 
     /**

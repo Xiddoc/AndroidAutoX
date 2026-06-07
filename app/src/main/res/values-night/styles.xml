@@ -1,5 +1,5 @@
 <resources>
-<style name="AppTheme" parent="Theme.AppCompat.DayNight.DarkActionBar">
+<style name="AppTheme" parent="Theme.MaterialComponents.DayNight.DarkActionBar.Bridge">
     <!-- Match the day theme: always-on dark navy brand theme. -->
     <item name="colorPrimary">@color/brand_navy</item>
     <item name="colorPrimaryDark">@color/brand_navy_dark</item>
@@ -10,5 +10,7 @@
     <item name="android:textColorSecondary">@color/text_muted</item>
     <item name="android:windowLightStatusBar">false</item>
     <item name="titleTextColor">@color/text_primary</item>
+    <item name="windowActionBar">false</item>
+    <item name="windowNoTitle">true</item>
 </style>
 </resources>

@@ -73,15 +73,52 @@ public class PhixitTweaksTest {
         assertEquals(PhixitSnapshot.TYPE_LONG, vbar.get(0).flag.type);
         assertEquals(40L, vbar.get(0).flag.longValue);
 
-        // string spec -> TYPE_STRING
+        // string spec -> TYPE_STRING. The no-arg path yields the placeholder (revert keys
+        // on pkg+name, so the value is irrelevant there); the dynamic path threads the URL.
         List<FlagSpec> ux = PhixitTweaks.specs("uxprototype_tweak");
         FlagSpec urlSpec = ux.get(1);
+        assertEquals("UxPrototype__url", urlSpec.name);
         assertEquals(PhixitSnapshot.TYPE_STRING, urlSpec.flag.type);
-        assertEquals("+ URL +", urlSpec.flag.stringValue);
+        assertEquals(PhixitTweaks.UX_URL_PLACEHOLDER, urlSpec.flag.stringValue);
 
         // bool false spec
         List<FlagSpec> batt = PhixitTweaks.specs("aa_battery_outline");
         assertEquals(PhixitSnapshot.TYPE_BOOL_FALSE, batt.get(0).flag.type);
+    }
+
+    @Test
+    public void uxPrototype_dynamicUrl_threadsUserUrlIntoFlag() {
+        // The dynamic overload puts the supplied URL into UxPrototype__url, while the
+        // enabled bool flag is unchanged.
+        List<FlagSpec> ux = PhixitTweaks.specs("uxprototype_tweak", "https://example.com/x");
+        assertEquals("UxPrototype__enabled", ux.get(0).name);
+        assertEquals(PhixitSnapshot.TYPE_BOOL_TRUE, ux.get(0).flag.type);
+        FlagSpec urlSpec = ux.get(1);
+        assertEquals("UxPrototype__url", urlSpec.name);
+        assertEquals(PhixitSnapshot.TYPE_STRING, urlSpec.flag.type);
+        assertEquals("https://example.com/x", urlSpec.flag.stringValue);
+    }
+
+    @Test
+    public void uxPrototype_nullUrl_normalizesToPlaceholder() {
+        // A null url must be normalized to the empty placeholder so it can never reach
+        // PhixitEngine's stringValue.getBytes(...) and NPE.
+        List<FlagSpec> ux = PhixitTweaks.specs("uxprototype_tweak", null);
+        FlagSpec urlSpec = ux.get(1);
+        assertEquals("UxPrototype__url", urlSpec.name);
+        assertEquals(PhixitSnapshot.TYPE_STRING, urlSpec.flag.type);
+        assertEquals(PhixitTweaks.UX_URL_PLACEHOLDER, urlSpec.flag.stringValue);
+        assertEquals("", urlSpec.flag.stringValue);
+    }
+
+    @Test
+    public void specsTwoArg_ignoresUrlForNonUxTweaks() {
+        // The url arg is only consumed by uxprototype_tweak; other tweaks are unaffected,
+        // and an unknown key still falls through to null.
+        List<FlagSpec> mat = PhixitTweaks.specs("aa_material_you", "https://ignored");
+        assertNotNull(mat);
+        assertEquals("SystemUi__material_you_settings_enabled", mat.get(0).name);
+        assertNull(PhixitTweaks.specs("not_a_real_tweak", "https://ignored"));
     }
 
     @Test
