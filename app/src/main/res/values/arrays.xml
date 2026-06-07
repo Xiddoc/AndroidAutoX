@@ -6,4 +6,23 @@
     <string-array name="xposed_scope" translatable="false">
         <item>android</item>
     </string-array>
+
+    <!--
+        WS7: Allowed certificate SHA-256 fingerprints for the official Android Auto
+        projection host (com.google.android.projection.gearhead).
+
+        The HostValidator.Builder in AutoXCarAppService uses this array to restrict Car
+        App connections to the Google-signed release build of Android Auto.
+
+        Format: colon-separated uppercase hex, as produced by `keytool -printcert`
+        and accepted by HostValidator.Builder.addAllowedHost.
+
+        IMPORTANT: this digest must match HostAllowlist.GEARHEAD_SHA256 exactly.
+        Human-verification: run
+          adb shell pm get-app-signing-info -show-cert com.google.android.projection.gearhead
+        on a real device and compare the SHA-256 fingerprint against this value.
+    -->
+    <string-array name="autox_gearhead_allowed_certs" translatable="false">
+        <item>F0:FD:6C:5B:41:0F:25:CB:25:C3:B5:33:46:C8:97:2F:AE:30:F8:EE:74:11:DF:91:04:80:AD:6B:2D:60:DB:83</item>
+    </string-array>
 </resources>

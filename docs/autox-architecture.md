@@ -346,6 +346,116 @@ impossible at the applier layer.
 > Device acceptance (projected app audio plays on car channel; phone unaffected; binding
 > reverts on disable) is pending human validation on a real head unit with root access.
 
+## WS7 — Robustness and Security
+
+### Restricted host allowlist
+
+**Problem.** Shipping `HostValidator.ALLOW_ALL_HOSTS_VALIDATOR` in `AutoXCarAppService`
+means any app that registers itself as an Android Auto host can connect to the AutoX
+pipeline on a rooted device — a significant privilege-escalation risk.
+
+**Solution.** `HostAllowlist` (pure, no Android imports) holds the allowlist data:
+
+| Field | Value |
+|---|---|
+| Allowed package | `com.google.android.projection.gearhead` |
+| SHA-256 digest | `F0:FD:6C:5B:41:0F:25:CB:25:C3:B5:33:46:C8:97:2F:AE:30:F8:EE:74:11:DF:91:04:80:AD:6B:2D:60:DB:83` |
+| Digest source | Jetpack Car App SDK docs + community Play Store APK analysis |
+
+`HostAllowlist#isAllowed(packageName, sha256Digest)` returns `true` only when both
+match. `HostAllowlist#check(…)` returns a richer `AllowResult` enum
+(`ALLOWED` / `REJECTED_NULL_PACKAGE` / `REJECTED_MALFORMED_DIGEST` /
+`REJECTED_UNKNOWN_PACKAGE` / `REJECTED_WRONG_DIGEST`).
+
+Digest comparison is **colon-agnostic and case-insensitive**: both plain 64-hex and
+colon-separated forms are normalized to 64-char uppercase hex by
+`HostAllowlist#normalizeDigest`.  Malformed digests (wrong length or non-hex chars)
+return `null` from `normalizeDigest` and are skipped or rejected.
+
+`AutoXCarAppService#createHostValidator()` iterates `HostAllowlist.createDefault().entries()`
+and calls `HostValidator.Builder#addAllowedHost(packageName, digest)` for each digest.
+The pure allowlist data is the tested unit; the `HostValidator.Builder` call is the
+only Android-coupled line (the service is excluded from the coverage gate).
+
+**Human-verification flag:** the baked-in digest should be confirmed on a real device:
+```
+adb shell pm get-app-signing-info -show-cert com.google.android.projection.gearhead
+```
+Compare the SHA-256 fingerprint against `HostAllowlist.GEARHEAD_SHA256`.
+
+Multiple digests per package are supported in `HostAllowlist.HostEntry` for
+key-rotation scenarios (list both old and new fingerprints while the fleet migrates).
+
+### Connection lifecycle state machine
+
+`ConnectionStateMachine` (pure, no Android imports) models the combined host + surface
+lifecycle as a deterministic state machine to avoid duplicated transition logic in the
+glue layer.
+
+**States:**
+
+| State | Meaning |
+|---|---|
+| `IDLE` | No host connected, no surface (initial state) |
+| `CONNECTED` | Host connected, no surface yet |
+| `SURFACE_ACTIVE` | Host connected AND surface available (virtual display running) |
+| `DISCONNECTED` | Host disconnected |
+| `RECONNECTING` | A reconnect attempt is in progress |
+
+**Transition table:**
+
+| From | Event | To |
+|---|---|---|
+| `IDLE` | `CONNECT` | `CONNECTED` |
+| `IDLE` | `RECONNECT` | `RECONNECTING` |
+| `CONNECTED` | `SURFACE_AVAILABLE` | `SURFACE_ACTIVE` |
+| `CONNECTED` | `DISCONNECT` | `DISCONNECTED` |
+| `SURFACE_ACTIVE` | `SURFACE_DESTROYED` | `CONNECTED` |
+| `SURFACE_ACTIVE` | `DISCONNECT` | `DISCONNECTED` |
+| `DISCONNECTED` | `RECONNECT` | `RECONNECTING` |
+| `RECONNECTING` | `CONNECT` | `CONNECTED` |
+| `RECONNECTING` | `DISCONNECT` | `DISCONNECTED` |
+| *(any)* | *(undefined)* | *(unchanged — no-op)* |
+
+All undefined (state, event) pairs are silently ignored so the machine is total and
+crash-safe.
+
+### Bounded exponential-backoff calculator
+
+`ReconnectBackoff` (pure, no Android imports) computes a bounded exponential delay
+sequence for reconnect attempts:
+
+```
+delay(n) = min(initialDelayMs × base^n, maxDelayMs)
+```
+
+Default parameters: initial = 1 s, base = 2, max = 30 s →
+sequence: 1 s, 2 s, 4 s, 8 s, 16 s, 30 s, 30 s, … (capped).
+
+Overflow safety: the pre-multiply check `delay >= maxDelayMs / base` ensures `delay *
+base` is never computed when it would exceed `maxDelayMs`, preventing `long` overflow
+at any combination of base and attempt count.  Negative or zero attempts are treated as
+attempt 0 (return initial delay, clamped to max).
+
+### Bounded wakelock in AutoXForegroundService
+
+`AutoXForegroundService` acquires a `PowerManager.PARTIAL_WAKE_LOCK` via
+`wakeLock.acquire(WAKE_LOCK_TIMEOUT_MS)` with a 4-hour backstop timeout.  The lock is
+released in `onDestroy()`.  The timeout backstop guarantees the lock cannot leak
+indefinitely if the process is killed without `onDestroy` running.
+
+The service is started in `AutoXScreen#createDisplay()` and stopped in
+`AutoXScreen#releaseDisplay()` — it is therefore strictly tied to the surface lifetime:
+alive exactly while a virtual display is active, not for the whole app session.
+
+### Pure vs excluded split (WS7 additions)
+
+| Class | Layer | Coverage |
+|---|---|---|
+| `HostAllowlist` | Pure allowlist data + normalization + matching (no Android imports) | 100% required |
+| `ConnectionStateMachine` | Pure state machine (no Android imports) | 100% required |
+| `ReconnectBackoff` | Pure backoff calculator (no Android imports) | 100% required |
+
 ## Key files
 
 | Path | Role |
@@ -358,6 +468,9 @@ impossible at the applier layer.
 | `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/` | WS4 LSPosed module glue (excluded) |
 | `app/src/xposedStub/java/` | Local compileOnly Xposed API stub (offline `-PuseXposedStub=true` fallback) |
 | `app/src/main/assets/xposed_init` | LSPosed module entry-class pointer |
+| `app/src/main/java/com/xiddoc/androidautox/autox/HostAllowlist.java` | WS7: pure host allowlist (allowlist data + digest normalization + matching) |
+| `app/src/main/java/com/xiddoc/androidautox/autox/ConnectionStateMachine.java` | WS7: pure connection lifecycle state machine |
+| `app/src/main/java/com/xiddoc/androidautox/autox/ReconnectBackoff.java` | WS7: pure bounded exponential-backoff calculator |
 | `app/src/main/res/xml/automotive_app_desc.xml` | Car app descriptor (template capability) |
 | `app/src/main/AndroidManifest.xml` | Service / permission / LSPosed module declarations |
 | `app/build.gradle` (`jacocoExclusions`) | Coverage gate exclusion list |
