@@ -85,14 +85,12 @@
 
         <!-- "Select apps" now owns the whole patch-apps flow: it opens the app picker, where an
              Apply FAB saves the selection and patches. The old standalone "patch apps" button and
-             its status icon were removed. The 33dp end margin keeps this button's right edge in
-             the same content column the other tweak rows align to (leaving room for status icons
-             on those rows). -->
+             its status icon were removed. This button has no status icon so it spans the full
+             content width with no trailing gap. -->
         <Button
             android:id="@+id/toapp_button"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="33dp"
             style="@style/ButtonStyle"
             android:text="@string/select_apps"
             app:layout_constraintEnd_toEndOf="parent"
@@ -138,7 +136,7 @@
 
 
             android:text="@string/disable_speed_limitations"
-            app:layout_constraintEnd_toEndOf="@id/toapp_button"
+            app:layout_constraintEnd_toStartOf="@id/sixtapstatus"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/toapp_button" />
 
@@ -226,7 +224,7 @@
            android:focusable="true"
 
             android:text="@string/force_widescreen_text"
-            app:layout_constraintEnd_toEndOf="@id/toapp_button"
+            app:layout_constraintEnd_toStartOf="@id/force_ws_status"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/section_two" />
 
@@ -250,7 +248,7 @@
            android:focusable="true"
 
             android:text="@string/base_no_ws"
-            app:layout_constraintEnd_toEndOf="@id/toapp_button"
+            app:layout_constraintEnd_toStartOf="@id/force_no_ws_status"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/force_ws_button" />
 
@@ -273,7 +271,7 @@
                     android:clickable="true"
                     style="@style/ButtonStyle"
                     android:focusable="true"
-                    app:layout_constraintEnd_toEndOf="@id/toapp_button"
+                    app:layout_constraintEnd_toStartOf="@id/force_portrait_status"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/force__no_ws_button" />
 
@@ -298,7 +296,7 @@
            android:focusable="true"
 
             android:text="@string/multi_display_string"
-            app:layout_constraintEnd_toEndOf="@id/toapp_button"
+            app:layout_constraintEnd_toStartOf="@id/multi_display_status"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/force_portrait_button" />
 
@@ -320,7 +318,7 @@
                     android:clickable="true"
                     style="@style/ButtonStyle"
                     android:focusable="true"
-                    app:layout_constraintEnd_toEndOf="@id/toapp_button"
+                    app:layout_constraintEnd_toStartOf="@id/nocoolwalk_tweak_status"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/multi_display_button" />
 
@@ -360,7 +358,7 @@
            android:focusable="true"
 
             android:text="@string/battery_warning"
-            app:layout_constraintEnd_toEndOf="@id/toapp_button"
+            app:layout_constraintEnd_toStartOf="@id/battery_warning_status"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/section_three" />
 
@@ -477,7 +475,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="end"
+            android:gravity="center_vertical|end"
             android:layout_marginEnd="4dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="@id/messages_hun_seekbar"
@@ -550,7 +548,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="end"
+            android:gravity="center_vertical|end"
             android:layout_marginEnd="4dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="@id/media_hun_seekbar"
@@ -668,7 +666,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:gravity="end"
+                    android:gravity="center_vertical|end"
                     android:layout_marginEnd="4dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toTopOf="@id/wifi_bitrate_seekbar"
@@ -743,7 +741,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:gravity="end"
+                    android:gravity="center_vertical|end"
                     android:layout_marginEnd="4dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toTopOf="@id/usb_bitrate_seekbar"
