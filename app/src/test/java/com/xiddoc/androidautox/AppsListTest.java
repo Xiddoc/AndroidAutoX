@@ -45,13 +45,18 @@ import java.util.Map;
  * <p>This screen has two distinct behaviours worth pinning:
  *
  * <ul>
- *   <li><b>Car-app filter.</b> {@code AppsList.onCreate} enumerates every
- *       installed app via {@code PackageManager.getInstalledApplications(GET_META_DATA)}
- *       and keeps <em>only</em> those whose manifest metadata declares a non-zero
- *       {@code com.google.android.gms.car.application} entry (the Android-Auto
- *       compatibility marker). Apps without that metadata — or with no metadata at
- *       all — are excluded. We register fake apps both with and without the marker
- *       via {@link ShadowPackageManager} and assert the resulting list.</li>
+ *   <li><b>Full launchable enumeration + badging.</b> {@code AppsList.onCreate}
+ *       enumerates <em>every</em> launchable app — those exposing an
+ *       {@code ACTION_MAIN}/{@code CATEGORY_LAUNCHER} entry via
+ *       {@code queryIntentActivities} — de-duped by package, and re-reads each via
+ *       {@code getApplicationInfo(GET_META_DATA)}. Nothing is filtered out: each app
+ *       is instead <em>badged</em> by {@link AppCompatibilityClassifier} into
+ *       {@code NATIVE_AUTO} (declares the non-zero
+ *       {@code com.google.android.gms.car.application} marker), {@code MIRROR_SHIM}
+ *       (a known screen-mirroring shim), or {@code NEEDS_BRIDGE} (everything else,
+ *       including apps with no metadata, a present-but-zero marker, or a missing
+ *       launcher ApplicationInfo). We register fake launchable apps across these
+ *       cases via {@link ShadowPackageManager} and assert the resulting badges.</li>
  *   <li><b>Pre-population.</b> Any package already stored in the
  *       {@value #PREF_NAME} SharedPreferences (key = packageName, value = label)
  *       loads as <em>checked</em>. A stored package that is no longer installed is
@@ -418,6 +423,40 @@ public class AppsListTest {
         assertTrue("real car app still appears", rows.containsKey("com.example.carapp"));
         assertFalse("package with no ApplicationInfo is skipped",
                 rows.containsKey("com.example.ghostlauncher"));
+    }
+
+    /**
+     * A single package can expose more than one launcher activity (e.g. multiple
+     * {@code MAIN/LAUNCHER} aliases). The picker enumerates per-package, so the
+     * package must appear exactly once — pinning the {@code LinkedHashSet} multi-
+     * activity de-dup in {@code AppsList} (distinct from the installed+prefs dedup).
+     */
+    @Test
+    public void enumeration_packageWithTwoLauncherActivities_appearsExactlyOnce() {
+        // installCarApp registers one launcher activity (pkg + ".MainActivity").
+        installCarApp("com.example.multi", "Multi Launcher App");
+
+        // Register a SECOND launcher activity for the SAME package.
+        ActivityInfo secondActivity = new ActivityInfo();
+        secondActivity.packageName = "com.example.multi";
+        secondActivity.name = "com.example.multi.SecondMain";
+        ResolveInfo secondResolve = new ResolveInfo();
+        secondResolve.activityInfo = secondActivity;
+        shadowPm.addResolveInfoForIntentNoDefaults(launcherIntent(), secondResolve);
+
+        AppsList activity = buildActivity();
+        RecyclerView rv = recyclerOf(activity);
+        layoutRecycler(rv);
+
+        int rowsForPackage = 0;
+        for (int i = 0; i < rv.getChildCount(); i++) {
+            TextView pkg = rv.getChildAt(i).findViewById(R.id.app_package_name);
+            if ("com.example.multi".equals(pkg.getText().toString())) {
+                rowsForPackage++;
+            }
+        }
+        assertEquals("a package with two launcher activities must appear once",
+                1, rowsForPackage);
     }
 
     @Test
