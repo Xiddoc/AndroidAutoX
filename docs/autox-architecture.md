@@ -72,6 +72,26 @@ InputManager#injectInputEvent  (hidden API, via reflection)
 Guest app receives MotionEvent
 ```
 
+## WS2 — Surface lifecycle: resize vs recreate
+
+When `onSurfaceAvailable` fires more than once (the host can call it on geometry change
+without an intervening `onSurfaceDestroyed`), `AutoXScreen` must decide whether to:
+
+- **NOOP** — geometry unchanged; nothing to do.
+- **RESIZE** — same `Surface` object, different dimensions/dpi; call
+  `VirtualDisplay.resize(w, h, dpi)` on the existing display. Avoids the cost of
+  destroying/recreating the display and re-launching the guest app.
+- **RECREATE** — the host supplied a new `Surface` object (the old surface is
+  invalid); release the old `VirtualDisplay` and create a fresh one.
+
+The decision is made by the pure helper `SurfaceGeometry.decide(oldW, oldH, oldDpi,
+newW, newH, newDpi, surfaceIdentityChanged)`.  `AutoXScreen` extracts primitives from
+the framework `SurfaceContainer` and delegates to `SurfaceGeometry`; this keeps the
+policy 100% unit-testable while the glue remains in `jacocoExclusions`.
+
+`VirtualDisplayController.resize(newSpec)` wraps `VirtualDisplay.resize` and updates
+the stored spec so `getSpec()` always reflects the current geometry.
+
 ## Testable-logic vs excluded-glue split
 
 | Class | Layer | Coverage |
@@ -83,6 +103,7 @@ Guest app receives MotionEvent
 | `AutoXTargetApp` | Pure value object (no Android imports) | 100% required |
 | `AutoXAppRegistry` | Pure registry (no Android imports) | 100% required |
 | `AppLaunchPolicy` | Pure decision logic (no Android imports) | 100% required |
+| `SurfaceGeometry` | Pure decision logic — resize-vs-recreate policy (WS2) | 100% required |
 | `GestureInjector` | Interface — no executable lines | Excluded (safety) |
 | `ReflectiveGestureInjector` | Reflection / InputManager (framework) | Excluded |
 | `VirtualDisplayController` | DisplayManager (framework) | Excluded |
