@@ -199,6 +199,9 @@ dependencies {
     // hand-rolled `Runtime.exec("su")` path and the bundled sqlite3 binary.
     implementation 'com.github.topjohnwu.libsu:core:5.2.2'
     implementation 'com.github.topjohnwu.libsu:service:5.2.2'
+    // Jetpack Car App library: CarAppService, Session, Screen, SurfaceCallback,
+    // NavigationTemplate — used by the AutoX virtual-display projection layer.
+    implementation 'androidx.car.app:app:1.4.0'
 
 }
 
@@ -260,6 +263,18 @@ def jacocoExclusions = [
         '**/NoRootDialog*.*',
         '**/NotSuccessfulDialog*.*',
         '**/RebootDialog*.*',
+        // AutoX virtual-display glue — framework-coupled, cannot be unit-tested off-device.
+        // Pure-logic classes (AutoXDisplaySpec, CoordinateTranslator, VirtualDisplayConfig,
+        // GestureSpec, AutoXTargetApp, AutoXAppRegistry, AppLaunchPolicy) are NOT excluded
+        // and must remain at 100% coverage.
+        '**/AutoXCarAppService*.*',  // CarAppService entry point
+        '**/AutoXSession*.*',        // Car App Session
+        '**/AutoXScreen*.*',         // Car App Screen + SurfaceCallback
+        '**/AutoXForegroundService*.*', // foreground Service (wake lock, notification)
+        '**/VirtualDisplayController*.*', // DisplayManager.createVirtualDisplay wrapper
+        '**/AppLauncher*.*',         // ActivityOptions.setLaunchDisplayId wrapper
+        '**/GestureInjector*.*',     // injection interface (no executable lines, excluded for safety)
+        '**/ReflectiveGestureInjector*.*', // reflection-based InputManager injection seam
 ]
 
 // Debug-variant javac output (and kotlin, if any is ever added) form the class
