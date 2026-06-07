@@ -21,6 +21,7 @@ import android.widget.TextView;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.core.app.ApplicationProvider;
 
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.rm.rmswitch.RMSwitch;
 
 import org.junit.Before;
@@ -107,6 +108,16 @@ public class AppsListTest {
         shadowPm = shadowOf(appContext.getPackageManager());
         // Start each test from a clean prefs slate so persistence assertions are isolated.
         prefs().edit().clear().commit();
+        statePrefs().edit().clear().commit();
+    }
+
+    /** The per-app applied-state prefs (package -> captured original installer). */
+    private SharedPreferences statePrefs() {
+        return appContext.getSharedPreferences(MainActivity.PATCHED_APPS_STATE, Context.MODE_PRIVATE);
+    }
+
+    private ExtendedFloatingActionButton fabOf(AppsList activity) {
+        return activity.findViewById(R.id.fab);
     }
 
     // ------------------------------------------------------------------
@@ -721,5 +732,72 @@ public class AppsListTest {
                 prefs().contains("com.example.app1"));
         assertFalse("neighbouring rows must be untouched",
                 prefs().contains("com.example.app2"));
+    }
+
+    // ------------------------------------------------------------------
+    // Apply FAB: smart apply / revert (drives onApplyClicked -> MainActivity)
+    // ------------------------------------------------------------------
+
+    /** A selection that isn't yet applied shows the "Save & apply" FAB. */
+    @Test
+    public void fab_showsApply_whenSelectionHasPendingChanges() {
+        installCarApp("com.example.carapp", "Car App");
+        selectApp("com.example.carapp", "Car App"); // desired non-empty, nothing applied -> APPLY
+
+        AppsList activity = buildActivity();
+
+        assertEquals(appContext.getString(R.string.apply_patch_apps),
+                fabOf(activity).getText().toString());
+    }
+
+    /** Tapping Apply hands off to MainActivity (with the patch-apps flag) and keeps the selection. */
+    @Test
+    public void fab_apply_startsPatchKeepingSelectionAndFinishes() {
+        installCarApp("com.example.carapp", "Car App");
+        selectApp("com.example.carapp", "Car App");
+
+        AppsList activity = buildActivity();
+        fabOf(activity).performClick();
+
+        Intent started = shadowOf(activity).getNextStartedActivity();
+        assertNotNull("Apply must launch MainActivity", started);
+        assertEquals(MainActivity.class.getName(), started.getComponent().getClassName());
+        assertTrue("the patch-apps request flag must be set",
+                started.getBooleanExtra(MainActivity.EXTRA_PATCH_APPS, false));
+        assertTrue("Apply (not revert) keeps the selection",
+                prefs().contains("com.example.carapp"));
+        assertTrue("AppsList finishes after handing off", activity.isFinishing());
+    }
+
+    /** When the selection already matches the applied set, the FAB offers "Revert all". */
+    @Test
+    public void fab_showsRevert_whenSelectionMatchesApplied() {
+        installCarApp("com.example.carapp", "Car App");
+        selectApp("com.example.carapp", "Car App");
+        // Mark it as already applied so desired == applied (no pending changes) -> REVERT_ALL.
+        statePrefs().edit().putString("com.example.carapp", "").commit();
+
+        AppsList activity = buildActivity();
+
+        assertEquals(appContext.getString(R.string.revert_patch_apps),
+                fabOf(activity).getText().toString());
+    }
+
+    /** Tapping Revert all clears the whitelist first, then hands off to MainActivity. */
+    @Test
+    public void fab_revertAll_clearsSelectionThenStartsPatch() {
+        installCarApp("com.example.carapp", "Car App");
+        selectApp("com.example.carapp", "Car App");
+        statePrefs().edit().putString("com.example.carapp", "").commit();
+
+        AppsList activity = buildActivity();
+        fabOf(activity).performClick();
+
+        assertFalse("revert-all clears the whitelist before applying",
+                prefs().contains("com.example.carapp"));
+        Intent started = shadowOf(activity).getNextStartedActivity();
+        assertNotNull("Revert all must launch MainActivity", started);
+        assertTrue(started.getBooleanExtra(MainActivity.EXTRA_PATCH_APPS, false));
+        assertTrue(activity.isFinishing());
     }
 }

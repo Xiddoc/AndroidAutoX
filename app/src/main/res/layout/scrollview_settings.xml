@@ -74,15 +74,6 @@
             android:text="@string/settings_aa_label" />
 
         <Button
-            android:id="@+id/settings_ndpatch"
-            style="@style/ButtonStyle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:clickable="true"
-            android:focusable="true"
-            android:text="@string/settings_ndpatch_label" />
-
-        <Button
             android:id="@+id/settings_backup"
             style="@style/ButtonStyle"
             android:layout_width="match_parent"

@@ -32,9 +32,13 @@ public class MainActivityReconcileRegistrationTest {
      * commented out (dead code), so there is no status view to register. If that block is ever
      * re-enabled, remove this entry — the test will then require it to be registered, making the
      * omission impossible to forget.
+     *
+     * <p>{@code "aa_patched_apps"}: the "patch apps" flow no longer has a status icon on the main
+     * screen — it is driven entirely from the Select-apps screen (AppsList) and applied via the
+     * intent path — so there is no main-screen view to reconcile against.
      */
     private static final Set<String> EXPECTED_UNREGISTERED =
-            new HashSet<String>(Arrays.asList("aa_speed_hack"));
+            new HashSet<String>(Arrays.asList("aa_speed_hack", "aa_patched_apps"));
 
     @Test
     public void everyLiveFlagMappedTweakIsRegisteredForReconcile() {

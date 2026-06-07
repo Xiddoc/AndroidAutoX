@@ -5,7 +5,7 @@ import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import android.os.Bundle;
@@ -25,6 +25,7 @@ import java.util.Set;
 
 public class AppsList extends AppCompatActivity {
 
+    private ExtendedFloatingActionButton fab;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,8 +36,8 @@ public class AppsList extends AppCompatActivity {
         ActionBar ab = getSupportActionBar();
         ab.setDisplayHomeAsUpEnabled(true);
 
-        FloatingActionButton fab = findViewById(R.id.fab);
-        fab.hide();
+        fab = findViewById(R.id.fab);
+        fab.setOnClickListener(v -> onApplyClicked());
 
         RecyclerView recyclerView = findViewById(R.id.apps_info);
         recyclerView.setHasFixedSize(true);
@@ -94,6 +95,67 @@ public class AppsList extends AppCompatActivity {
         }
 
         Collections.sort(appsList);
-        recyclerView.setAdapter(new MyAdapter(appsList, recyclerView));
+        MyAdapter adapter = new MyAdapter(appsList, recyclerView);
+        // Re-evaluate the Apply FAB whenever the user toggles a row, so it tracks pending changes
+        // live (Apply when the selection differs from what's applied, Revert when it matches).
+        adapter.setOnSelectionChanged(this::refreshFab);
+        recyclerView.setAdapter(adapter);
+
+        refreshFab();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Reflect any change made while we were away (e.g. an apply that ran in MainActivity).
+        refreshFab();
+    }
+
+    /** Package names the user currently wants patched (the whitelist). */
+    private Set<String> desiredPackages() {
+        return new LinkedHashSet<>(
+                getSharedPreferences("appsListPref", MODE_PRIVATE).getAll().keySet());
+    }
+
+    /** Package names whose installer has already been re-stamped (recorded at apply time). */
+    private Set<String> appliedPackages() {
+        return new LinkedHashSet<>(
+                getSharedPreferences(MainActivity.PATCHED_APPS_STATE, MODE_PRIVATE).getAll().keySet());
+    }
+
+    /** Updates the Apply FAB label/visibility from the current desired-vs-applied state. */
+    private void refreshFab() {
+        switch (PatchAppsPlan.decideFab(desiredPackages(), appliedPackages())) {
+            case APPLY:
+                fab.setText(R.string.apply_patch_apps);
+                fab.show();
+                break;
+            case REVERT_ALL:
+                fab.setText(R.string.revert_patch_apps);
+                fab.show();
+                break;
+            default: // HIDDEN
+                fab.hide();
+                break;
+        }
+    }
+
+    /**
+     * Runs the apply: for a revert-all (selection already fully applied) the whitelist is cleared
+     * first so the apply disables everything. The actual patch is performed by {@link MainActivity}
+     * (it owns the root shell, phixit engine, logs and reboot prompt), reached via an intent that
+     * brings the existing instance forward.
+     */
+    private void onApplyClicked() {
+        boolean revertAll =
+                PatchAppsPlan.decideFab(desiredPackages(), appliedPackages())
+                        == PatchAppsPlan.FabAction.REVERT_ALL;
+        if (revertAll) {
+            getSharedPreferences("appsListPref", MODE_PRIVATE).edit().clear().apply();
+        }
+        startActivity(new Intent(this, MainActivity.class)
+                .putExtra(MainActivity.EXTRA_PATCH_APPS, true)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        finish();
     }
 }

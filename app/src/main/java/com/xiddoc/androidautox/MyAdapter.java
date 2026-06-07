@@ -19,6 +19,15 @@ public class MyAdapter extends RecyclerView.Adapter {
 
     private final ArrayList<AppInfo> mAppInfo;
 
+    /** Invoked after every selection change so the host can refresh dependent UI (the Apply FAB).
+     *  Defaults to a no-op so the adapter works standalone (e.g. in isolation tests). */
+    private Runnable onSelectionChanged = () -> {};
+
+    /** Sets the callback run after each toggle persists. */
+    public void setOnSelectionChanged(Runnable callback) {
+        this.onSelectionChanged = callback;
+    }
+
     private class MyViewHolder extends RecyclerView.ViewHolder {
         public TextView mName;
         public TextView mPackageName;
@@ -139,6 +148,8 @@ public class MyAdapter extends RecyclerView.Adapter {
                 }
             }
         }
+        // Notify the host (if any) that the whitelist changed so it can refresh the Apply FAB.
+        onSelectionChanged.run();
     }
 
     @Override

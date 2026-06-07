@@ -1,5 +1,16 @@
 # Is the destructive uninstall/reinstall in "Patch apps" actually necessary? — Analysis
 
+> **UPDATE (resolved):** The destructive uninstall/reinstall path has been **removed**.
+> "Patch apps" now uses the non-destructive `pm set-installer` path **only**, and it captures
+> each app's original installer first so the change can be reverted per app (restoring the
+> captured installer). No app is ever uninstalled, so the data-loss foot-gun is gone. The
+> historical analysis below is retained for rationale; references to `patchAppDestructive`,
+> the destructive `nextAction`/rollback/temp-APK logic, the split-APK guard, and the opt-in
+> "non-destructive" toggle describe code that no longer exists. The known caveat still stands:
+> `set-installer` changes `getInstallingPackageName()` but **not** the immutable
+> `getInitiatingPackageName()`, so it is a strictly weaker spoof and relies on the Phenotype
+> validation-bypass flags (`TweakRegistry.patchedAppsSpecs()`) to cover the rest.
+
 **Status:** research note / design rationale. Not a spec.
 **Question studied:** When a user picks third-party apps to use over Android Auto, AndroidAutoX
 runs a **destructive** per-app loop that *uninstalls and reinstalls* each app so it is re-stamped

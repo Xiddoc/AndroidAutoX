@@ -21,7 +21,6 @@ public enum SettingAction {
     RESET_TWEAKS(false),
     AUTO_REAPPLY(false),
     AA_SETTINGS(false),
-    NONDESTRUCTIVE_PATCH(false),
     AUTO_BACKUP_DBS(false),
     PHIXIT_APPLY_TEST(true),   // developer-only
     PHIXIT_DUMP_ALL(true),     // developer-only
