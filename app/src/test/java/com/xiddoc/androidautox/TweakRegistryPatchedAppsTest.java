@@ -72,12 +72,18 @@ public class TweakRegistryPatchedAppsTest {
     private static final String F_FILTER_DISABLED_PACKAGES =
             "CarProjectionValidator__filter_disabled_packages_in_ispackageallowed_method";
     private static final String F_ALLOW_FULL_SCREEN_APPS = "UnknownSources__allow_full_screen_apps";
+    private static final String F_UNKNOWN_SOURCES_ENABLED = "UnknownSources__enabled";
+    private static final String F_LITE_UNKNOWN_SOURCES_ALLOWED =
+            "UnknownSources__lite_unknown_sources_allowed";
+    private static final String F_GEARHEAD_DEVELOPER_ENABLED = "GearheadDeveloper__enabled";
+    private static final String F_GEARHEAD_DEVELOPER_SETTINGS_ENABLED =
+            "GearheadDeveloper__settings_enabled";
 
     /**
      * Total spec count: 2 dynamic whitelist string flags + 2 static empty-string
-     * flags + 7 static boolean/bypass flags = 11.
+     * flags + 11 static boolean/bypass flags = 15.
      */
-    private static final int EXPECTED_SPEC_COUNT = 11;
+    private static final int EXPECTED_SPEC_COUNT = 15;
 
     private Context ctx;
     private SharedPreferences appsPref;
@@ -156,13 +162,13 @@ public class TweakRegistryPatchedAppsTest {
 
     /** The method always emits exactly EXPECTED_SPEC_COUNT flag specs regardless of selection. */
     @Test
-    public void emptySelection_producesExactlyElevenSpecs() {
+    public void emptySelection_producesExactlyFifteenSpecs() {
         List<FlagSpec> specs = TweakRegistry.patchedAppsSpecs(ctx);
         assertEquals(EXPECTED_SPEC_COUNT, specs.size());
     }
 
     @Test
-    public void multipleApps_stillExactlyElevenSpecs() {
+    public void multipleApps_stillExactlyFifteenSpecs() {
         selectApps("com.example.one", "com.example.two", "com.example.three");
         List<FlagSpec> specs = TweakRegistry.patchedAppsSpecs(ctx);
         assertEquals(EXPECTED_SPEC_COUNT, specs.size());
@@ -185,7 +191,7 @@ public class TweakRegistryPatchedAppsTest {
     /**
      * Strong oracle that pins, per flag name, the tuple "PKG|type|value" so a
      * regression in any single flag's package, type, OR value is caught — and the
-     * failure message names the offending flag instead of dumping two 11-entry
+     * failure message names the offending flag instead of dumping two 15-entry
      * maps. The value component is the bool true/false, the string literal, etc.
      *
      * <p>This is the single source of truth for the static flags' package/type/value;
@@ -216,6 +222,10 @@ public class TweakRegistryPatchedAppsTest {
         expected.put(F_SHOULD_BYPASS_VALIDATION_CAR, boolDescriptor(FlagSpec.PKG_CAR, true));
         expected.put(F_FILTER_DISABLED_PACKAGES, boolDescriptor(FlagSpec.PKG_GEARHEAD, false));
         expected.put(F_ALLOW_FULL_SCREEN_APPS, boolDescriptor(FlagSpec.PKG_GEARHEAD, true));
+        expected.put(F_UNKNOWN_SOURCES_ENABLED, boolDescriptor(FlagSpec.PKG_GEARHEAD, true));
+        expected.put(F_LITE_UNKNOWN_SOURCES_ALLOWED, boolDescriptor(FlagSpec.PKG_GEARHEAD, true));
+        expected.put(F_GEARHEAD_DEVELOPER_ENABLED, boolDescriptor(FlagSpec.PKG_GEARHEAD, true));
+        expected.put(F_GEARHEAD_DEVELOPER_SETTINGS_ENABLED, boolDescriptor(FlagSpec.PKG_GEARHEAD, true));
 
         // Per-entry assertion so a failure names the offending flag.
         for (Map.Entry<String, String> e : expected.entrySet()) {
@@ -380,6 +390,10 @@ public class TweakRegistryPatchedAppsTest {
         assertBool(one(specs, FlagSpec.PKG_GEARHEAD, F_PLAY_INSTALL_API), false);
         assertBool(one(specs, FlagSpec.PKG_CAR, F_SHOULD_BYPASS_VALIDATION_CAR), true);
         assertBool(one(specs, FlagSpec.PKG_GEARHEAD, F_ALLOW_FULL_SCREEN_APPS), true);
+        assertBool(one(specs, FlagSpec.PKG_GEARHEAD, F_UNKNOWN_SOURCES_ENABLED), true);
+        assertBool(one(specs, FlagSpec.PKG_GEARHEAD, F_LITE_UNKNOWN_SOURCES_ALLOWED), true);
+        assertBool(one(specs, FlagSpec.PKG_GEARHEAD, F_GEARHEAD_DEVELOPER_ENABLED), true);
+        assertBool(one(specs, FlagSpec.PKG_GEARHEAD, F_GEARHEAD_DEVELOPER_SETTINGS_ENABLED), true);
     }
 
     // -----------------------------------------------------------------------
