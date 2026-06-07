@@ -1,5 +1,6 @@
 package com.xiddoc.androidautox.autox;
 
+import android.content.Intent;
 import android.hardware.display.DisplayManager;
 import android.hardware.input.InputManager;
 import android.util.Log;
@@ -144,6 +145,12 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             return;
         }
 
+        // The surface may be re-created without an intervening onSurfaceDestroyed; release
+        // any existing display first to avoid leaking the previous VirtualDisplay/service.
+        if (displayController != null) {
+            releaseDisplay();
+        }
+
         carSpec = new AutoXDisplaySpec(
                 surfaceContainer.getWidth(),
                 surfaceContainer.getHeight(),
@@ -157,6 +164,11 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             Log.e(TAG, "AutoXScreen.onSurfaceAvailable: failed to create virtual display", e);
             return;
         }
+
+        // Start the foreground service to keep the projection session alive (wake lock +
+        // ongoing notification). Tied to the surface lifecycle: stopped in releaseDisplay().
+        getCarContext().startForegroundService(
+                new Intent(getCarContext(), AutoXForegroundService.class));
 
         // Launch the first default app (e.g. YouTube) onto the new virtual display.
         AutoXTargetApp defaultApp = AutoXAppRegistry.defaults().get(0);
@@ -190,12 +202,12 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
     @Override
     public void onClick(float x, float y) {
         if (displayController == null || carSpec == null) return;
-        AutoXDisplaySpec virtSpec = new AutoXDisplaySpec(
-                displayController.getDisplayId() > 0 ? carSpec.getWidth() : carSpec.getWidth(),
-                carSpec.getHeight(), carSpec.getDensityDpi());
-        CoordinateTranslator translator = new CoordinateTranslator(carSpec, virtSpec);
-        CoordinateTranslator.TranslatedPoint pt = translator.translate(x, y);
-        GestureSpec spec = GestureSpec.tap(displayController.getDisplayId(), pt.getX(), pt.getY());
+        // Note: today the virtual display is created at the car's resolution, so
+        // virtSpec == carSpec (identity) at runtime; the routing math is still correct
+        // when they differ (e.g. forced-vertical layouts).
+        AutoXDisplaySpec virtSpec = displayController.getSpec();
+        GestureSpec spec = TouchRouter.routeTap(
+                carSpec, virtSpec, displayController.getDisplayId(), x, y);
         gestureInjector.inject(spec);
     }
 
@@ -208,19 +220,10 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
     @Override
     public void onScroll(float distanceX, float distanceY) {
         if (displayController == null || carSpec == null) return;
-        // Treat the scroll as a swipe starting from the centre of the car surface.
-        float startX = carSpec.getWidth() / 2.0f;
-        float startY = carSpec.getHeight() / 2.0f;
-        float endX = startX - distanceX;
-        float endY = startY - distanceY;
-        CoordinateTranslator translator = new CoordinateTranslator(carSpec, carSpec);
-        CoordinateTranslator.TranslatedPoint start = translator.translate(startX, startY);
-        CoordinateTranslator.TranslatedPoint end = translator.translate(endX, endY);
-        GestureSpec spec = GestureSpec.swipe(
-                displayController.getDisplayId(),
-                start.getX(), start.getY(),
-                end.getX(), end.getY(),
-                SWIPE_DURATION_MS);
+        AutoXDisplaySpec virtSpec = displayController.getSpec();
+        GestureSpec spec = TouchRouter.routeScroll(
+                carSpec, virtSpec, displayController.getDisplayId(),
+                distanceX, distanceY, SWIPE_DURATION_MS);
         gestureInjector.inject(spec);
     }
 
@@ -233,19 +236,10 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
     @Override
     public void onFling(float velocityX, float velocityY) {
         if (displayController == null || carSpec == null) return;
-        float startX = carSpec.getWidth() / 2.0f;
-        float startY = carSpec.getHeight() / 2.0f;
-        // Project the fling velocity over the swipe duration to an end point.
-        float endX = startX + velocityX * (SWIPE_DURATION_MS / 1000.0f);
-        float endY = startY + velocityY * (SWIPE_DURATION_MS / 1000.0f);
-        CoordinateTranslator translator = new CoordinateTranslator(carSpec, carSpec);
-        CoordinateTranslator.TranslatedPoint start = translator.translate(startX, startY);
-        CoordinateTranslator.TranslatedPoint end = translator.translate(endX, endY);
-        GestureSpec spec = GestureSpec.swipe(
-                displayController.getDisplayId(),
-                start.getX(), start.getY(),
-                end.getX(), end.getY(),
-                SWIPE_DURATION_MS);
+        AutoXDisplaySpec virtSpec = displayController.getSpec();
+        GestureSpec spec = TouchRouter.routeFling(
+                carSpec, virtSpec, displayController.getDisplayId(),
+                velocityX, velocityY, SWIPE_DURATION_MS);
         gestureInjector.inject(spec);
     }
 
@@ -257,6 +251,9 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         if (displayController != null) {
             displayController.release();
             displayController = null;
+            // Stop the foreground service: its lifecycle is tied to an active display.
+            getCarContext().stopService(
+                    new Intent(getCarContext(), AutoXForegroundService.class));
         }
         carSpec = null;
     }

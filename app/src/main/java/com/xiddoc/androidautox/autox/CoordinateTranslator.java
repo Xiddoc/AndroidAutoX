@@ -158,6 +158,8 @@ public final class CoordinateTranslator {
      */
     public float translateX(float xCar) {
         double raw = xCar * scaleX;
+        // Clamp to the CLOSED range [0, virtWidth] (intentional, per spec — NOT width-1).
+        // A bezel/edge hit at exactly virtWidth is a valid on-canvas coordinate.
         return (float) Math.max(0.0, Math.min(virtWidth, raw));
     }
 
@@ -171,6 +173,7 @@ public final class CoordinateTranslator {
      */
     public float translateY(float yCar) {
         double raw = yCar * scaleY;
+        // Clamp to the CLOSED range [0, virtHeight] (intentional, per spec — NOT height-1).
         return (float) Math.max(0.0, Math.min(virtHeight, raw));
     }
 
@@ -184,5 +187,23 @@ public final class CoordinateTranslator {
      */
     public TranslatedPoint translate(float xCar, float yCar) {
         return new TranslatedPoint(translateX(xCar), translateY(yCar));
+    }
+
+    /**
+     * Clamps an (x, y) pair <em>already expressed in virtual-display space</em> to the
+     * virtual-display bounds without applying any scaling. Used by {@link TouchRouter} for
+     * swipe endpoints that were computed directly in virtual space.
+     *
+     * <p>The result is clamped to the CLOSED ranges {@code [0, virtWidth]} and
+     * {@code [0, virtHeight]}.
+     *
+     * @param xVirt x coordinate already in virtual-display space
+     * @param yVirt y coordinate already in virtual-display space
+     * @return the clamped point in virtual-display space
+     */
+    public TranslatedPoint clamp(float xVirt, float yVirt) {
+        float x = (float) Math.max(0.0, Math.min(virtWidth, xVirt));
+        float y = (float) Math.max(0.0, Math.min(virtHeight, yVirt));
+        return new TranslatedPoint(x, y);
     }
 }

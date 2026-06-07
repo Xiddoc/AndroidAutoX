@@ -9,7 +9,7 @@
 
     <!-- AutoX virtual-display projection: keep the service alive while projecting -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <!-- AutoX: PARTIAL_WAKE_LOCK to prevent CPU suspension during projection -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Car App: required to use navigation templates in the Android Auto host -->
@@ -100,13 +100,19 @@
 
         <!-- AutoX foreground service: holds a PARTIAL_WAKE_LOCK and a foreground
              notification while the projection session is active.
-             foregroundServiceType=connectedDevice is required on Android 12+ for
-             services that run while connected to an external device (the car head unit).
+             foregroundServiceType=specialUse: the connectedDevice type enforces Android 14
+             runtime preconditions (companion-device association) that this rooted projection
+             tool does not satisfy; specialUse has no such precondition. The required subtype
+             is declared via the PROPERTY_SPECIAL_USE_FGS_SUBTYPE property below.
              exported=false: not accessible from other apps. -->
         <service
             android:name=".autox.AutoXForegroundService"
-            android:foregroundServiceType="connectedDevice"
-            android:exported="false"/>
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="android_auto_projection"/>
+        </service>
 
     </application>
 

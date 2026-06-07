@@ -36,6 +36,12 @@ public final class VirtualDisplayController {
 
     private final VirtualDisplay virtualDisplay;
 
+    /** The spec this controller was created with (car/virtual geometry). */
+    private final AutoXDisplaySpec spec;
+
+    /** True once {@link #release()} has run; guards against double-release and use-after-release. */
+    private boolean released;
+
     /**
      * Creates the AutoX isolated virtual display.
      *
@@ -46,7 +52,7 @@ public final class VirtualDisplayController {
      * @param surface        the {@link Surface} provided by the
      *                       {@code SurfaceCallback.onSurfaceAvailable} callback
      * @throws IllegalArgumentException if {@code spec} or {@code surface} is null
-     * @throws RuntimeException         if the display manager refuses to create the
+     * @throws IllegalStateException    if the display manager refuses to create the
      *                                  virtual display (e.g. missing permission)
      */
     public VirtualDisplayController(DisplayManager displayManager,
@@ -65,6 +71,7 @@ public final class VirtualDisplayController {
         Log.d(TAG, "VirtualDisplayController: creating display " + spec
                 + " flags=0x" + Integer.toHexString(VirtualDisplayConfig.defaultFlags()));
 
+        this.spec = spec;
         this.virtualDisplay = displayManager.createVirtualDisplay(
                 VirtualDisplayConfig.DISPLAY_NAME,
                 spec.getWidth(),
@@ -74,7 +81,7 @@ public final class VirtualDisplayController {
                 VirtualDisplayConfig.defaultFlags());
 
         if (virtualDisplay == null) {
-            throw new RuntimeException(
+            throw new IllegalStateException(
                     "DisplayManager.createVirtualDisplay returned null — "
                             + "check that VIRTUAL_DISPLAY_FLAG_TRUSTED is permitted on this device.");
         }
@@ -87,19 +94,42 @@ public final class VirtualDisplayController {
      * {@link GestureSpec#getDisplayId()}.
      *
      * @return the virtual display id; always &ge; 1 (display 0 is the primary display)
+     * @throws IllegalStateException if called after {@link #release()}
      */
     public int getDisplayId() {
+        if (released) {
+            throw new IllegalStateException("VirtualDisplayController has been released");
+        }
         return virtualDisplay.getDisplay().getDisplayId();
+    }
+
+    /**
+     * Returns the {@link AutoXDisplaySpec} this controller was created with (the geometry of
+     * the virtual display). Used by {@link AutoXScreen} to build the virtual-space side of the
+     * {@link CoordinateTranslator} when routing touch events.
+     *
+     * @return the virtual-display spec
+     * @throws IllegalStateException if called after {@link #release()}
+     */
+    public AutoXDisplaySpec getSpec() {
+        if (released) {
+            throw new IllegalStateException("VirtualDisplayController has been released");
+        }
+        return spec;
     }
 
     /**
      * Releases the underlying {@link VirtualDisplay}, freeing the display resource.
      *
-     * <p>After this call the display id returned by {@link #getDisplayId()} is invalid.
-     * Idempotent: calling {@code release()} more than once is harmless.
+     * <p>After this call {@link #getDisplayId()} and {@link #getSpec()} fail fast with
+     * {@link IllegalStateException}. Idempotent: a second call is a harmless no-op.
      */
     public void release() {
+        if (released) {
+            return;
+        }
         Log.d(TAG, "VirtualDisplayController: releasing display id=" + getDisplayId());
+        released = true;
         virtualDisplay.release();
     }
 }

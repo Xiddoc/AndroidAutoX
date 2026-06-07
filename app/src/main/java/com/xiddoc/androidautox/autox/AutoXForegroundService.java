@@ -5,6 +5,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Log;
@@ -23,7 +24,7 @@ import com.xiddoc.androidautox.R;
  *       while the guest app is rendering on the virtual display. The lock is released
  *       in {@link #onDestroy()}.</li>
  *   <li>Posts a foreground notification (required for {@code foregroundServiceType=
- *       connectedDevice} on Android 12+) so the system does not kill the service.</li>
+ *       specialUse} on Android 12+) so the system does not kill the service.</li>
  *   <li>Returns {@link #START_STICKY} from {@link #onStartCommand} so Android restarts
  *       the service automatically if it is killed by the OOM killer.</li>
  * </ul>
@@ -34,6 +35,15 @@ import com.xiddoc.androidautox.R;
  *   <li>It does not manage the {@link VirtualDisplayController} directly — that is
  *       owned by {@link AutoXScreen} and tied to the Car App surface lifecycle.</li>
  * </ul>
+ *
+ * <h2>FGS type: {@code specialUse}</h2>
+ * <p>The service is declared as {@code foregroundServiceType=specialUse} rather than
+ * {@code connectedDevice}. On Android 14 the {@code connectedDevice} type enforces runtime
+ * preconditions (e.g. an active Bluetooth/companion-device association) that this rooted
+ * projection tool does not satisfy, so {@code startForeground} with that type would throw.
+ * {@code specialUse} carries no such precondition and is the documented escape hatch for
+ * legitimate use cases that do not fit a predefined type — which fits a root-only Android
+ * Auto projection tool. The subtype is declared via a {@code <property>} in the manifest.
  *
  * <h2>Design notes</h2>
  * <p>This class is a framework-entry point and is excluded from the JaCoCo coverage gate.
@@ -53,6 +63,14 @@ public final class AutoXForegroundService extends Service {
     /** Wake-lock tag; visible in battery/wakelock logs. */
     private static final String WAKE_LOCK_TAG = "AndroidAutoX:AutoXSession";
 
+    /**
+     * Bounded wake-lock timeout backstop. The lock is normally released in
+     * {@link #onDestroy()} when the projection ends; this timeout guarantees the lock cannot
+     * leak forever (e.g. if the process is killed without {@code onDestroy}). 4 hours
+     * comfortably exceeds any realistic single projection session.
+     */
+    private static final long WAKE_LOCK_TIMEOUT_MS = 4L * 60L * 60L * 1000L;
+
     @Nullable
     private PowerManager.WakeLock wakeLock;
 
@@ -64,7 +82,9 @@ public final class AutoXForegroundService extends Service {
     public void onCreate() {
         super.onCreate();
         acquireWakeLock();
-        startForeground(NOTIFICATION_ID, buildNotification());
+        // 3-arg startForeground is mandatory on targetSdk 34 when a FGS type is declared.
+        startForeground(NOTIFICATION_ID, buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         Log.d(TAG, "AutoXForegroundService: started, wake lock acquired");
     }
 
@@ -104,7 +124,9 @@ public final class AutoXForegroundService extends Service {
             return;
         }
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG);
-        wakeLock.acquire();
+        // Bounded acquire: released in onDestroy(), with a timeout backstop so the lock can
+        // never leak indefinitely if the process dies without onDestroy running.
+        wakeLock.acquire(WAKE_LOCK_TIMEOUT_MS);
     }
 
     /** Releases the wake lock if it is currently held. */
