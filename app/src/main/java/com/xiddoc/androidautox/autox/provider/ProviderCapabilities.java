@@ -3,8 +3,10 @@ package com.xiddoc.androidautox.autox.provider;
 /**
  * Immutable snapshot of the privileged-provider capabilities detected on the live
  * system. Produced by capability detection (the pure parts here; the live reflection in
- * the excluded {@code ReflectiveCapabilityProbe} glue) and consumed by the pure
- * {@link ProviderSelectionPolicy} to choose which provider set to use.
+ * the existing excluded provider glue — {@code RootDisplayProvider},
+ * {@code ReflectiveGestureInjector}, the root settings providers — collected via
+ * {@link CapabilityDecider}, not via any single dedicated probe class) and consumed by the
+ * pure {@link ProviderSelectionPolicy} to choose which provider set to use.
  *
  * <p>Framework-free value object (no Android imports) — fully unit testable. Built via
  * the nested {@link Builder} so call sites read clearly and unset flags default to the

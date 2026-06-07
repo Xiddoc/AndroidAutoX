@@ -1,5 +1,26 @@
 # AutoX Subsystem Architecture
 
+## Status (honest summary — read first)
+
+- **WS2–WS7 pure logic is COMPLETE and unit-tested** to the repo's 100% line+branch gate
+  (specs, policies, bounds/coordinate math, host allowlist, state machine, backoff, the
+  shared settings entry/applier/result, and the LSPosed `HookGatePolicy`).
+- **Runtime WIRING of that pure logic into the framework glue is PENDING** in several
+  places — notably the settings apply/revert call-sites in the AutoX enable/disable flow
+  (see the `TODO(WS3/WS5)` markers), and the LSPosed IPC `displayId` plumbing.
+- **On-device validation is PENDING for every privileged path.** The privileged glue
+  carries `// TODO(device-verify)` markers where exact hidden-API signatures/values/return
+  contracts can only be confirmed on a real rooted device (API-34 `injectInputEvent` via
+  `InputManagerGlobal`, `AudioPolicy#setUidDeviceAffinity`, `DisplayInfo.flags &
+  Display.FLAG_TRUSTED`, the Car App SDK host-digest format).
+- **`InputInjectionBridge` is SCAFFOLDING, not a working bypass.** Its `allow()` is a
+  documented no-op placeholder; the per-display permission-check rewrite against the real
+  `InputManagerService` signature is not yet implemented (`// TODO(device-verify)`).
+- **Capability probing**: there is no `ReflectiveCapabilityProbe` class. Capability inputs
+  are collected by the existing excluded glue (`RootDisplayProvider#isTrustedDisplayHonored`,
+  `ReflectiveGestureInjector#isInjectionHonored`, the settings providers' `SettingsResult`)
+  and turned into a snapshot by the pure `CapabilityDecider`.
+
 ## Overview
 
 The AutoX feature lets AndroidAutoX project arbitrary Android apps onto a car head-unit
@@ -106,9 +127,12 @@ can be launched onto its virtual display, and that `ActivityOptions.setLaunchBou
 ### Spec, applier, and bounds calculator
 
 All policy (which keys, which values, revert strategy) lives in the pure helper
-`SecureSettingsSpec`.  The thin applier `FreeformSettingsApplier` executes the spec
-against a `SystemSettingsProvider` — it contains no decision logic.  The
-`LaunchBoundsCalculator` computes the launch-bounds rectangle for the "forced vertical"
+`FreeformGlobalSettingsSpec` (formerly `SecureSettingsSpec` — renamed because the keys live
+in `Settings.Global`).  It emits shared `SettingsEntry` lists that the shared instance
+`SettingsApplier` (constructed with `Namespace.GLOBAL`) writes against a
+`SystemSettingsProvider`, aggregating outcomes into the shared `ApplyResult`
+(continue-and-report).  The `LaunchBoundsCalculator` computes the launch-bounds rectangle
+for the "forced vertical"
 (portrait) case: on a landscape virtual display it shrinks the window width to satisfy a
 target aspect ratio and centres it horizontally.
 
@@ -116,7 +140,7 @@ target aspect ratio and centres it horizontally.
 
 Before AutoX enables these keys it reads the current value of each key via the
 `SystemSettingsProvider`.  The snapshot (a `null` for absent keys, an `Integer` for
-present ones) is passed to `SecureSettingsSpec.revertList` to produce the correct
+present ones) is passed to `FreeformGlobalSettingsSpec.revertList` to produce the correct
 per-key revert strategy:
 
 - `RESTORE_PRIOR` — key had a value; write it back.
@@ -127,9 +151,9 @@ The actual call-site that triggers revert is in the AutoX enable/disable flow
 
 ```java
 // TODO(WS3) call-site in AutoXScreen.onAutoXDisabled() / enable-policy disable path:
-//   List<SecureSettingsSpec.Entry> revertEntries =
-//       SecureSettingsSpec.revertList(priorForceResizable, priorEnableFreeform);
-//   FreeformSettingsApplier.revert(revertEntries, provider);
+//   List<SettingsEntry> revertEntries =
+//       FreeformGlobalSettingsSpec.revertList(priorForceResizable, priorEnableFreeform);
+//   new SettingsApplier(provider, SettingsApplier.Namespace.GLOBAL).revert(revertEntries);
 ```
 
 The prior values must be persisted between enable and disable (e.g. in
@@ -153,9 +177,9 @@ and passes it to `ActivityOptions.setLaunchBounds`.
 
 | Class | Layer | Coverage |
 |---|---|---|
-| `SecureSettingsSpec` | Pure spec: keys, enabled values, revert strategy | 100% required |
-| `LaunchBoundsCalculator` | Pure math: forced-vertical bounds computation | 100% required |
-| `FreeformSettingsApplier` | Thin loop over spec + provider (no Android imports) | 100% required |
+| `FreeformGlobalSettingsSpec` | Pure spec: keys, enabled values, revert strategy (emits `SettingsEntry`) | 100% required |
+| `LaunchBoundsCalculator` | Pure math: forced-vertical bounds computation (`fullDisplay` validates but ignores `densityDpi`) | 100% required |
+| `SettingsEntry` / `ApplyResult` / `SettingsApplier` | Shared pure entry + result + instance applier (GLOBAL/SECURE) | 100% required |
 
 ## Testable-logic vs excluded-glue split
 
@@ -169,9 +193,9 @@ and passes it to `ActivityOptions.setLaunchBounds`.
 | `AutoXAppRegistry` | Pure registry (no Android imports) | 100% required |
 | `AppLaunchPolicy` | Pure decision logic (no Android imports) | 100% required |
 | `SurfaceGeometry` | Pure decision logic — resize-vs-recreate policy (WS2) | 100% required |
-| `SecureSettingsSpec` | Pure spec — WS3 resizable/freeform keys + revert strategy | 100% required |
+| `FreeformGlobalSettingsSpec` | Pure spec — WS3 resizable/freeform keys + revert strategy | 100% required |
 | `LaunchBoundsCalculator` | Pure math — forced-vertical bounds (WS3) | 100% required |
-| `FreeformSettingsApplier` | Pure loop (no Android imports) — applies/reverts spec (WS3) | 100% required |
+| `SettingsEntry` / `ApplyResult` / `SettingsApplier` | Shared pure entry/result + instance applier (no Android imports) | 100% required |
 | `GestureInjector` | Interface — no executable lines | Excluded (safety) |
 | `ReflectiveGestureInjector` | Reflection / InputManager (framework) | Excluded |
 | `VirtualDisplayController` | DisplayManager (framework) | Excluded |
@@ -244,11 +268,12 @@ is obtained. Two implementations sit behind the seam:
 | `ProviderSelectionPolicy` | Pure decision: caps → `LSPOSED`/`ROOT_REFLECTION`/`DEGRADED` + reason | 100% required |
 | `IpcCommand` | Pure app↔module wire schema (encode/decode over XSharedPreferences) | 100% required |
 | `HookDescriptor`, `HookTargetSet`, `HookTargetTable` | Pure per-SDK (31–34) hook-target table + resolver (incl. unknown-SDK branch) | 100% required |
-| `CapabilityDecider`, `TrustedFlagPolicy` | Pure capability-from-probe + trusted-flag math | 100% required |
+| `CapabilityDecider`, `TrustedFlagPolicy` | Pure capability-from-probe (inputs from existing glue; no `ReflectiveCapabilityProbe` class) + trusted-flag math | 100% required |
+| `HookGatePolicy` | Pure act/no-act gate (primitives) so LSPosed hooks act only for AutoX's display | 100% required |
 | `InputProvider`/`DisplayProvider`/`SystemSettingsProvider`/`AudioRouter` | Pure interfaces (no executable lines) | n/a |
 | `RootSystemSettingsProvider`, `RootDisplayProvider` | Settings/DisplayManager framework plumbing | Excluded |
 | `ReflectiveGestureInjector` | now also implements `InputProvider` | Excluded |
-| `AutoXXposedModule`, `TrustedFlagBridge`, `InputInjectionBridge` | LSPosed/Xposed `system_server` reflection | Excluded |
+| `AutoXXposedModule`, `TrustedFlagBridge`, `InputInjectionBridge` | LSPosed/Xposed `system_server` reflection (each gated by the pure `HookGatePolicy` to AutoX's display; `InputInjectionBridge.allow()` is a no-op placeholder) | Excluded |
 
 ### Selection policy
 
@@ -493,8 +518,8 @@ Guest app text field focused (on VirtualDisplay)
     │
     ▼  WMS checks per-display flags
     │
-    │  shouldShowSystemDecors_<id> == 1  ─── (written by ImeDisplaySettingsApplier)
-    │  shouldShowIme_<id>          == 1  ─── (written by ImeDisplaySettingsApplier)
+    │  shouldShowSystemDecors_<id> == 1  ─── (written by SettingsApplier, SECURE)
+    │  shouldShowIme_<id>          == 1  ─── (written by SettingsApplier, SECURE)
     │  display is TRUSTED               ─── (VirtualDisplayController.defaultFlags())
     ▼
 WMS routes IME window to VirtualDisplay
@@ -532,17 +557,23 @@ without any additional wiring in AutoX.
 
 #### Apply / Revert lifecycle
 
-`ImeDisplaySettingsSpec.forDisplay(displayId)` builds the spec.
-`ImeDisplaySettingsApplier.readPriorAndApply(spec)` reads the prior values (to support
-clean revert), then writes `VALUE_ENABLED` (1) for both keys in apply order
-(system-decors first, then IME). On session teardown (virtual display released),
-`ImeDisplaySettingsApplier.revert(specWithPriors)` restores the prior values in
-reverse order (IME first, then system-decors).
+`ImeDisplaySettingsSpec.forDisplay(displayId)` builds the spec. The pure `ImeSettingsReader`
+reads the prior values from the `SystemSettingsProvider` (to support a clean revert) and
+returns a populated spec. `spec.applyEntries()` then yields shared `SettingsEntry` objects
+that the shared instance `SettingsApplier` (constructed with `Namespace.SECURE`) writes,
+in apply order (system-decors first, then IME). On session teardown (virtual display
+released), `spec.revertEntries()` + `SettingsApplier.revert(...)` restores the prior values
+in reverse order (IME first, then system-decors).
+
+> Migration note: the former bespoke `ImeDisplaySettingsApplier` (and its private
+> `ApplyResult`/`Entry` types) has been removed. IME settings now use the same shared
+> `SettingsEntry` / `SettingsApplier` / `ApplyResult` types as the freeform/global path; the
+> only IME-specific piece left is the pure `ImeSettingsReader` prior-read helper.
 
 #### WS4 provider seam
 
 Both keys are protected by `WRITE_SECURE_SETTINGS` (a signature-level permission).
-`ImeDisplaySettingsApplier` writes them via the `SystemSettingsProvider` interface
+The shared `SettingsApplier` writes them via the `SystemSettingsProvider` interface
 (WS4 seam), which is backed at runtime by either a root-reflection implementation
 (`RootSystemSettingsProvider`) or an LSPosed hook (`AutoXXposedModule`) that relaxes the
 permission check inside `system_server`.
@@ -553,16 +584,17 @@ implementation path.
 
 #### TODO — call-site wiring (excluded glue)
 
-The `ImeDisplaySettingsApplier` is pure logic and fully tested, but it must be wired into
-the excluded framework-glue classes at session start/stop:
+The IME spec/reader/applier are pure logic and fully tested, but they must still be wired
+into the excluded framework-glue classes at session start/stop (PENDING):
 
 - **`AutoXScreen.onSurfaceAvailable`** (excluded): after `VirtualDisplayController` creates
-  the trusted virtual display and returns its `displayId`, construct an
-  `ImeDisplaySettingsApplier` with the live `SystemSettingsProvider` (injected via
-  `AutoXSession` or `AutoXCarAppService`) and call `readPriorAndApply(spec)`. Store the
-  returned `specWithPriors` on the session state.
-- **`AutoXScreen.onSurfaceDestroyed`** (excluded): retrieve the stored `specWithPriors` and
-  call `applier.revert(specWithPriors)` to restore the prior settings.
+  the trusted virtual display and returns its `displayId`, build
+  `ImeDisplaySettingsSpec.forDisplay(displayId)`, populate priors via
+  `new ImeSettingsReader(provider).readPriors(spec)`, then
+  `new SettingsApplier(provider, Namespace.SECURE).apply(specWithPriors.applyEntries())`.
+  Persist the populated spec's priors on the session state.
+- **`AutoXScreen.onSurfaceDestroyed`** (excluded): rebuild the populated spec from the
+  persisted priors and call `SettingsApplier.revert(spec.revertEntries())`.
 
 These wiring points are in `AutoXScreen` (excluded from coverage gate) and therefore
 require human or device validation rather than unit tests.
@@ -572,9 +604,10 @@ require human or device validation rather than unit tests.
 | Path | Role |
 |---|---|
 | `app/src/main/java/com/xiddoc/androidautox/autox/` | All AutoX classes |
-| `app/src/main/java/com/xiddoc/androidautox/autox/SecureSettingsSpec.java` | WS3 pure spec: resizable/freeform keys + revert strategy |
+| `app/src/main/java/com/xiddoc/androidautox/autox/FreeformGlobalSettingsSpec.java` | WS3 pure spec: resizable/freeform keys + revert strategy (formerly `SecureSettingsSpec`) |
 | `app/src/main/java/com/xiddoc/androidautox/autox/LaunchBoundsCalculator.java` | WS3 pure forced-vertical bounds computation |
-| `app/src/main/java/com/xiddoc/androidautox/autox/FreeformSettingsApplier.java` | WS3 thin applier (spec + provider) |
+| `app/src/main/java/com/xiddoc/androidautox/autox/provider/SettingsEntry.java` · `ApplyResult.java` · `SettingsApplier.java` | Shared pure entry/result + instance applier (GLOBAL/SECURE) |
+| `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/HookGatePolicy.java` | Pure act/no-act gate scoping LSPosed hooks to AutoX's display |
 | `app/src/main/java/com/xiddoc/androidautox/autox/provider/` | WS4 provider seam (pure interfaces + policy/schema/table) |
 | `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/` | WS4 LSPosed module glue (excluded) |
 | `app/src/xposedStub/java/` | Local compileOnly Xposed API stub (offline `-PuseXposedStub=true` fallback) |

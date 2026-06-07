@@ -1,8 +1,13 @@
 package com.xiddoc.androidautox.autox.provider;
 
 /**
- * Pure logic that turns raw probe inputs (gathered by the excluded
- * {@code ReflectiveCapabilityProbe} glue) into a {@link ProviderCapabilities} snapshot.
+ * Pure logic that turns raw probe inputs into a {@link ProviderCapabilities} snapshot.
+ *
+ * <p>The raw inputs are collected at runtime by the existing excluded provider glue — e.g.
+ * {@code RootDisplayProvider#isTrustedDisplayHonored()},
+ * {@code ReflectiveGestureInjector#isInjectionHonored()}, and the settings providers'
+ * {@link SettingsResult} outcomes — rather than by any single dedicated probe class. (An
+ * earlier draft referenced a {@code ReflectiveCapabilityProbe} that was never added.)
  *
  * <p>Separating this from the reflection keeps the decision logic 100% unit testable: the
  * glue only collects booleans from the live system; this class decides what they mean.
