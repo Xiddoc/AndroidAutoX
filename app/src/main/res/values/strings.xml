@@ -206,4 +206,6 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="autox_notification_channel_desc">Shown while AndroidAutoX is projecting an app onto the car display</string>
     <string name="autox_notification_title">AutoX projection active</string>
     <string name="autox_notification_text">An app is being projected onto your car display via AndroidAutoX</string>
+    <!-- WS4: LSPosed module description shown in the LSPosed manager. -->
+    <string name="xposed_module_description">Honors trusted virtual displays, cross-display input injection, per-display IME/system-decors and launch-on-display for AndroidAutoX projection.</string>
 </resources>
