@@ -59,11 +59,8 @@ section in [`AGENTS.md`](AGENTS.md) and the per-class map in
 
 ## 🌍 Translations
 
-AndroidAutoX is open to translations. Translations live in `app/src/main/res/values-<locale>/strings.xml` — to add or fix a language, copy the English source from `app/src/main/res/values/strings.xml` and open a pull request. Please don't reupload the APK elsewhere; just link people to the download page.
+AndroidAutoX is open to translations. See [`TRANSLATIONS.md`](TRANSLATIONS.md) for how to add or fix a language.
 
 ## 🙏 Credits
 
-- Originally created by [Shmykelsa](https://github.com/shmykelsa)
-- [Jen94](https://github.com/jen94) for the original app whitelist hack
-- [SAAX by agentdr8](https://gitlab.com/agentdr8/saax), which inspired several features
-- [AA Phenotype Patcher by Eselter](https://github.com/Eselter/AA-Phenotype-Patcher)
+Credits and the full list of translators live in [`THANKS.md`](THANKS.md).

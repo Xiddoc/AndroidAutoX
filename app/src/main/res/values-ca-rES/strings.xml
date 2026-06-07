@@ -65,7 +65,6 @@ VERMELL= Patch no aplicat\n</string>
     <string name="patch_app">Patch\u0020</string>
     <string name="default_string">\u0020Per defecte</string>
     <string name="app_list_label">Llista d\'Aplicacions</string>
-    <string name="translators_button">Traduït per</string>
     <string name="custom_wallpapers">Fons de pantalla</string>
     <string name="tutorial_wallpapers">Aquest ajust activarà la nova funció de canvi de fons de pantalla en Android Auto. Es requereix Android Auto 5.8 o superior.\nADVERTÈNCIA: Si fas servir Wallpapers For Android Auto, hauràs d\'actualitzar-ho com a mínim a la versió 3.0, altrament aquest ajust no permetrà funcionar correctament Wallpapers For Android Auto.</string>
     <string name="tutorial_dark_mode">Starting from December 2020, Google reverted a behaviour that happened since Android 10. Previously, the light/dark mode on Android Auto followed the light/dark mode on the phone and vice versa. This meant that switching the phone to dark mode had effect on the car, or if the phone was in dark mode and the car had lights off it used to switch on the light theme on the phone.\n However, since this feature of \"independent\" dark mode was introduced, users with Aftermarket headunits have no way to switch to dark mode anymore without actually wiring the stereo to the car\'s lights.\n This tweak makes sure that night mode is again dependent from phone and switching light/dark mode on phone will have its effects on cars too.</string>

@@ -85,7 +85,6 @@ Android Auto 5.8 or superior is required.</string>
     <string name="patch_app">Patch\u0020</string>
     <string name="default_string">\u0020Default</string>
     <string name="app_list_label">Apps List</string>
-    <string name="translators_button">Translated by</string>
     <string name="about_part_one"><![CDATA[AndroidAutoX<br><br>Made with &#10084; by <a href=\"https://github.com/Xiddoc\">Xiddoc</a><br><br>Source code is available on <a href=\"https://github.com/Xiddoc/AndroidAutoX\">GitHub</a>]]></string>
     <string name="custom_wallpapers">Wallpapers</string>
     <string name="tutorial_wallpapers">This tweak will activate the new built in wallpaper changer in Android Auto. Android Auto 5.8 or superior is required.\nWARNING: If you are a user of Wallpapers For Android Auto, you will need to update it to at least version 3.0, otherwise this tweak will break Wallpapers For Android Auto functionality.</string>
@@ -207,7 +206,4 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <!-- Settings tab: developer-mode toggle toasts -->
     <string name="settings_devmode_on">Developer mode enabled</string>
     <string name="settings_devmode_off">Developer mode disabled</string>
-
-    <!-- Settings tab: "Translated by" list (proper nouns; not translatable) -->
-    <string name="translators_list"><![CDATA[Russian: Diversant96<br>Dutch: Coyenzo, smit.sydney<br>Slovak: Jozo19<br>Spanish: Krilok, jdavidcs4<br>Czech: Martin2412, LLZN, pesekpata<br>Slovenian: Brubblu<br>French: Nova.kin, Sperafico<br>Brazilian Portuguese: Gsproenca<br>Vietnamese: Quang.chk1, votruongvu.hcm<br>German: Lassmiranda, cbrosius<br>Korean: Mabig<br>Catalan: rogerpi95<br>Polish: Nor7ovich, MarcinzSowie, Geranium743<br>Serbian: BojanJagodic91<br>Chinese (simplified): Danchunlanse<br>Chinese (traditional): chh2299<br>Hebrew: yaari302<br>Japanese: HHSAN<br>Greek: panbimis<br>Turkish: un4saken<br>Arabic: almaqhor<br><br>Interested in translating AndroidAutoX in your own language? Open a translation PR on <a href=\"https://github.com/Xiddoc/AndroidAutoX\">GitHub</a>!]]></string>
 </resources>

@@ -1968,14 +1968,6 @@ public class MainActivity extends AppCompatActivity {
         settingsAbout.setText(Html.fromHtml(getString(R.string.about_part_one)));
         settingsAbout.setMovementMethod(LinkMovementMethod.getInstance());
 
-        Button translators = findViewById(R.id.settings_translators);
-        translators.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showTranslatorsDialog();
-            }
-        });
-
         final View devGroup = findViewById(R.id.settings_dev_group);
 
         // Drive the wiring from SettingAction so it stays the canonical list of settings
@@ -2105,23 +2097,6 @@ public class MainActivity extends AppCompatActivity {
     private void applyToggleLabel(Button b, int labelRes, boolean on) {
         b.setText(getString(R.string.settings_toggle_label, getString(labelRes),
                 getString(on ? R.string.settings_state_on : R.string.settings_state_off)));
-    }
-
-    /**
-     * The "Translated by" list — moved verbatim out of the old {@code AboutDialog} neutral
-     * button. Shown from the Settings tab's translators button.
-     */
-    private void showTranslatorsDialog() {
-        androidx.appcompat.app.AlertDialog.Builder builder =
-                new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this);
-        builder.setMessage(Html.fromHtml(getString(R.string.translators_list)));
-        builder.setCancelable(true);
-        builder.setPositiveButton(getString(android.R.string.ok), (dialog, which) -> {
-        });
-        androidx.appcompat.app.AlertDialog alert = builder.create();
-        alert.show();
-        ((TextView) alert.findViewById(android.R.id.message))
-                .setMovementMethod(LinkMovementMethod.getInstance());
     }
 
     public WindowManager.LayoutParams setDialogLayoutParams(Dialog dialog) {

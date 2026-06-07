@@ -27,22 +27,17 @@
             android:layout_height="wrap_content"
             android:text="@string/settings_header_about" />
 
+        <!-- The About text sits on a glassy card so it stays readable against the
+             ambient aurora background (the bare TextView washed out over it). -->
         <TextView
             android:id="@+id/settings_about_text"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
+            android:background="@drawable/info_card_bg"
+            android:padding="14dp"
             android:text="@string/about_part_one"
             android:textColor="@color/text_primary" />
-
-        <Button
-            android:id="@+id/settings_translators"
-            style="@style/ButtonStyle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:clickable="true"
-            android:focusable="true"
-            android:text="@string/translators_button" />
 
         <!-- GENERAL -->
         <TextView
