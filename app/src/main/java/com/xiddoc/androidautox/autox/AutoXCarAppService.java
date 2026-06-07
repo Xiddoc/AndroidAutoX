@@ -19,31 +19,56 @@ import androidx.car.app.validation.HostValidator;
  * connection. The session owns the {@link AutoXScreen} which drives the virtual-display
  * lifecycle (create on surface available, release on surface destroyed).
  *
- * <h2>Host validation</h2>
- * <p>{@link #createHostValidator()} returns {@link HostValidator#ALLOW_ALL_HOSTS_VALIDATOR}
- * for development convenience.
+ * <h2>Host validation (WS7)</h2>
+ * <p>{@link #createHostValidator()} builds a real {@link HostValidator} from the
+ * {@link HostAllowlist} default, which restricts connections to the official Android
+ * Auto gearhead host ({@code com.google.android.projection.gearhead}) signed with
+ * the expected Google release certificate fingerprint.
  *
- * <p><b>Production caveat:</b> {@code ALLOW_ALL_HOSTS_VALIDATOR} accepts connections
- * from any host including unofficial ones. For a production release, replace this with
- * a {@link HostValidator} built from the official Android Auto host certificate
- * fingerprints to prevent rogue hosts from connecting. See the Jetpack Car App
- * {@code HostValidator.Builder} documentation for details.
+ * <p>The pure allowlist data and matching logic live in {@link HostAllowlist}
+ * (100% unit-tested).  The only Android-coupled code here is the
+ * {@link HostValidator.Builder} call — this glue class is excluded from the coverage gate.
+ *
+ * <p><b>Human-verification note:</b> the SHA-256 certificate digest baked into
+ * {@link HostAllowlist#GEARHEAD_SHA256} should be verified against the device-installed
+ * Android Auto build; see the Javadoc on that constant for the {@code adb} command.
  *
  * <p>This class is a framework-entry point and is excluded from the JaCoCo coverage gate.
  */
 public final class AutoXCarAppService extends CarAppService {
 
     /**
-     * Returns {@link HostValidator#ALLOW_ALL_HOSTS_VALIDATOR}.
+     * Builds and returns a {@link HostValidator} that restricts Car App connections to
+     * the official Android Auto gearhead host package and its known certificate digest(s).
      *
-     * <p><b>IMPORTANT — production caveat:</b> replace with a certificate-fingerprint
-     * based validator before publishing to the Play Store. The allow-all validator is
-     * acceptable only for development / sideloaded builds.
+     * <p>The allowlist data is provided by {@link HostAllowlist#createDefault()}.
+     * Each {@link HostAllowlist.HostEntry} is iterated; for each entry every digest is
+     * registered with {@link HostValidator.Builder#addAllowedHost(String, String)} so
+     * the builder accumulates the same set as the pure allowlist object.
      */
     @NonNull
     @Override
     public HostValidator createHostValidator() {
-        return HostValidator.ALLOW_ALL_HOSTS_VALIDATOR;
+        HostAllowlist allowlist = HostAllowlist.createDefault();
+        HostValidator.Builder builder = new HostValidator.Builder(getApplicationContext());
+        for (HostAllowlist.HostEntry entry : allowlist.entries()) {
+            for (String digest : entry.sha256Digests) {
+                // addAllowedHost(packageName, sha256Digest): registers one package+digest
+                // pair.  Called once per digest to support key-rotation entries that list
+                // multiple fingerprints for the same host package.
+                //
+                // The stored digest is colon-separated UPPERCASE hex (keytool form); the Car
+                // App SDK matches against the connecting host's computed (lowercase)
+                // fingerprint, so we register the pure-computed canonical form instead of the
+                // raw stored value. A digest that fails to canonicalize is skipped (it can
+                // never legitimately match) rather than registered verbatim.
+                String canonical = HostAllowlist.canonicalDigestForCarAppSdk(digest);
+                if (canonical != null) {
+                    builder.addAllowedHost(entry.packageName, canonical);
+                }
+            }
+        }
+        return builder.build();
     }
 
     /**

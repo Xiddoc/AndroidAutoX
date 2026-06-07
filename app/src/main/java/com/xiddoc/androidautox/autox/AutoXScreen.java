@@ -1,9 +1,11 @@
 package com.xiddoc.androidautox.autox;
 
 import android.content.Intent;
+import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.hardware.input.InputManager;
 import android.util.Log;
+import android.view.Surface;
 
 import androidx.annotation.NonNull;
 import androidx.car.app.AppManager;
@@ -33,12 +35,25 @@ import androidx.car.app.navigation.model.NavigationTemplate;
  *       └─ frames flow back through Surface to Android Auto head unit
  * </pre>
  *
- * <h2>Surface lifecycle</h2>
+ * <h2>Surface lifecycle — resize vs recreate</h2>
  * <ul>
- *   <li>{@link SurfaceCallback#onSurfaceAvailable(SurfaceContainer)}: creates the
- *       {@link VirtualDisplayController} and optionally launches the first default app.</li>
- *   <li>{@link SurfaceCallback#onSurfaceDestroyed(SurfaceContainer)}: releases the
- *       {@link VirtualDisplayController}, freeing the display resource.</li>
+ *   <li>{@link SurfaceCallback#onSurfaceAvailable(SurfaceContainer)}: the host provides a
+ *       surface.  If a display already exists, {@link SurfaceGeometry#decide} is consulted:
+ *       <ul>
+ *         <li>{@link SurfaceGeometry.Action#NOOP} — geometry unchanged; no-op.</li>
+ *         <li>{@link SurfaceGeometry.Action#RESIZE} — same {@link Surface} object, new size/dpi;
+ *             calls {@link VirtualDisplayController#resize(AutoXDisplaySpec)} to update the
+ *             existing display in-place (avoids an unnecessary app relaunch).</li>
+ *         <li>{@link SurfaceGeometry.Action#RECREATE} — the host tore down and re-created the
+ *             surface; the old display is released and a new one is created.</li>
+ *       </ul>
+ *   </li>
+ *   <li>{@link SurfaceCallback#onSurfaceDestroyed(SurfaceContainer)}: releases the display
+ *       (idempotent).</li>
+ *   <li>{@link SurfaceCallback#onVisibleAreaChanged(Rect)}: logs the new visible area for
+ *       future coordinate-clipping use.</li>
+ *   <li>{@link SurfaceCallback#onStableAreaChanged(Rect)}: logs the new stable area for
+ *       future content-inset use.</li>
  * </ul>
  *
  * <h2>Gesture routing</h2>
@@ -70,6 +85,13 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
 
     /** Spec for the car surface; set when the surface becomes available. */
     private AutoXDisplaySpec carSpec;
+
+    /**
+     * The {@link Surface} object currently backing the virtual display.
+     * Tracked so that {@code onSurfaceAvailable} can detect surface-identity changes
+     * (host tore down and re-created the surface vs. just resizing it in place).
+     */
+    private Surface currentSurface;
 
     /**
      * Constructs an {@code AutoXScreen} with production-wired collaborators.
@@ -126,11 +148,20 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
     // ------------------------------------------------------------------
 
     /**
-     * Called by the Android Auto host when a drawable surface is ready.
+     * Called by the Android Auto host when a drawable surface is ready or when
+     * the surface geometry changes.
      *
-     * <p>Builds an {@link AutoXDisplaySpec} from the container geometry, creates a
-     * {@link VirtualDisplayController} backed by the provided surface, then launches
-     * the first default app from {@link AutoXAppRegistry} onto the virtual display.
+     * <p>Builds an {@link AutoXDisplaySpec} from the container geometry, then applies
+     * the resize-vs-recreate policy via {@link SurfaceGeometry#decide}:
+     * <ul>
+     *   <li>{@link SurfaceGeometry.Action#NOOP}: geometry unchanged — nothing to do.</li>
+     *   <li>{@link SurfaceGeometry.Action#RESIZE}: same surface, new size/dpi — resizes the
+     *       existing virtual display in place via
+     *       {@link VirtualDisplayController#resize(AutoXDisplaySpec)}.</li>
+     *   <li>{@link SurfaceGeometry.Action#RECREATE}: new surface object — releases the old
+     *       display and creates a fresh one, then re-launches the guest app.</li>
+     * </ul>
+     * When there is no existing display yet (first call), a display is always created.
      */
     @Override
     public void onSurfaceAvailable(@NonNull SurfaceContainer surfaceContainer) {
@@ -145,43 +176,82 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             return;
         }
 
-        // The surface may be re-created without an intervening onSurfaceDestroyed; release
-        // any existing display first to avoid leaking the previous VirtualDisplay/service.
-        if (displayController != null) {
-            releaseDisplay();
-        }
-
-        carSpec = new AutoXDisplaySpec(
+        AutoXDisplaySpec newSpec = new AutoXDisplaySpec(
                 surfaceContainer.getWidth(),
                 surfaceContainer.getHeight(),
                 surfaceContainer.getDpi());
+        Surface newSurface = surfaceContainer.getSurface();
 
-        DisplayManager dm = getCarContext().getSystemService(DisplayManager.class);
-        try {
-            displayController = new VirtualDisplayController(
-                    dm, carSpec, surfaceContainer.getSurface());
-        } catch (RuntimeException e) {
-            Log.e(TAG, "AutoXScreen.onSurfaceAvailable: failed to create virtual display", e);
+        if (displayController == null) {
+            // First call: no display exists yet — always create.
+            createDisplay(newSpec, newSurface);
             return;
         }
 
-        // Start the foreground service to keep the projection session alive (wake lock +
-        // ongoing notification). Tied to the surface lifecycle: stopped in releaseDisplay().
-        getCarContext().startForegroundService(
-                new Intent(getCarContext(), AutoXForegroundService.class));
+        // A display already exists. Consult SurfaceGeometry to decide the action.
+        AutoXDisplaySpec oldSpec = carSpec;
+        boolean surfaceIdentityChanged = (currentSurface != newSurface);
 
-        // Launch the first default app (e.g. YouTube) onto the new virtual display.
-        AutoXTargetApp defaultApp = AutoXAppRegistry.defaults().get(0);
-        boolean launched = appLauncher.launch(defaultApp.packageName, displayController.getDisplayId());
-        if (!launched) {
-            Log.w(TAG, "AutoXScreen: default app '" + defaultApp.packageName
-                    + "' could not be launched — app may not be installed on this device");
+        SurfaceGeometry.Action action = SurfaceGeometry.decide(
+                oldSpec.getWidth(), oldSpec.getHeight(), oldSpec.getDensityDpi(),
+                newSpec.getWidth(), newSpec.getHeight(), newSpec.getDensityDpi(),
+                surfaceIdentityChanged);
+
+        Log.d(TAG, "AutoXScreen.onSurfaceAvailable: SurfaceGeometry.decide → " + action);
+
+        switch (action) {
+            case NOOP:
+                // Geometry and surface are identical — nothing to do.
+                break;
+            case RESIZE:
+                // Same surface object, different size/dpi: resize the existing display.
+                carSpec = newSpec;
+                displayController.resize(newSpec);
+                break;
+            case RECREATE:
+                // New surface object: release the old display and recreate.
+                releaseDisplay();
+                createDisplay(newSpec, newSurface);
+                break;
         }
     }
 
     /**
+     * Called by the Android Auto host when the visible area of the surface changes
+     * (e.g. an overlay is drawn on part of the surface by the host template).
+     *
+     * <p>The visible area describes the portion of the surface that is not occluded by
+     * host-drawn UI chrome. Logged here for diagnostics; future implementations can use
+     * this to clip the coordinate-translation range or inset the guest app's content.
+     *
+     * @param visibleArea the current visible (non-occluded) rectangle on the surface
+     */
+    @Override
+    public void onVisibleAreaChanged(@NonNull Rect visibleArea) {
+        Log.d(TAG, "AutoXScreen.onVisibleAreaChanged: " + visibleArea);
+        // Stored for future use (e.g. touch-coordinate clamping to visible area).
+        // No action needed yet: the CoordinateTranslator clamps to the full display bounds.
+    }
+
+    /**
+     * Called by the Android Auto host when the stable area of the surface changes.
+     *
+     * <p>The stable area is the region that remains consistently available regardless
+     * of temporary UI chrome (e.g. keyboard, overlays). Logged here for diagnostics;
+     * future implementations can use this to inset content layout.
+     *
+     * @param stableArea the current stable rectangle on the surface
+     */
+    @Override
+    public void onStableAreaChanged(@NonNull Rect stableArea) {
+        Log.d(TAG, "AutoXScreen.onStableAreaChanged: " + stableArea);
+        // Stored for future use (e.g. content-inset guidance for the guest app).
+    }
+
+    /**
      * Called by the Android Auto host when the surface is no longer available (e.g. the
-     * projection session ended or the user navigated away). Releases the virtual display.
+     * projection session ended or the user navigated away). Releases the virtual display
+     * idempotently.
      */
     @Override
     public void onSurfaceDestroyed(@NonNull SurfaceContainer surfaceContainer) {
@@ -247,14 +317,55 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
     // Private helpers
     // ------------------------------------------------------------------
 
+    /**
+     * Creates a new virtual display backed by {@code surface} with the given {@code spec},
+     * starts the foreground service, and launches the default guest app.
+     *
+     * <p>On failure to create the display, the state is left clean (no partial display
+     * or service started).
+     */
+    private void createDisplay(AutoXDisplaySpec spec, Surface surface) {
+        DisplayManager dm = getCarContext().getSystemService(DisplayManager.class);
+        try {
+            displayController = new VirtualDisplayController(dm, spec, surface);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "AutoXScreen.createDisplay: failed to create virtual display", e);
+            return;
+        }
+        carSpec = spec;
+        currentSurface = surface;
+
+        // Start the foreground service to keep the projection session alive (wake lock +
+        // ongoing notification). Tied to the surface lifecycle: stopped in releaseDisplay().
+        getCarContext().startForegroundService(
+                new Intent(getCarContext(), AutoXForegroundService.class));
+
+        // Launch the first default app (e.g. YouTube) onto the new virtual display.
+        AutoXTargetApp defaultApp = AutoXAppRegistry.defaults().get(0);
+        boolean launched = appLauncher.launch(
+                defaultApp.packageName, displayController.getDisplayId());
+        if (!launched) {
+            Log.w(TAG, "AutoXScreen: default app '" + defaultApp.packageName
+                    + "' could not be launched — app may not be installed on this device");
+        }
+    }
+
+    /**
+     * Releases the virtual display and stops the foreground service.
+     * Idempotent: safe to call even when no display is active.
+     */
     private void releaseDisplay() {
         if (displayController != null) {
             displayController.release();
             displayController = null;
-            // Stop the foreground service: its lifecycle is tied to an active display.
-            getCarContext().stopService(
-                    new Intent(getCarContext(), AutoXForegroundService.class));
         }
+        // Stop the foreground service unconditionally (stopService is idempotent — a no-op if
+        // the service is not running). Doing this even when displayController was already null
+        // guarantees the wake-lock-holding service can never outlive the surface, e.g. if the
+        // display failed to create but the service had already started.
+        getCarContext().stopService(
+                new Intent(getCarContext(), AutoXForegroundService.class));
         carSpec = null;
+        currentSurface = null;
     }
 }

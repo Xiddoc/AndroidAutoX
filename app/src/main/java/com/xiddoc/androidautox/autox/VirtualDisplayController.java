@@ -36,8 +36,11 @@ public final class VirtualDisplayController {
 
     private final VirtualDisplay virtualDisplay;
 
-    /** The spec this controller was created with (car/virtual geometry). */
-    private final AutoXDisplaySpec spec;
+    /**
+     * The spec describing the current geometry of the virtual display.
+     * Updated in place by {@link #resize(AutoXDisplaySpec)}.
+     */
+    private AutoXDisplaySpec spec;
 
     /** True once {@link #release()} has run; guards against double-release and use-after-release. */
     private boolean released;
@@ -116,6 +119,33 @@ public final class VirtualDisplayController {
             throw new IllegalStateException("VirtualDisplayController has been released");
         }
         return spec;
+    }
+
+    /**
+     * Resizes the underlying {@link VirtualDisplay} in place without recreating it.
+     *
+     * <p>Use this when the car surface reports new dimensions or dpi but the
+     * {@link android.view.Surface} object itself has not changed — i.e. when
+     * {@link SurfaceGeometry#decide} returns {@link SurfaceGeometry.Action#RESIZE}.
+     * Resizing avoids the overhead of destroying and recreating the display (which
+     * would re-trigger an app launch) while keeping the projection in sync with the
+     * new car-surface geometry.
+     *
+     * @param newSpec the new display geometry; must not be {@code null}
+     * @throws IllegalArgumentException if {@code newSpec} is {@code null}
+     * @throws IllegalStateException    if called after {@link #release()}
+     */
+    public void resize(@androidx.annotation.NonNull AutoXDisplaySpec newSpec) {
+        if (newSpec == null) {
+            throw new IllegalArgumentException("newSpec must not be null");
+        }
+        if (released) {
+            throw new IllegalStateException("VirtualDisplayController has been released");
+        }
+        Log.d(TAG, "VirtualDisplayController: resizing display id=" + getDisplayId()
+                + " to " + newSpec);
+        virtualDisplay.resize(newSpec.getWidth(), newSpec.getHeight(), newSpec.getDensityDpi());
+        spec = newSpec;
     }
 
     /**

@@ -58,6 +58,7 @@ import java.util.regex.Pattern;
 
 import com.xiddoc.androidautox.CarRemoverActivity.CarRemover;
 import com.xiddoc.androidautox.Utils.BottomDialog;
+import com.xiddoc.androidautox.autox.AutoXSettingsStore;
 
 @SuppressWarnings("ALL")
 public class MainActivity extends AppCompatActivity {
@@ -92,6 +93,8 @@ public class MainActivity extends AppCompatActivity {
     private ImageView declineSmsTweakStatus;
     private ImageView uxprototypeTweakStatus;
     private ImageView materialYouTweakStatus;
+    private ImageView autoXToggleStatus;
+    private Button autoXToggleButton;
     private TextView currentlySetHun;
     private TextView currentlySetMediaHun;
     private TextView currentlySetUSBSeekbar;
@@ -797,7 +800,30 @@ public class MainActivity extends AppCompatActivity {
 
         setOnLongClickListener(materialYouButton, R.string.tutorial_materialyou, R.drawable.tutorial_materialyou);
 
+        // --- AutoX virtual-display projection toggle (WS1) ---
+        final SharedPreferences autoXPrefs =
+                getSharedPreferences("autox_prefs", Context.MODE_PRIVATE);
+        autoXToggleButton = findViewById(R.id.autox_toggle_button);
+        autoXToggleStatus = findViewById(R.id.autox_toggle_status);
+        refreshAutoXButtonState(autoXPrefs);
 
+        autoXToggleButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                AutoXSettingsStore.toggleEnabled(autoXPrefs);
+                refreshAutoXButtonState(autoXPrefs);
+            }
+        });
+
+        setOnLongClickListener(autoXToggleButton, R.string.autox_tutorial);
+
+        Button autoXPickTargetButton = findViewById(R.id.autox_pick_target_button);
+        autoXPickTargetButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                startActivity(new Intent(MainActivity.this, AppsList.class));
+            }
+        });
 
         batteryoutline = findViewById(R.id.battoutline);
         batteryOutlineStatus = findViewById(R.id.batterystatus);
@@ -3380,6 +3406,21 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
         }.start();
 
         return;
+    }
+
+    /**
+     * Refreshes the AutoX toggle button label and status icon to reflect the current
+     * persisted enabled state in {@code prefs}.
+     *
+     * <p>Called once during {@code onCreate} and again each time the toggle is tapped.
+     * The status icon follows the same convention as other tweak icons:
+     * 2 = applied/enabled (green), 0 = not applied (red).
+     */
+    private void refreshAutoXButtonState(SharedPreferences prefs) {
+        boolean enabled = AutoXSettingsStore.isEnabled(prefs);
+        autoXToggleButton.setText(getString(
+                enabled ? R.string.autox_button_disable : R.string.autox_button_enable));
+        changeStatus(autoXToggleStatus, enabled ? 2 : 0, false);
     }
 
     public void showRebootButton() {
