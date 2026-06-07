@@ -6,11 +6,14 @@ import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.drawable.ColorDrawable;
 import android.widget.TextView;
 
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.rm.rmswitch.RMSwitch;
+import com.xiddoc.androidautox.AppCompatibilityClassifier.Category;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -48,8 +51,9 @@ public class MyAdapterTest {
         context.getSharedPreferences("appsListPref", 0).edit().clear().commit();
 
         items = new ArrayList<>();
-        items.add(new AppInfo("Alpha", "com.example.alpha", false));
-        items.add(new AppInfo("Beta", "com.example.beta", true));
+        // Alpha is NEEDS_BRIDGE (default) and unchecked; Beta is NATIVE_AUTO and checked.
+        items.add(new AppInfo("Alpha", "com.example.alpha", false, Category.NEEDS_BRIDGE));
+        items.add(new AppInfo("Beta", "com.example.beta", true, Category.NATIVE_AUTO));
 
         recyclerView = new RecyclerView(context);
         adapter = new MyAdapter(items, recyclerView);
@@ -127,5 +131,83 @@ public class MyAdapterTest {
         SharedPreferences prefs = context.getSharedPreferences("appsListPref", 0);
         assertFalse(prefs.contains("com.example.beta"));
         assertFalse(items.get(1).getIsChecked());
+    }
+
+    // -----------------------------------------------------------------------
+    // Badge binding + helper mappings
+    // -----------------------------------------------------------------------
+
+    private static int colorOf(android.view.View badge) {
+        return ((ColorDrawable) badge.getBackground()).getColor();
+    }
+
+    @Test
+    public void onBindViewHolder_bindsBadgeTextAndColorPerCategory() {
+        // Row 0 (Alpha) is NEEDS_BRIDGE; row 1 (Beta) is NATIVE_AUTO.
+        TextView badge0 = holderAt(0).itemView.findViewById(R.id.app_badge);
+        TextView badge1 = holderAt(1).itemView.findViewById(R.id.app_badge);
+
+        assertEquals(context.getString(R.string.badge_needs_bridge), badge0.getText().toString());
+        assertEquals(ContextCompat.getColor(context, R.color.status_red), colorOf(badge0));
+
+        assertEquals(context.getString(R.string.badge_native_auto), badge1.getText().toString());
+        assertEquals(ContextCompat.getColor(context, R.color.status_green), colorOf(badge1));
+    }
+
+    @Test
+    public void onBindViewHolder_mirrorShim_bindsYellowMirrorBadge() {
+        ArrayList<AppInfo> mirrorItems = new ArrayList<>();
+        mirrorItems.add(new AppInfo("Mir", "ru.inceptive.screentwoauto", false, Category.MIRROR_SHIM));
+        MyAdapter mirrorAdapter = new MyAdapter(mirrorItems, new RecyclerView(context));
+        RecyclerView rv = RecyclerTestSupport.laidOutRecycler(context, mirrorAdapter);
+
+        TextView badge = rv.findViewHolderForAdapterPosition(0)
+                .itemView.findViewById(R.id.app_badge);
+        assertEquals(context.getString(R.string.badge_mirror_shim), badge.getText().toString());
+        assertEquals(ContextCompat.getColor(context, R.color.status_yellow), colorOf(badge));
+    }
+
+    @Test
+    public void badgeStringRes_mapsEveryCategory() {
+        assertEquals(R.string.badge_native_auto, MyAdapter.badgeStringRes(Category.NATIVE_AUTO));
+        assertEquals(R.string.badge_mirror_shim, MyAdapter.badgeStringRes(Category.MIRROR_SHIM));
+        assertEquals(R.string.badge_needs_bridge, MyAdapter.badgeStringRes(Category.NEEDS_BRIDGE));
+    }
+
+    @Test
+    public void badgeColorRes_mapsEveryCategory() {
+        assertEquals(R.color.status_green, MyAdapter.badgeColorRes(Category.NATIVE_AUTO));
+        assertEquals(R.color.status_yellow, MyAdapter.badgeColorRes(Category.MIRROR_SHIM));
+        assertEquals(R.color.status_red, MyAdapter.badgeColorRes(Category.NEEDS_BRIDGE));
+    }
+
+    // -----------------------------------------------------------------------
+    // NEEDS_BRIDGE hint toast branch
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void rowClick_onNeedsBridgeItem_showsHintToast() {
+        // Alpha (row 0) is NEEDS_BRIDGE and unchecked -> toggling ON fires the hint.
+        holderAt(0).itemView.performClick();
+
+        assertEquals(context.getString(R.string.badge_needs_bridge_hint),
+                org.robolectric.shadows.ShadowToast.getTextOfLatestToast());
+    }
+
+    @Test
+    public void switchClick_onNativeAutoItem_doesNotShowBridgeHint() {
+        // Beta (row 1) is NATIVE_AUTO and checked -> toggling OFF must not show the
+        // bridge hint (covers the false side of the NEEDS_BRIDGE branch on add, and
+        // the remove path never hints). Toggle it OFF then back ON to add a NATIVE app.
+        context.getSharedPreferences("appsListPref", 0)
+                .edit().putString("com.example.beta", "Beta").commit();
+        RMSwitch sw1 = holderAt(1).itemView.findViewById(R.id.checkbox_app);
+
+        sw1.performClick(); // OFF (remove)
+        sw1.performClick(); // ON again (add, NATIVE_AUTO -> no hint)
+
+        assertEquals("adding a NATIVE_AUTO app shows the added toast, not the hint",
+                context.getString(R.string.added_app_action) + "com.example.beta",
+                org.robolectric.shadows.ShadowToast.getTextOfLatestToast());
     }
 }
