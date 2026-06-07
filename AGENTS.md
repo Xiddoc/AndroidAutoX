@@ -51,6 +51,20 @@ AndroidAutoX is a native Android app that applies "tweaks" to Google's Android A
 | `app/src/main/aidl/com/xiddoc/androidautox/Partition.aidl` + `Partition.java` | Parcelable {id, blob} crossing the binder |
 | `app/src/main/res/values/strings.xml` | English source strings (localization source of truth) |
 | `app/src/main/res/values-*/strings.xml` | ~33 translated locales (edited via PRs) |
+| `app/src/main/java/com/xiddoc/androidautox/autox/` | AutoX virtual-display subsystem (pure-logic + framework glue) |
+| `app/src/main/res/xml/automotive_app_desc.xml` | Car app descriptor (`<automotiveApp><uses name="template"/>`) |
+| `docs/autox-architecture.md` | AutoX subsystem architecture: pipeline, class split, input-injection caveat |
+
+## AutoX virtual-display subsystem
+
+The `autox/` sub-package implements an isolated virtual-display projection pipeline
+for the AutoX feature. Pure-logic classes (`AutoXDisplaySpec`, `CoordinateTranslator`,
+`VirtualDisplayConfig`, `GestureSpec`, `AutoXTargetApp`, `AutoXAppRegistry`,
+`AppLaunchPolicy`) have no Android imports and are covered at 100% by unit tests.
+Framework-glue classes (`VirtualDisplayController`, `AppLauncher`, `GestureInjector` /
+`ReflectiveGestureInjector`, `AutoXCarAppService`, `AutoXSession`, `AutoXScreen`,
+`AutoXForegroundService`) are excluded from the coverage gate. See
+`docs/autox-architecture.md` for the full pipeline diagram and design rationale.
 
 ## Building
 
