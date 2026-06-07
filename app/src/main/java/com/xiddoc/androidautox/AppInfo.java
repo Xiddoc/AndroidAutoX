@@ -1,16 +1,22 @@
 package com.xiddoc.androidautox;
 
-import java.util.ArrayList;
+import com.xiddoc.androidautox.AppCompatibilityClassifier.Category;
 
 public class AppInfo implements Comparable<AppInfo> {
     private String name;
     private String packageName;
     private boolean isChecked;
+    private final Category category;
 
     public AppInfo(String name, String packageName, boolean isChecked) {
+        this(name, packageName, isChecked, Category.NEEDS_BRIDGE);
+    }
+
+    public AppInfo(String name, String packageName, boolean isChecked, Category category) {
         this.name = name;
         this.packageName = packageName;
         this.isChecked = isChecked;
+        this.category = category;
     }
 
     public String getName() {
@@ -37,18 +43,12 @@ public class AppInfo implements Comparable<AppInfo> {
         this.isChecked = isChecked;
     }
 
+    public Category getCategory() {
+        return category;
+    }
+
     @Override
     public int compareTo(AppInfo o) {
-        ArrayList<String> aAutoAppsList = new ArrayList<>();
-        aAutoAppsList.add("com.github.slashmax.aamirror");
-        aAutoAppsList.add("me.aap.fermata.auto");
-        aAutoAppsList.add("com.github.slashmax.aamirror_plus");
-        aAutoAppsList.add("com.google.android.kk");
-        aAutoAppsList.add("com.google.android.kk2");
-        aAutoAppsList.add("com.mqbcoding.stats");
-        aAutoAppsList.add("org.openauto.aautolauncher");
-        aAutoAppsList.add("ru.inceptive.screentwoauto");
-        aAutoAppsList.add("com.garage.aastream");
         int comp1;
         int comp2;
         int result;
@@ -62,8 +62,8 @@ public class AppInfo implements Comparable<AppInfo> {
             return result;
         }
 
-        comp1 = aAutoAppsList.contains(o.getPackageName()) ? 1 : 0;
-        comp2 = aAutoAppsList.contains(this.getPackageName()) ? 1 : 0;
+        comp1 = AppCompatibilityClassifier.isKnownAa(o.getPackageName()) ? 1 : 0;
+        comp2 = AppCompatibilityClassifier.isKnownAa(this.getPackageName()) ? 1 : 0;
 
         result = comp1 - comp2;
 

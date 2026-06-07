@@ -277,6 +277,10 @@ public final class PhixitTweaks {
                 l.add(FlagSpec.bool(FlagSpec.PKG_CAR, "should_bypass_validation", true));
                 l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "CarProjectionValidator__filter_disabled_packages_in_ispackageallowed_method", false));
                 l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "UnknownSources__allow_full_screen_apps", true));
+                l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "UnknownSources__enabled", true));
+                l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "UnknownSources__lite_unknown_sources_allowed", true));
+                l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "GearheadDeveloper__enabled", true));
+                l.add(FlagSpec.bool(FlagSpec.PKG_GEARHEAD, "GearheadDeveloper__settings_enabled", true));
                 break;
             default:
                 return null;

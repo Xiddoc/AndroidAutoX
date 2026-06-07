@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.xiddoc.androidautox.AppCompatibilityClassifier.Category;
+
 import org.junit.Test;
 
 /**
@@ -94,5 +96,25 @@ public class AppInfoTest {
     @Test
     public void isChecked_falseGetter() {
         assertFalse(new AppInfo("n", "p", false).getIsChecked());
+    }
+
+    // --- category ---------------------------------------------------------
+
+    @Test
+    public void threeArgConstructor_defaultsToNeedsBridge() {
+        AppInfo a = new AppInfo("Name", "pkg", true);
+        assertEquals(Category.NEEDS_BRIDGE, a.getCategory());
+    }
+
+    @Test
+    public void fourArgConstructor_retainsCategory() {
+        AppInfo a = new AppInfo("Name", "pkg", false, Category.NATIVE_AUTO);
+        assertEquals(Category.NATIVE_AUTO, a.getCategory());
+        assertEquals("Name", a.getName());
+        assertEquals("pkg", a.getPackageName());
+        assertFalse(a.getIsChecked());
+
+        AppInfo mirror = new AppInfo("M", "p", true, Category.MIRROR_SHIM);
+        assertEquals(Category.MIRROR_SHIM, mirror.getCategory());
     }
 }

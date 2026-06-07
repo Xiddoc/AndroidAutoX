@@ -156,7 +156,7 @@ public class TweakRegistryTest {
     public void patchedAppsSpecs_emptyWhitelist_whenNoAppsSelected() {
         List<FlagSpec> l = TweakRegistry.patchedAppsSpecs(ctx);
         assertEquals("", l.get(0).flag.stringValue);
-        assertEquals(11, l.size());
+        assertEquals(15, l.size());
     }
 
     @Test

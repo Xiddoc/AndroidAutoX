@@ -7,9 +7,12 @@ import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
+import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.Looper;
 import android.view.View;
@@ -42,13 +45,18 @@ import java.util.Map;
  * <p>This screen has two distinct behaviours worth pinning:
  *
  * <ul>
- *   <li><b>Car-app filter.</b> {@code AppsList.onCreate} enumerates every
- *       installed app via {@code PackageManager.getInstalledApplications(GET_META_DATA)}
- *       and keeps <em>only</em> those whose manifest metadata declares a non-zero
- *       {@code com.google.android.gms.car.application} entry (the Android-Auto
- *       compatibility marker). Apps without that metadata — or with no metadata at
- *       all — are excluded. We register fake apps both with and without the marker
- *       via {@link ShadowPackageManager} and assert the resulting list.</li>
+ *   <li><b>Full launchable enumeration + badging.</b> {@code AppsList.onCreate}
+ *       enumerates <em>every</em> launchable app — those exposing an
+ *       {@code ACTION_MAIN}/{@code CATEGORY_LAUNCHER} entry via
+ *       {@code queryIntentActivities} — de-duped by package, and re-reads each via
+ *       {@code getApplicationInfo(GET_META_DATA)}. Nothing is filtered out: each app
+ *       is instead <em>badged</em> by {@link AppCompatibilityClassifier} into
+ *       {@code NATIVE_AUTO} (declares the non-zero
+ *       {@code com.google.android.gms.car.application} marker), {@code MIRROR_SHIM}
+ *       (a known screen-mirroring shim), or {@code NEEDS_BRIDGE} (everything else,
+ *       including apps with no metadata, a present-but-zero marker, or a missing
+ *       launcher ApplicationInfo). We register fake launchable apps across these
+ *       cases via {@link ShadowPackageManager} and assert the resulting badges.</li>
  *   <li><b>Pre-population.</b> Any package already stored in the
  *       {@value #PREF_NAME} SharedPreferences (key = packageName, value = label)
  *       loads as <em>checked</em>. A stored package that is no longer installed is
@@ -115,8 +123,13 @@ public class AppsListTest {
     }
 
     /**
-     * Shared core: registers a fake installed app with the given metadata bundle
-     * (which may be {@code null} to cover the no-metadata branch).
+     * Shared core: registers a fake <em>launchable</em> installed app with the given
+     * metadata bundle (which may be {@code null} to cover the no-metadata branch).
+     *
+     * <p>The production code now enumerates apps via {@code queryIntentActivities(
+     * MAIN/LAUNCHER)} and re-reads each via {@code getApplicationInfo(pkg,
+     * GET_META_DATA)}, so the package needs both a registered ApplicationInfo (with
+     * metadata) and a MAIN/LAUNCHER activity that resolves.
      */
     private void installAppWithMeta(String pkg, String label, Bundle meta) {
         ApplicationInfo ai = new ApplicationInfo();
@@ -125,10 +138,24 @@ public class AppsListTest {
         ai.nonLocalizedLabel = label; // loadLabel() falls back to this off-device
         ai.metaData = meta;
 
+        String activityName = pkg + ".MainActivity";
+        ActivityInfo activityInfo = new ActivityInfo();
+        activityInfo.packageName = pkg;
+        activityInfo.name = activityName;
+        activityInfo.applicationInfo = ai;
+        activityInfo.nonLocalizedLabel = label;
+
         PackageInfo pi = new PackageInfo();
         pi.packageName = pkg;
         pi.applicationInfo = ai;
+        pi.activities = new ActivityInfo[]{activityInfo};
         shadowPm.installPackage(pi);
+
+        // Make the package launchable so queryIntentActivities(MAIN/LAUNCHER) returns
+        // a ResolveInfo carrying this activity (and thus its package).
+        ResolveInfo resolveInfo = new ResolveInfo();
+        resolveInfo.activityInfo = activityInfo;
+        shadowPm.addResolveInfoForIntentNoDefaults(launcherIntent(), resolveInfo);
     }
 
     /**
@@ -154,7 +181,7 @@ public class AppsListTest {
         installAppWithMeta(pkg, label, new Bundle());
     }
 
-    /** Registers an app whose {@code metaData} is null (covers the NPE-catch branch). */
+    /** Registers an app whose {@code metaData} is null (covers the null-bundle branch). */
     private void installAppNoMetaData(String pkg, String label) {
         installAppWithMeta(pkg, label, null);
     }
@@ -236,9 +263,11 @@ public class AppsListTest {
             View row = rv.getChildAt(i);
             TextView name = row.findViewById(R.id.app_name);
             TextView pkg = row.findViewById(R.id.app_package_name);
+            TextView badge = row.findViewById(R.id.app_badge);
             RMSwitch sw = row.findViewById(R.id.checkbox_app);
             byPackage.put(pkg.getText().toString(),
-                    new RowState(name.getText().toString(), sw.isChecked()));
+                    new RowState(name.getText().toString(), sw.isChecked(),
+                            badge.getText().toString()));
         }
         return byPackage;
     }
@@ -259,82 +288,175 @@ public class AppsListTest {
     private static final class RowState {
         final String label;
         final boolean checked;
+        final String badge;
 
-        RowState(String label, boolean checked) {
+        RowState(String label, boolean checked, String badge) {
             this.label = label;
             this.checked = checked;
+            this.badge = badge;
         }
 
         @Override
         public String toString() {
-            return "RowState{label='" + label + "', checked=" + checked + "}";
+            return "RowState{label='" + label + "', checked=" + checked
+                    + ", badge='" + badge + "'}";
         }
     }
 
     // ------------------------------------------------------------------
-    // car-app filter
+    // enumeration: ALL launchable apps appear, badged by category
     // ------------------------------------------------------------------
 
+    private String badge(int res) {
+        return appContext.getString(res);
+    }
+
+    /**
+     * Every launchable app now appears (the old car-only filter is gone), each
+     * tagged by its compatibility category: a car app -> NATIVE, a known mirror
+     * shim -> MIRROR, an arbitrary app -> NEEDS BRIDGE.
+     */
     @Test
-    public void filter_keepsOnlyCarTaggedApps() {
+    public void enumeration_includesAllLaunchableApps_withCorrectBadges() {
         installCarApp("com.example.carapp", "Car App");
-        installPlainApp("com.example.plainapp", "Plain App");
+        installPlainApp("ru.inceptive.screentwoauto", "Screen2Auto");
+        installPlainApp("com.anthropic.claude", "Claude");
 
         AppsList activity = buildActivity();
         Map<String, RowState> rows = renderRows(activity);
 
-        assertTrue("car-tagged app must appear", rows.containsKey("com.example.carapp"));
-        assertFalse("non-car app must be filtered out", rows.containsKey("com.example.plainapp"));
+        assertTrue("car app must appear", rows.containsKey("com.example.carapp"));
+        assertTrue("mirror shim must appear", rows.containsKey("ru.inceptive.screentwoauto"));
+        assertTrue("arbitrary app must appear", rows.containsKey("com.anthropic.claude"));
+
+        assertEquals(badge(R.string.badge_native_auto),
+                rows.get("com.example.carapp").badge);
+        assertEquals(badge(R.string.badge_mirror_shim),
+                rows.get("ru.inceptive.screentwoauto").badge);
+        assertEquals(badge(R.string.badge_needs_bridge),
+                rows.get("com.anthropic.claude").badge);
     }
 
+    /** A car app with a null metadata bundle still resolves to NEEDS_BRIDGE, not a crash. */
     @Test
-    public void filter_excludesAppWithoutMetaData() {
-        installCarApp("com.example.carapp", "Car App");
+    public void enumeration_nullMetaData_classifiesAsNeedsBridge() {
         installAppNoMetaData("com.example.nometa", "No Meta App");
 
         AppsList activity = buildActivity();
         Map<String, RowState> rows = renderRows(activity);
 
-        assertTrue(rows.containsKey("com.example.carapp"));
-        assertFalse("app with null metaData must be skipped (NPE branch)",
-                rows.containsKey("com.example.nometa"));
+        RowState state = rows.get("com.example.nometa");
+        assertNotNull("app with null metaData must still appear", state);
+        assertEquals(badge(R.string.badge_needs_bridge), state.badge);
     }
 
-    /**
-     * The filter discriminates: it must EXCLUDE the specific non-car packages and
-     * INCLUDE the one car app — not merely produce a list that happens to be empty
-     * (Robolectric's default packages carry no car marker, so a bare isEmpty() check
-     * could pass for the wrong reason).
-     */
+    /** Present-but-zero marker is NOT a declared car app -> NEEDS_BRIDGE (carApp != 0 boundary). */
     @Test
-    public void filter_excludesNonCarAppsButKeepsCarApp() {
-        installPlainApp("com.example.plainapp", "Plain App");
-        installAppNoMetaData("com.example.nometa", "No Meta App");
-        installCarApp("com.example.carapp", "Car App");
-
-        AppsList activity = buildActivity();
-        Map<String, RowState> rows = renderRows(activity);
-
-        assertFalse("plain app must be excluded", rows.containsKey("com.example.plainapp"));
-        assertFalse("no-metadata app must be excluded", rows.containsKey("com.example.nometa"));
-        assertTrue("the single car app must be included", rows.containsKey("com.example.carapp"));
-    }
-
-    /**
-     * Metadata PRESENT but value 0 must be filtered OUT — distinct from the
-     * key-absent and null-bundle cases. Pins the {@code carApp != 0} boundary.
-     */
-    @Test
-    public void filter_excludesAppWithZeroMarkerValue() {
-        installCarApp("com.example.carapp", "Car App");
+    public void enumeration_zeroMarker_classifiesAsNeedsBridge() {
         installApp("com.example.zeromarker", "Zero Marker App", 0);
 
         AppsList activity = buildActivity();
         Map<String, RowState> rows = renderRows(activity);
 
-        assertTrue(rows.containsKey("com.example.carapp"));
-        assertFalse("present-but-zero marker must be filtered out (carApp != 0 boundary)",
-                rows.containsKey("com.example.zeromarker"));
+        RowState state = rows.get("com.example.zeromarker");
+        assertNotNull(state);
+        assertEquals("present-but-zero marker is not native (carApp != 0 boundary)",
+                badge(R.string.badge_needs_bridge), state.badge);
+    }
+
+    /** A plain app (metadata bundle present but no marker key) -> NEEDS_BRIDGE. */
+    @Test
+    public void enumeration_plainApp_classifiesAsNeedsBridge() {
+        installPlainApp("com.example.plainapp", "Plain App");
+
+        AppsList activity = buildActivity();
+        Map<String, RowState> rows = renderRows(activity);
+
+        RowState state = rows.get("com.example.plainapp");
+        assertNotNull(state);
+        assertEquals(badge(R.string.badge_needs_bridge), state.badge);
+    }
+
+    /** The launcher intent AppsList builds, used to register edge-case resolve infos. */
+    private static Intent launcherIntent() {
+        return new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+    }
+
+    /**
+     * A launcher resolve whose {@code activityInfo} is null is skipped (the
+     * {@code ri.activityInfo == null} continue branch) without crashing — the real
+     * car app still shows.
+     */
+    @Test
+    public void enumeration_resolveWithNullActivityInfo_isSkipped() {
+        installCarApp("com.example.carapp", "Car App");
+
+        ResolveInfo bogus = new ResolveInfo();
+        bogus.activityInfo = null;
+        shadowPm.addResolveInfoForIntentNoDefaults(launcherIntent(), bogus);
+
+        AppsList activity = buildActivity();
+        Map<String, RowState> rows = renderRows(activity);
+
+        assertTrue("real car app still appears", rows.containsKey("com.example.carapp"));
+    }
+
+    /**
+     * A package that is launchable but has no installed ApplicationInfo makes
+     * {@code getApplicationInfo} throw NameNotFoundException; that package is skipped
+     * (the catch/continue branch) while the real car app still shows.
+     */
+    @Test
+    public void enumeration_uninstalledLaunchablePackage_isSkipped() {
+        installCarApp("com.example.carapp", "Car App");
+
+        ActivityInfo ghostActivity = new ActivityInfo();
+        ghostActivity.packageName = "com.example.ghostlauncher";
+        ghostActivity.name = "com.example.ghostlauncher.Main";
+        ResolveInfo ghost = new ResolveInfo();
+        ghost.activityInfo = ghostActivity;
+        shadowPm.addResolveInfoForIntentNoDefaults(launcherIntent(), ghost);
+
+        AppsList activity = buildActivity();
+        Map<String, RowState> rows = renderRows(activity);
+
+        assertTrue("real car app still appears", rows.containsKey("com.example.carapp"));
+        assertFalse("package with no ApplicationInfo is skipped",
+                rows.containsKey("com.example.ghostlauncher"));
+    }
+
+    /**
+     * A single package can expose more than one launcher activity (e.g. multiple
+     * {@code MAIN/LAUNCHER} aliases). The picker enumerates per-package, so the
+     * package must appear exactly once — pinning the {@code LinkedHashSet} multi-
+     * activity de-dup in {@code AppsList} (distinct from the installed+prefs dedup).
+     */
+    @Test
+    public void enumeration_packageWithTwoLauncherActivities_appearsExactlyOnce() {
+        // installCarApp registers one launcher activity (pkg + ".MainActivity").
+        installCarApp("com.example.multi", "Multi Launcher App");
+
+        // Register a SECOND launcher activity for the SAME package.
+        ActivityInfo secondActivity = new ActivityInfo();
+        secondActivity.packageName = "com.example.multi";
+        secondActivity.name = "com.example.multi.SecondMain";
+        ResolveInfo secondResolve = new ResolveInfo();
+        secondResolve.activityInfo = secondActivity;
+        shadowPm.addResolveInfoForIntentNoDefaults(launcherIntent(), secondResolve);
+
+        AppsList activity = buildActivity();
+        RecyclerView rv = recyclerOf(activity);
+        layoutRecycler(rv);
+
+        int rowsForPackage = 0;
+        for (int i = 0; i < rv.getChildCount(); i++) {
+            TextView pkg = rv.getChildAt(i).findViewById(R.id.app_package_name);
+            if ("com.example.multi".equals(pkg.getText().toString())) {
+                rowsForPackage++;
+            }
+        }
+        assertEquals("a package with two launcher activities must appear once",
+                1, rowsForPackage);
     }
 
     @Test
@@ -389,7 +511,6 @@ public class AppsListTest {
             }
         }
         assertEquals("installed-and-stored app must not be duplicated", 1, rowsForPackage);
-        assertEquals("adapter must hold exactly one entry", 1, rv.getAdapter().getItemCount());
     }
 
     @Test
@@ -438,7 +559,14 @@ public class AppsListTest {
         selectApp("com.example.mike", "Mike");
 
         AppsList activity = buildActivity();
-        List<String> order = renderRowOrder(activity);
+        // Keep only the test packages: the app-under-test (and any Robolectric default
+        // launchers) now also surface, since the picker lists ALL launchable apps.
+        List<String> order = new ArrayList<>();
+        for (String pkg : renderRowOrder(activity)) {
+            if (pkg.startsWith("com.example.")) {
+                order.add(pkg);
+            }
+        }
 
         assertEquals("checked app sorts first, then unchecked apps by name",
                 Arrays.asList(
@@ -456,16 +584,29 @@ public class AppsListTest {
      */
     @Test
     public void edge_nullLabel_isToleratedAndShowsPackageName() {
+        String pkg = "com.example.nolabel";
         Bundle meta = new Bundle();
         meta.putInt(CAR_META, 1);
         ApplicationInfo ai = new ApplicationInfo();
-        ai.packageName = "com.example.nolabel";
+        ai.packageName = pkg;
         ai.nonLocalizedLabel = null; // force loadLabel() past its nonLocalizedLabel fallback
         ai.metaData = meta;
+
+        ActivityInfo activityInfo = new ActivityInfo();
+        activityInfo.packageName = pkg;
+        activityInfo.name = pkg + ".MainActivity";
+        activityInfo.applicationInfo = ai;
+        activityInfo.nonLocalizedLabel = null;
+
         PackageInfo pi = new PackageInfo();
-        pi.packageName = "com.example.nolabel";
+        pi.packageName = pkg;
         pi.applicationInfo = ai;
+        pi.activities = new ActivityInfo[]{activityInfo};
         shadowPm.installPackage(pi);
+
+        ResolveInfo resolveInfo = new ResolveInfo();
+        resolveInfo.activityInfo = activityInfo;
+        shadowPm.addResolveInfoForIntentNoDefaults(launcherIntent(), resolveInfo);
 
         AppsList activity = buildActivity();
         Map<String, RowState> rows = renderRows(activity);
