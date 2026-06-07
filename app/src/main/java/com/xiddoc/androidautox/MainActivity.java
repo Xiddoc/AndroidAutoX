@@ -24,6 +24,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.Html;
 import android.text.method.LinkMovementMethod;
+import android.webkit.URLUtil;
 import androidx.annotation.NonNull;
 import androidx.annotation.WorkerThread;
 import androidx.fragment.app.DialogFragment;
@@ -718,19 +719,26 @@ public class MainActivity extends AppCompatActivity {
                                            url =  "http://" + url;
                                         }
 
-
+                                    // Guard against blank / hostless URLs. An empty field normalizes
+                                    // to "http://", which new URL() accepts without throwing, so a junk
+                                    // value would otherwise be persisted+applied silently (the error
+                                    // toast never showed because the dialog was already dismissed).
+                                    // Validate first; on failure show the error toast and keep the
+                                    // dialog open (no dismiss, no apply).
+                                    URL parsed;
                                     try {
-                                        uxprototypeTweak(new URL(url));
-                                        uxprototypeDialog.dismiss();
+                                        parsed = new URL(url);
                                     } catch (MalformedURLException e) {
-                                        e.printStackTrace();
+                                        parsed = null;
                                     }
-
-                                    if (uxprototypeDialog.isShowing()) {
+                                    if (!URLUtil.isValidUrl(url) || parsed == null
+                                            || parsed.getHost() == null || parsed.getHost().isEmpty()) {
                                         Toast.makeText(uxprototypeDialog.getContext(), R.string.uxprototype_dialog, Toast.LENGTH_LONG).show();
+                                        return;
                                     }
 
-
+                                    uxprototypeTweak(parsed);
+                                    uxprototypeDialog.dismiss();
                                 }
                             });
                             cancelButton.setOnClickListener(new View.OnClickListener() {
@@ -2058,7 +2066,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void saveString(final String value, String key) {
-        SharedPreferences sharedPreferences = getPreferences(getContext().MODE_PRIVATE);
+        SharedPreferences sharedPreferences = getPreferences(Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPreferences.edit();
         editor.putString(key, value);
         editor.apply();

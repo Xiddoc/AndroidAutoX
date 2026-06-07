@@ -100,6 +100,18 @@ public class PhixitTweaksTest {
     }
 
     @Test
+    public void uxPrototype_nullUrl_normalizesToPlaceholder() {
+        // A null url must be normalized to the empty placeholder so it can never reach
+        // PhixitEngine's stringValue.getBytes(...) and NPE.
+        List<FlagSpec> ux = PhixitTweaks.specs("uxprototype_tweak", null);
+        FlagSpec urlSpec = ux.get(1);
+        assertEquals("UxPrototype__url", urlSpec.name);
+        assertEquals(PhixitSnapshot.TYPE_STRING, urlSpec.flag.type);
+        assertEquals(PhixitTweaks.UX_URL_PLACEHOLDER, urlSpec.flag.stringValue);
+        assertEquals("", urlSpec.flag.stringValue);
+    }
+
+    @Test
     public void specsTwoArg_ignoresUrlForNonUxTweaks() {
         // The url arg is only consumed by uxprototype_tweak; other tweaks are unaffected,
         // and an unknown key still falls through to null.

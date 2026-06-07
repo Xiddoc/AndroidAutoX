@@ -19,7 +19,7 @@ public final class PhixitTweaks {
      * ignores the value). The real user-entered URL is threaded in via the dynamic-value
      * path ({@link TweakRegistry#uxPrototypeSpecs(String)} / {@link #specs(String, String)}).
      */
-    public static final String UX_URL_PLACEHOLDER = "";
+    static final String UX_URL_PLACEHOLDER = "";
 
     /** Returns the flag specs for a tweak key, or null if not a registry tweak. */
     public static List<FlagSpec> specs(String key) {
@@ -29,8 +29,12 @@ public final class PhixitTweaks {
     /**
      * As {@link #specs(String)} but threads {@code uxUrl} into the {@code uxprototype_tweak}
      * {@code UxPrototype__url} string flag. Other tweaks ignore {@code uxUrl}.
+     *
+     * <p>A {@code null} {@code uxUrl} is normalized to {@link #UX_URL_PLACEHOLDER} so a null
+     * can never reach {@code PhixitEngine}'s {@code stringValue.getBytes(...)} and NPE.
      */
     public static List<FlagSpec> specs(String key, String uxUrl) {
+        uxUrl = uxUrl == null ? UX_URL_PLACEHOLDER : uxUrl;
         List<FlagSpec> l = new ArrayList<FlagSpec>();
         switch (key) {
             case "aa_message_autoread":

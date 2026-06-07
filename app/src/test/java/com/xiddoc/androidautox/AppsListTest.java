@@ -30,6 +30,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
+import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowPackageManager;
 
 import java.util.ArrayList;
@@ -799,5 +800,24 @@ public class AppsListTest {
         assertNotNull("Revert all must launch MainActivity", started);
         assertTrue(started.getBooleanExtra(MainActivity.EXTRA_PATCH_APPS, false));
         assertTrue(activity.isFinishing());
+    }
+
+    // ------------------------------------------------------------------
+    // night-mode inflation regression
+    // ------------------------------------------------------------------
+
+    /**
+     * Pins the crash that was fixed by syncing the night {@code AppTheme} with the
+     * day theme: under {@code values-night} the Material {@link ExtendedFloatingActionButton}
+     * ({@code R.id.fab}) must still inflate. A theme mismatch (the night override
+     * dropping {@code windowActionBar}/{@code windowNoTitle}) previously made this
+     * throw at inflation time. The activity building at all already exercises that.
+     */
+    @Test
+    @Config(qualifiers = "night")
+    public void nightMode_fabInflatesWithoutCrashing() {
+        AppsList activity = buildActivity();
+        assertNotNull("the FAB must inflate under the night AppTheme",
+                activity.findViewById(R.id.fab));
     }
 }

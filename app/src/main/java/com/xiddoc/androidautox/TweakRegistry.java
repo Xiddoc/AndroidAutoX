@@ -26,11 +26,12 @@ public final class TweakRegistry {
             "coolwalk_daynight_tweak", "aa_battery_outline", "aa_activate_coolwalk",
             "aa_deactivate_coolwalk", "aa_material_you", "aa_activate_assistant_tips",
             "aa_activate_declinesms", "aa_new_seekbar", "bluetooth_pairing_off",
-            "kill_telemetry", "uxprototype_tweak", "aa_inertial_scroll", "aa_vertical_bar",
+            "kill_telemetry", "aa_inertial_scroll", "aa_vertical_bar",
             // special
             "battery_saver_warning",
             // dynamic (value from saved pref)
             "aa_hun_ms", "aa_media_hun", "aa_bitrate_usb", "aa_bitrate_wireless",
+            "uxprototype_tweak",
             // dynamic (whitelist from appsListPref); the re-apply job re-asserts the
             // flags only -- it never reinstalls apps (that stays in patchforapps()).
             "aa_patched_apps",
