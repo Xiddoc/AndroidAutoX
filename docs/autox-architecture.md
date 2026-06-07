@@ -92,6 +92,71 @@ policy 100% unit-testable while the glue remains in `jacocoExclusions`.
 `VirtualDisplayController.resize(newSpec)` wraps `VirtualDisplay.resize` and updates
 the stored spec so `getSpec()` always reflects the current geometry.
 
+## WS3 — Resizable / freeform launch enablement
+
+AutoX must ensure any arbitrary app (including those with `resizeableActivity="false"`)
+can be launched onto its virtual display, and that `ActivityOptions.setLaunchBounds`
+(used for forced-vertical layout) is honored.  Two `Settings.Global` keys control this:
+
+| Key | Value | Effect |
+|---|---|---|
+| `force_resizable_activities` | 1 | Overrides per-app `resizeableActivity="false"` so all activities are treated as resizable |
+| `enable_freeform_support` | 1 | Enables freeform windowing mode; required for `setLaunchBounds` to be honored on non-desktop builds |
+
+### Spec, applier, and bounds calculator
+
+All policy (which keys, which values, revert strategy) lives in the pure helper
+`SecureSettingsSpec`.  The thin applier `FreeformSettingsApplier` executes the spec
+against a `SystemSettingsProvider` — it contains no decision logic.  The
+`LaunchBoundsCalculator` computes the launch-bounds rectangle for the "forced vertical"
+(portrait) case: on a landscape virtual display it shrinks the window width to satisfy a
+target aspect ratio and centres it horizontally.
+
+### Revert-on-disable
+
+Before AutoX enables these keys it reads the current value of each key via the
+`SystemSettingsProvider`.  The snapshot (a `null` for absent keys, an `Integer` for
+present ones) is passed to `SecureSettingsSpec.revertList` to produce the correct
+per-key revert strategy:
+
+- `RESTORE_PRIOR` — key had a value; write it back.
+- `WRITE_DEFAULT` — key was absent; write `0` (feature off).
+
+The actual call-site that triggers revert is in the AutoX enable/disable flow
+(framework-layer glue, excluded from the coverage gate):
+
+```java
+// TODO(WS3) call-site in AutoXScreen.onAutoXDisabled() / enable-policy disable path:
+//   List<SecureSettingsSpec.Entry> revertEntries =
+//       SecureSettingsSpec.revertList(priorForceResizable, priorEnableFreeform);
+//   FreeformSettingsApplier.revert(revertEntries, provider);
+```
+
+The prior values must be persisted between enable and disable (e.g. in
+`AutoXSettingsStore`) so the revert can reconstruct the correct list even after a
+process restart.
+
+### Forced-vertical bounds (§2.4)
+
+`LaunchBoundsCalculator.forcedVertical(displayWidth, displayHeight, densityDpi,
+targetAspectRatio)` computes the largest portrait sub-rectangle that fits within the
+display:
+
+- Display is already portrait (height ≥ width): full display area is returned.
+- Display is landscape: `boundsWidth = floor(displayHeight / targetAspectRatio)`,
+  clamped to `displayWidth`; the rectangle is centred: `left = (displayWidth − boundsWidth) / 2`.
+
+The glue layer (excluded) converts `LaunchBoundsCalculator.Bounds` to `android.graphics.Rect`
+and passes it to `ActivityOptions.setLaunchBounds`.
+
+### Pure-logic vs excluded-glue split (WS3 additions)
+
+| Class | Layer | Coverage |
+|---|---|---|
+| `SecureSettingsSpec` | Pure spec: keys, enabled values, revert strategy | 100% required |
+| `LaunchBoundsCalculator` | Pure math: forced-vertical bounds computation | 100% required |
+| `FreeformSettingsApplier` | Thin loop over spec + provider (no Android imports) | 100% required |
+
 ## Testable-logic vs excluded-glue split
 
 | Class | Layer | Coverage |
@@ -104,6 +169,9 @@ the stored spec so `getSpec()` always reflects the current geometry.
 | `AutoXAppRegistry` | Pure registry (no Android imports) | 100% required |
 | `AppLaunchPolicy` | Pure decision logic (no Android imports) | 100% required |
 | `SurfaceGeometry` | Pure decision logic — resize-vs-recreate policy (WS2) | 100% required |
+| `SecureSettingsSpec` | Pure spec — WS3 resizable/freeform keys + revert strategy | 100% required |
+| `LaunchBoundsCalculator` | Pure math — forced-vertical bounds (WS3) | 100% required |
+| `FreeformSettingsApplier` | Pure loop (no Android imports) — applies/reverts spec (WS3) | 100% required |
 | `GestureInjector` | Interface — no executable lines | Excluded (safety) |
 | `ReflectiveGestureInjector` | Reflection / InputManager (framework) | Excluded |
 | `VirtualDisplayController` | DisplayManager (framework) | Excluded |
@@ -207,6 +275,9 @@ meta-data plus `assets/xposed_init` naming `AutoXXposedModule`.
 | Path | Role |
 |---|---|
 | `app/src/main/java/com/xiddoc/androidautox/autox/` | All AutoX classes |
+| `app/src/main/java/com/xiddoc/androidautox/autox/SecureSettingsSpec.java` | WS3 pure spec: resizable/freeform keys + revert strategy |
+| `app/src/main/java/com/xiddoc/androidautox/autox/LaunchBoundsCalculator.java` | WS3 pure forced-vertical bounds computation |
+| `app/src/main/java/com/xiddoc/androidautox/autox/FreeformSettingsApplier.java` | WS3 thin applier (spec + provider) |
 | `app/src/main/java/com/xiddoc/androidautox/autox/provider/` | WS4 provider seam (pure interfaces + policy/schema/table) |
 | `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/` | WS4 LSPosed module glue (excluded) |
 | `app/src/xposedStub/java/` | Local compileOnly Xposed API stub (offline `-PuseXposedStub=true` fallback) |
