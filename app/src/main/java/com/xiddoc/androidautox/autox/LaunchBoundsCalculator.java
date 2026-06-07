@@ -7,7 +7,7 @@ package com.xiddoc.androidautox.autox;
  *
  * <h2>Motivation</h2>
  * <p>When freeform windowing is enabled (via
- * {@link SecureSettingsSpec#KEY_ENABLE_FREEFORM}), Android honours
+ * {@link FreeformGlobalSettingsSpec#KEY_ENABLE_FREEFORM}), Android honours
  * {@code ActivityOptions.setLaunchBounds(Rect)}.  Supplying a correctly-sized
  * bounds rectangle lets AutoX force a "forced vertical" (portrait) layout even
  * when the virtual display itself is landscape — important because most head-unit
@@ -159,9 +159,15 @@ public final class LaunchBoundsCalculator {
      * fills the entire virtual display.  This is the identity case: no scaling or
      * cropping.
      *
+     * <p><b>Note:</b> {@code densityDpi} is <em>validated</em> ({@code > 0}) for call-site
+     * symmetry with {@link #forcedVertical}, but it does <em>not</em> affect the returned
+     * bounds (a full-display rectangle is purely a function of width/height). It is kept in
+     * the signature so callers pass the same triple to both policies.
+     *
      * @param displayWidth  the virtual display width in pixels; must be &gt; 0
      * @param displayHeight the virtual display height in pixels; must be &gt; 0
-     * @param densityDpi    the virtual display density in dpi; must be &gt; 0
+     * @param densityDpi    the virtual display density in dpi; must be &gt; 0 (validated but
+     *                      not used in the bounds computation)
      * @return {@code Bounds(0, 0, displayWidth, displayHeight)}
      * @throws IllegalArgumentException if any parameter is out of range
      */
