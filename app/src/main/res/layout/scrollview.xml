@@ -83,43 +83,21 @@
                     app:layout_constraintTop_toBottomOf="@+id/section_one"
                     app:layout_constraintStart_toStartOf="parent" />
 
-        <Button
-            android:minLines="2"
-            android:id="@+id/patchapps"
-            android:layout_width="0dp"
-            android:layout_height="70dp"
-            android:layout_marginStart="4dp"
-            android:clickable="true"
-            style="@style/ButtonStyle"
-           android:focusable="true"
-
-            android:text="@string/patch_custom_apps"
-            app:layout_constraintEnd_toStartOf="@id/patchedappstatus"
-            app:layout_constraintHorizontal_weight="1"
-            app:layout_constraintStart_toEndOf="@id/toapp_button"
-            app:layout_constraintTop_toBottomOf="@+id/car_remover"/>
-
+        <!-- "Select apps" now owns the whole patch-apps flow: it opens the app picker, where an
+             Apply FAB saves the selection and patches. The old standalone "patch apps" button and
+             its status icon were removed. The 33dp end margin keeps this button's right edge in
+             the same content column the other tweak rows align to (leaving room for status icons
+             on those rows). -->
         <Button
             android:id="@+id/toapp_button"
             android:layout_width="0dp"
-            android:layout_height="70dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="33dp"
             style="@style/ButtonStyle"
             android:text="@string/select_apps"
-            app:layout_constraintBottom_toBottomOf="@id/patchapps"
-            app:layout_constraintEnd_toStartOf="@id/patchapps"
-            app:layout_constraintHorizontal_weight="0.6"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="@id/patchapps" />
-
-        <ImageView
-            android:id="@+id/patchedappstatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:src="@drawable/ic_baseline_check_circle_24"
-            app:layout_constraintBottom_toBottomOf="@id/toapp_button"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/patchapps"
-            app:layout_constraintTop_toTopOf="@id/toapp_button" />
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/car_remover" />
 
 <!--        <Button
             android:id="@+id/nospeed"
@@ -135,7 +113,7 @@
            android:focusable="true"
 
             android:text="@string/unlimited_scrolling_when_driving"
-            app:layout_constraintEnd_toEndOf="@id/patchapps"
+            app:layout_constraintEnd_toEndOf="@id/toapp_button"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/patchapps" />
 
@@ -160,7 +138,7 @@
 
 
             android:text="@string/disable_speed_limitations"
-            app:layout_constraintEnd_toEndOf="@id/patchapps"
+            app:layout_constraintEnd_toEndOf="@id/toapp_button"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/toapp_button" />
 
@@ -248,7 +226,7 @@
            android:focusable="true"
 
             android:text="@string/force_widescreen_text"
-            app:layout_constraintEnd_toEndOf="@id/patchapps"
+            app:layout_constraintEnd_toEndOf="@id/toapp_button"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/section_two" />
 
@@ -272,7 +250,7 @@
            android:focusable="true"
 
             android:text="@string/base_no_ws"
-            app:layout_constraintEnd_toEndOf="@id/patchapps"
+            app:layout_constraintEnd_toEndOf="@id/toapp_button"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/force_ws_button" />
 
@@ -295,7 +273,7 @@
                     android:clickable="true"
                     style="@style/ButtonStyle"
                     android:focusable="true"
-                    app:layout_constraintEnd_toEndOf="@id/patchapps"
+                    app:layout_constraintEnd_toEndOf="@id/toapp_button"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/force__no_ws_button" />
 
@@ -320,7 +298,7 @@
            android:focusable="true"
 
             android:text="@string/multi_display_string"
-            app:layout_constraintEnd_toEndOf="@id/patchapps"
+            app:layout_constraintEnd_toEndOf="@id/toapp_button"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/force_portrait_button" />
 
@@ -342,7 +320,7 @@
                     android:clickable="true"
                     style="@style/ButtonStyle"
                     android:focusable="true"
-                    app:layout_constraintEnd_toEndOf="@id/patchapps"
+                    app:layout_constraintEnd_toEndOf="@id/toapp_button"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/multi_display_button" />
 
@@ -382,7 +360,7 @@
            android:focusable="true"
 
             android:text="@string/battery_warning"
-            app:layout_constraintEnd_toEndOf="@id/patchapps"
+            app:layout_constraintEnd_toEndOf="@id/toapp_button"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/section_three" />
 

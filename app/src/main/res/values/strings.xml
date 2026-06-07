@@ -6,6 +6,8 @@ This app will let you apply some tweaks to Android Auto\n
 Simply select what tweak you want to apply :)\n
 If you are unsure of what a tweak does, long press on it and a tutorial will show up.</string>
     <string name="select_apps">Select apps</string>
+    <string name="apply_patch_apps">Save &amp; apply</string>
+    <string name="revert_patch_apps">Revert all</string>
     <string name="enable_assistant_shortcuts">Assistant shortcuts</string>
     <string name="patch_custom_apps">custom apps</string>
     <string name="disable_speed_limitations">tap limitations</string>

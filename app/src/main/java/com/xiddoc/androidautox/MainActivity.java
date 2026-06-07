@@ -65,13 +65,10 @@ public class MainActivity extends AppCompatActivity {
 
     boolean suitableMethodFound;
 
-    private boolean temp;
-
     private static Context mContext;
     private ImageView noSpeedRestrictionsStatus;
     private ImageView taplimitstatus;
     private ImageView navstatus;
-    private ImageView patchappstatus;
     private ImageView messageAutoReadStatus;
     private ImageView batteryOutlineStatus;
     private ImageView forceWideScreenStatus;
@@ -262,7 +259,6 @@ public class MainActivity extends AppCompatActivity {
     private Button nospeed;
     private Button taplimitat;
     private Button coolwalkDayNightTweak;
-    private Button patchapps;
     private Button messageAutoReadTweak;
     private Button batteryoutline;
     private Button forceNoWideScreen;
@@ -632,68 +628,11 @@ public class MainActivity extends AppCompatActivity {
 
         setOnLongClickListener(coolwalkDayNightTweak, R.string.coolwalk_daynight_tutorial, R.drawable.tutorial_coolwalkdaynight);
 
-        patchapps = findViewById(R.id.patchapps);
-        patchappstatus = findViewById(R.id.patchedappstatus);
-
-
-        if (load("aa_patched_apps")) {
-            patchapps.setText(getString(R.string.re_enable_tweak_string) + getString(R.string.patch_custom_apps));
-            changeStatus(patchappstatus, 2, false);
-        } else {
-            patchapps.setText(getString(R.string.patch_app) + getString(R.string.patch_custom_apps));
-            changeStatus(patchappstatus, 0, false);
-        }
-        // Icon-only: the patched-apps button text depends on the chosen whitelist, so the
-        // background pass repaints the status icon but leaves the button label alone.
-        registerReconcileTarget("aa_patched_apps", patchappstatus);
-
-        patchapps.setOnClickListener(
-                new View.OnClickListener() {
-
-
-                    @Override
-                    public void onClick(View view) {
-                        if (load("aa_patched_apps")) {
-                            revert("aa_patched_apps");
-                            patchapps.setText(getString(R.string.patch_app) + getString(R.string.patch_custom_apps));
-                            changeStatus(patchappstatus, 0, true);
-                            showRebootButton();
-                        } else {
-                            SharedPreferences appsListPref = getApplicationContext().getSharedPreferences("appsListPref", 0);
-                            Map<String, ?> allEntries = appsListPref.getAll();
-                            if (allEntries.isEmpty()) {
-                                Intent intent = new Intent(MainActivity.this, AppsList.class);
-                                startActivity(intent);
-                                Toast.makeText(getApplicationContext(), getString(R.string.choose_apps_warning), Toast.LENGTH_LONG).show();
-                            } else{
-                                temp = true;
-                                final androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this);
-                                builder.setTitle(getString(R.string.warning_title));
-                                builder.setMessage(getResources().getString(R.string.warning_patch_apps));
-                                builder.setNeutralButton( getString(android.R.string.ok),
-                                        new DialogInterface.OnClickListener() {
-                                            public void onClick(DialogInterface dialog, int which) {
-                                                temp = false;
-                                                patchforapps();
-
-                                            }
-                                        });
-                                builder.setNegativeButton( android.R.string.no
-                                        ,
-                                        new DialogInterface.OnClickListener() {
-                                            public void onClick(DialogInterface dialog, int which) {
-                                                dialog.dismiss();
-                                            }
-                                        });
-                                builder.setCancelable(false);
-                                builder.show();
-
-                            }
-                        }
-                    }
-                });
-
-        setOnLongClickListener(patchapps, R.string.tutorial_patchapps);
+        // "Patch apps" no longer has its own button: the Select-apps screen (AppsList) owns the
+        // whole flow via its Apply FAB and signals us, through the launch intent, to run the
+        // diff-based apply. Handle a request that arrived with the current intent (covers a
+        // cold start / recreate; the live case is delivered to onNewIntent).
+        handlePatchAppsIntent(getIntent());
 
 
         messageAutoReadTweak = findViewById(R.id.message_autoread_tweak_button);
@@ -2133,13 +2072,51 @@ public class MainActivity extends AppCompatActivity {
         return sharedPreferences.getFloat(key, 0);
     }
 
-    public void patchforapps() {
+    /**
+     * Intent extra (boolean) set by {@link AppsList}'s Apply FAB to ask {@code MainActivity} to
+     * run the diff-based patch-apps apply. Routed back here (rather than applied in AppsList) so
+     * the apply reuses the existing logs view, progress dialog, phixit engine and reboot button.
+     */
+    public static final String EXTRA_PATCH_APPS = "com.xiddoc.androidautox.PATCH_APPS";
 
-        if (temp) {
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        // Make the new intent the current one (so getIntent() reflects it) and act on it.
+        setIntent(intent);
+        handlePatchAppsIntent(intent);
+    }
+
+    /**
+     * If {@code intent} carries {@link #EXTRA_PATCH_APPS}, consume the flag and run the apply
+     * once. Consuming it means a later configuration-change recreate (which re-delivers the same
+     * intent) does not re-trigger the apply.
+     */
+    private void handlePatchAppsIntent(Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_PATCH_APPS, false)) {
             return;
         }
+        intent.removeExtra(EXTRA_PATCH_APPS);
+        patchforapps();
+    }
 
+    /**
+     * SharedPreferences file recording which apps are currently patched and the original
+     * installer captured for each (so a later disable can restore it). Key = package name,
+     * value = the original installing package ("" when there was none / unknown).
+     */
+    static final String PATCHED_APPS_STATE = "patchedAppsState";
 
+    /**
+     * Runs the diff-based "patch apps" apply. Reconciles the user's whitelist ({@code appsListPref})
+     * against the set of apps already re-stamped ({@link #PATCHED_APPS_STATE}): newly-whitelisted
+     * apps get {@code pm set-installer} (their original installer captured first), apps removed from
+     * the whitelist have that original installer restored. The Phenotype flags are then recomputed
+     * from the final whitelist, or fully reverted when nothing remains selected. Because the
+     * per-app actions are a set difference (see {@link PatchAppsPlan}) they are disjoint, so
+     * enabling one app and disabling another in the same apply cannot collide.
+     */
+    public void patchforapps() {
         final TextView logs = getLogsView();
 
         final ProgressDialog dialog = ProgressDialog.show(MainActivity.this, "",
@@ -2153,41 +2130,76 @@ public class MainActivity extends AppCompatActivity {
         new Thread() {
             @Override
             public void run() {
-                SharedPreferences appsListPref =
-                        getApplicationContext().getSharedPreferences("appsListPref", 0);
-                Map<String, ?> allEntries = appsListPref.getAll();
-                appendText(logs, "--  Apps which will be added to whitelist: --\n");
-                for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
-                    String pkg = entry.getKey();
-                    appendText(logs, "\t\t- " + entry.getValue() + " (" + pkg + ")\n");
+                final Context appCtx = getApplicationContext();
+                SharedPreferences appsListPref = appCtx.getSharedPreferences("appsListPref", 0);
+                SharedPreferences state = appCtx.getSharedPreferences(PATCHED_APPS_STATE, 0);
 
-                    // Validate the package name BEFORE it is ever interpolated into a root
-                    // command -- this closes the shell-injection vector for the whole loop.
+                java.util.Set<String> desired =
+                        new java.util.LinkedHashSet<>(appsListPref.getAll().keySet());
+                java.util.Set<String> applied =
+                        new java.util.LinkedHashSet<>(state.getAll().keySet());
+                PatchAppsPlan.Diff diff = PatchAppsPlan.computeDiff(desired, applied);
+
+                appendText(logs, "--  Patch apps: enabling " + diff.toEnable.size()
+                        + ", disabling " + diff.toDisable.size() + "  --\n");
+
+                // ENABLE: capture the current installer, then re-stamp to the Play Store. Only
+                // record applied-state on success, so a failed app is retried on the next apply.
+                for (String pkg : diff.toEnable) {
+                    appendText(logs, "\t\t+ enable " + pkg + "\n");
                     if (!PatchAppsPolicy.isValidPackageName(pkg)) {
                         appendText(logs, "\t\t  SKIPPED: invalid/unsafe package name\n");
                         continue;
                     }
+                    String original = currentInstaller(pkg);
+                    if (enableAppInstaller(logs, pkg)) {
+                        state.edit().putString(pkg, original).apply();
+                    }
+                }
 
-                    patchAppSetInstaller(logs, pkg);
+                // DISABLE: restore the captured installer (best-effort) and drop the state entry.
+                for (String pkg : diff.toDisable) {
+                    appendText(logs, "\t\t- disable " + pkg + "\n");
+                    disableAppInstaller(logs, pkg, state.getString(pkg, ""));
+                    state.edit().remove(pkg).apply();
                 }
 
                 appendText(logs, "\n\n--  restoring Google Play Services   --");
                 appendText(logs, runSuWithCmd(GmsCommandBuilder.enableGms()).getStreamLogsWithLabels());
 
+                final boolean revertAll = desired.isEmpty();
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
                     public void run() {
                         dialog.dismiss();
-                        // Apply the whitelist + validation-bypass flags through the phixit
-                        // engine: captures baselines, persists the toggle, updates the UI.
-                        applyPhixitTweakSpecs("aa_patched_apps",
-                                TweakRegistry.patchedAppsSpecs(getApplicationContext()),
-                                patchappstatus, patchapps,
-                                getString(R.string.patch_custom_apps));
+                        if (revertAll) {
+                            // Nothing selected any more: restore the flag baselines and turn the
+                            // tweak off (save(false) happens inside revert()).
+                            revert("aa_patched_apps");
+                            showRebootButton();
+                        } else {
+                            // Recompute the whitelist + validation-bypass flags from the final
+                            // selection. Baselines are captured-if-absent, so re-applying after a
+                            // change does not clobber the original values.
+                            applyPhixitTweakSpecs("aa_patched_apps",
+                                    TweakRegistry.patchedAppsSpecs(appCtx),
+                                    null, null, null);
+                        }
                     }
                 });
             }
         }.start();
+    }
+
+    /** The package currently recorded as having installed {@code pkg} ("" when none/unknown). */
+    private String currentInstaller(String pkg) {
+        try {
+            String n = getPackageManager().getInstallSourceInfo(pkg).getInstallingPackageName();
+            return n == null ? "" : n;
+        } catch (Throwable t) {
+            // No install-source info (or no visibility): treat as "unknown / none".
+            return "";
+        }
     }
 
     /**
@@ -2196,12 +2208,14 @@ public class MainActivity extends AppCompatActivity {
      * {@code getInstallingPackageName()} but NOT the immutable {@code getInitiatingPackageName()};
      * see docs/patch-apps-installer-analysis.md for that caveat. {@code pkg} must already be
      * validated by {@link PatchAppsPolicy#isValidPackageName(String)}.
+     *
+     * @return {@code true} iff {@code pm set-installer} reported success.
      */
-    private void patchAppSetInstaller(final TextView logs, String pkg) {
+    private boolean enableAppInstaller(final TextView logs, String pkg) {
         // Existence guard: skip cleanly if the package is gone.
         if (!isPackageInstalled(pkg)) {
             appendText(logs, "\t\t  SKIPPED: package not found (" + pkg + ")\n");
-            return;
+            return false;
         }
         String cmd = "pm set-installer " + pkg + " " + PatchAppsPolicy.PLAY_STORE_PKG;
         com.topjohnwu.superuser.Shell.Result r = runSuWithCmdResult(cmd);
@@ -2209,6 +2223,37 @@ public class MainActivity extends AppCompatActivity {
         // Judge by pm's OUTPUT, not its exit code: pm exits 0 even when it prints Failure.
         if (!pmResultOk(r)) {
             appendText(logs, "\n\t\t  WARNING: set-installer failed for " + pkg + "\n");
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Restores {@code pkg}'s original installer (captured at enable time) via
+     * {@code pm set-installer}. Best-effort: if the original was unknown/none (or not a safe
+     * package name) there is no clean way to clear the installer, so the Play-Store stamp is left
+     * in place and a note is logged. Both {@code pkg} and {@code original} are validated before
+     * interpolation into the root command.
+     */
+    private void disableAppInstaller(final TextView logs, String pkg, String original) {
+        if (!PatchAppsPolicy.isValidPackageName(pkg)) {
+            appendText(logs, "\t\t  SKIPPED: invalid/unsafe package name\n");
+            return;
+        }
+        if (!isPackageInstalled(pkg)) {
+            appendText(logs, "\t\t  SKIPPED: package not found (" + pkg + ")\n");
+            return;
+        }
+        if (!PatchAppsPolicy.isValidPackageName(original)) {
+            appendText(logs, "\t\t  no original installer to restore for " + pkg
+                    + "; leaving Play-Store stamp in place\n");
+            return;
+        }
+        String cmd = "pm set-installer " + pkg + " " + original;
+        com.topjohnwu.superuser.Shell.Result r = runSuWithCmdResult(cmd);
+        appendText(logs, describeResult(cmd, r));
+        if (!pmResultOk(r)) {
+            appendText(logs, "\n\t\t  WARNING: restore set-installer failed for " + pkg + "\n");
         }
     }
 

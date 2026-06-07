@@ -29,14 +29,15 @@
             android:layout_height="match_parent" />
     </LinearLayout>
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:backgroundTint="@color/common_blue_revert"
-        android:src="@drawable/ic_baseline_arrow_forward_24"
+        app:icon="@drawable/ic_baseline_arrow_forward_24"
+        android:text="@string/apply_patch_apps"
         android:layout_margin="18dp"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
