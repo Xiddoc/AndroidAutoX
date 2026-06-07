@@ -968,6 +968,60 @@
 
 
 
+                <!-- AUTOX section: virtual-display projection feature (WS1) -->
+                <TextView
+                    android:id="@+id/section_autox"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    app:layout_constraintTop_toBottomOf="@id/materialyoutweak"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginBottom="15dp"
+                    android:gravity="center"
+                    android:textAlignment="center"
+                    android:text="@string/section_autox"
+                    android:textAllCaps="true"
+                    android:textStyle="bold"
+                    android:textSize="16sp"/>
+
+                <Button
+                    android:id="@+id/autox_toggle_button"
+                    android:paddingTop="9dp"
+                    android:layout_width="0dp"
+                    style="@style/ButtonStyle"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:drawablePadding="9dp"
+                    android:text="@string/autox_button_enable"
+                    app:layout_constraintEnd_toStartOf="@id/autox_toggle_status"
+                    app:layout_constraintTop_toBottomOf="@id/section_autox"
+                    app:layout_constraintStart_toStartOf="parent" />
+
+                <ImageView
+                    android:id="@+id/autox_toggle_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:src="@drawable/ic_baseline_check_circle_24"
+                    android:layout_marginEnd="3dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="@id/autox_toggle_button"
+                    app:layout_constraintBottom_toBottomOf="@id/autox_toggle_button" />
+
+                <Button
+                    android:id="@+id/autox_pick_target_button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="33dp"
+                    style="@style/ButtonStyle"
+                    android:text="@string/autox_pick_target"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/autox_toggle_button" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
 
 
