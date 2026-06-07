@@ -185,6 +185,44 @@ public class TweakRegistryPatchedAppsTest {
     }
 
     // -----------------------------------------------------------------------
+    // Dual-list sync invariant (apply path vs. revert/baseline path)
+    // -----------------------------------------------------------------------
+
+    /**
+     * The patch-custom-apps flag set is declared in TWO places that must stay in
+     * lockstep:
+     *   - apply path:  {@link TweakRegistry#patchedAppsSpecs(Context)}
+     *   - revert/baseline path: {@link PhixitTweaks#specs(String)} for "aa_patched_apps"
+     *
+     * <p>If a contributor adds a flag to only one list, apply would set a flag that
+     * revert never captures/restores (a silent revert leak), or revert would touch a
+     * flag apply never sets. This test makes that invariant self-enforcing: every flag
+     * apply sets must be revertable, and vice versa. We compare the set of
+     * (pkg, name) pairs — order-independent — so the two lists may be ordered
+     * differently but must cover exactly the same flags on the same packages.
+     */
+    @Test
+    public void applyAndRevertSpecs_targetIdenticalFlagSet() {
+        Set<String> applyPairs = new HashSet<>();
+        for (FlagSpec s : TweakRegistry.patchedAppsSpecs(ctx)) {
+            applyPairs.add(s.pkg + "|" + s.name);
+        }
+
+        Set<String> revertPairs = new HashSet<>();
+        for (FlagSpec s : PhixitTweaks.specs("aa_patched_apps")) {
+            revertPairs.add(s.pkg + "|" + s.name);
+        }
+
+        assertEquals(
+                "patch-custom-apps flag lists are out of sync: every flag TweakRegistry"
+                        + ".patchedAppsSpecs() sets on the apply path must also be declared in"
+                        + " PhixitTweaks.specs(\"aa_patched_apps\") on the revert/baseline path"
+                        + " (and vice versa), otherwise applying a flag that revert never"
+                        + " restores leaks it permanently.",
+                applyPairs, revertPairs);
+    }
+
+    // -----------------------------------------------------------------------
     // Full pinned view: package + type + value for every flag
     // -----------------------------------------------------------------------
 
