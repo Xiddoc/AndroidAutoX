@@ -78,7 +78,6 @@ Je vyžadován Android Auto verze 5.8 a vyšší.</string>
     <string name="patch_app">Použít opravu na\u0020</string>
     <string name="default_string">\u0020Výchozí</string>
     <string name="app_list_label">Seznam aplikací</string>
-    <string name="translators_button">Přeložil</string>
     <string name="custom_wallpapers">Tapety</string>
     <string name="tutorial_wallpapers">Toto nastavení aktivuje změnu vestavěné tapety v Android Auto. Je vyžadován Android Auto verze 5.8 a vyšší.\n
 UPOZORNĚNÍ: Pokud používáte aplikaci Wallpapers for Android Auto, budete jí muset aktualizovat alespoň na verzi 3, jinak toto mastavení naruší funkčnost aplikace Wallpapers for Android Auto.</string>

@@ -76,7 +76,6 @@
     <string name="patch_app">打补丁\u0020</string>
     <string name="default_string">\u0020默认设置</string>
     <string name="app_list_label">应用列表</string>
-    <string name="translators_button">翻译者</string>
     <string name="custom_wallpapers">壁纸</string>
     <string name="tutorial_wallpapers">这一调整将激活Android Auto的壁纸更换功能。需要Android Auto 5.8或更高版本。\n警告：如果您使用 Wallpapers For Android Auto应用，需要将其更新到最低3.0版本，否则此调整将破坏Wallpapers For Android Auto的功能。</string>
     <string name="tutorial_dark_mode">从2020年12月开始，谷歌取消了一个自安卓10以来的功能。之前，Android Auto上的亮/暗模式遵循手机上的亮/暗模式，反之亦然。这意味着将手机切换到暗模式会对汽车生效，或者如果手机处于暗模式，汽车熄灯将打开手机上的日间模式。\n但是，由于引入了“独立”暗模式，因此改装车机的用户无法再切换到暗模式，除非将车机连接到车灯。\n此调整可确保夜间模式再次依赖于手机，在手机上切换明暗模式可对汽车生效。</string>
