@@ -1,6 +1,7 @@
 package com.xiddoc.androidautox.autox;
 
 import android.hardware.input.InputManager;
+import android.os.Build;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.InputDevice;
@@ -59,33 +60,78 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
      */
     private static final int INJECT_MODE_ASYNC = 0;
 
-    /** Cached reference to the hidden {@code InputManager#injectInputEvent} method. */
+    /** Cached reference to the hidden {@code injectInputEvent} method. */
     private final Method injectInputEvent;
 
-    /** Platform InputManager singleton obtained at construction time. */
-    private final InputManager inputManager;
+    /**
+     * The object the {@link #injectInputEvent} method is invoked on. On API &lt; 34 this is
+     * the {@link InputManager} passed to the constructor; on API 34+ it is the
+     * {@code android.hardware.input.InputManagerGlobal} singleton (see class Javadoc).
+     */
+    private final Object injectTarget;
 
     /**
      * Constructs an injector, resolving the hidden {@code injectInputEvent} method
-     * via reflection. If resolution fails (e.g. the platform removed or renamed it),
-     * subsequent calls to {@link #inject} will immediately return {@code false} with
-     * a warning logged.
+     * via reflection.
+     *
+     * <h3>API-34 relocation</h3>
+     * <p>On API 33 and below the method lives on {@link InputManager} itself
+     * ({@code InputManager#injectInputEvent(InputEvent, int)}). On API 34 the platform
+     * moved the implementation to the hidden singleton
+     * {@code android.hardware.input.InputManagerGlobal}; the {@link InputManager} instance
+     * method was removed, so reflecting it against {@link InputManager} throws
+     * {@link NoSuchMethodException}. We therefore choose the target by
+     * {@link Build.VERSION#SDK_INT}: on API 34+ we reflect
+     * {@code InputManagerGlobal#getInstance()} and resolve {@code injectInputEvent} on that
+     * instance; below 34 we resolve it on {@link InputManager}.
+     *
+     * <p>If resolution fails on every path, subsequent calls to {@link #inject}
+     * immediately return {@code false} with a warning logged (fail-closed — no events are
+     * dispatched and the provider reports the privilege as unproven).
+     *
+     * <p>// TODO(device-verify): confirm the exact {@code InputManagerGlobal} class name,
+     * {@code getInstance()} signature, and that {@code injectInputEvent(InputEvent, int)}
+     * is still the honored entry point on a real API-34 device; the relocation is
+     * documented but the precise reflective shape can only be validated on-device.
      *
      * @param inputManager the system {@link InputManager}; obtain via
      *                     {@code context.getSystemService(InputManager.class)}
      */
     public ReflectiveGestureInjector(InputManager inputManager) {
-        this.inputManager = inputManager;
+        Object target = null;
         Method resolved = null;
         try {
-            resolved = InputManager.class.getDeclaredMethod(
-                    "injectInputEvent", android.view.InputEvent.class, int.class);
-            resolved.setAccessible(true);
-        } catch (NoSuchMethodException e) {
-            Log.w(TAG, "ReflectiveGestureInjector: injectInputEvent not found on this platform; "
-                    + "gesture injection will be a no-op.", e);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                // API 34+: injectInputEvent lives on InputManagerGlobal, not InputManager.
+                Class<?> globalCls = Class.forName(
+                        "android.hardware.input.InputManagerGlobal");
+                Method getInstance = globalCls.getDeclaredMethod("getInstance");
+                getInstance.setAccessible(true);
+                target = getInstance.invoke(null);
+                resolved = globalCls.getDeclaredMethod(
+                        "injectInputEvent", android.view.InputEvent.class, int.class);
+                resolved.setAccessible(true);
+            } else {
+                target = inputManager;
+                resolved = InputManager.class.getDeclaredMethod(
+                        "injectInputEvent", android.view.InputEvent.class, int.class);
+                resolved.setAccessible(true);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "ReflectiveGestureInjector: injectInputEvent could not be resolved on "
+                    + "this platform (SDK " + Build.VERSION.SDK_INT + "); gesture injection "
+                    + "will be a no-op.", t);
+            target = null;
+            resolved = null;
         }
-        this.injectInputEvent = resolved;
+        // Fail-closed: only keep the method if we also have a non-null target to invoke on.
+        if (resolved != null && target != null) {
+            this.injectTarget = target;
+            this.injectInputEvent = resolved;
+        } else {
+            this.injectTarget = null;
+            this.injectInputEvent = null;
+        }
     }
 
     /**
@@ -239,7 +285,7 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
      */
     private boolean injectMotionEvent(MotionEvent event) throws Exception {
         try {
-            Object result = injectInputEvent.invoke(inputManager, event, INJECT_MODE_ASYNC);
+            Object result = injectInputEvent.invoke(injectTarget, event, INJECT_MODE_ASYNC);
             return Boolean.TRUE.equals(result);
         } finally {
             event.recycle();
