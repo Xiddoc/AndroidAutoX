@@ -7,6 +7,7 @@ import androidx.annotation.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -81,6 +82,12 @@ public class PhixitEngine {
         LinkedHashMap<String, List<FlagSpec>> byPkg = groupByPkg(specs);
 
         List<Partition> toWrite = new ArrayList<Partition>();
+        // Packages whose flag COUNT changed (a flag was added/removed). Their Heterodyne
+        // committed-config bookkeeping must be invalidated after a successful write, or the
+        // next GMS sync throws "Encountered conflicting flags. Expected flag count N, but
+        // was M." (issue #25). A pure value edit never lands a package here. See
+        // HeterodyneSyncState.
+        LinkedHashSet<String> countChangedPkgs = new LinkedHashSet<String>();
         boolean ok = true;
 
         for (Map.Entry<String, List<FlagSpec>> e : byPkg.entrySet()) {
@@ -125,22 +132,50 @@ public class PhixitEngine {
 
             for (int i = 0; i < ids.size(); i++) {
                 List<PhixitSnapshot.Flag> flags = parts.get(i);
+                int countBefore = flags.size();
                 for (FlagSpec s : ps) applySpecToList(flags, s);
+                // Adding/removing a flag drifts the on-disk count from the committed-config
+                // count Heterodyne validates against; record the package so its sync state
+                // is invalidated after the write. A pure value edit leaves the count alone.
+                if (HeterodyneSyncState.countChanged(countBefore, flags.size())) {
+                    countChangedPkgs.add(pkg);
+                }
                 byte[] blob = PhixitSnapshot.deflateRaw(PhixitSnapshot.encode(flags));
                 toWrite.add(new Partition(ids.get(i), blob));
             }
             sb.append("  [").append(pkg).append("] ").append(ids.size()).append(" partitions updated\n");
         }
 
+        boolean writeOk = false;
         if (toWrite.isEmpty()) {
             ok = false;
         } else {
             int servingVersion = (int) (System.currentTimeMillis() / 1000L);
             try {
                 RootDb.writePartitions(toWrite, servingVersion);
+                writeOk = true;
             } catch (Exception ex) {
                 sb.append("  apply ERR: ").append(ex).append("\n");
                 ok = false;
+            }
+        }
+
+        // If the write landed and any partition's flag COUNT changed, invalidate the
+        // Heterodyne committed-config bookkeeping for the affected packages so GMS rebuilds
+        // a self-consistent expected count from our on-disk edit on its next sync (instead
+        // of throwing "Encountered conflicting flags..." and crashing). Gated on the WRITE
+        // succeeding -- NOT the global `ok` -- so a successful count-changing write for one
+        // package is still healed even if another package failed to read/decode (issue #25,
+        // risk #3). Best-effort + lenient: missing tables are skipped, and a failure here
+        // never fails the apply (the flag edit already landed).
+        if (writeOk && !countChangedPkgs.isEmpty()) {
+            List<String> clearSql = HeterodyneSyncState.clearSyncSql(countChangedPkgs);
+            try {
+                RootDb.exec(PHENO_DB, clearSql);
+                sb.append("  Heterodyne sync state cleared for ")
+                        .append(countChangedPkgs).append("\n");
+            } catch (Exception ex) {
+                sb.append("  Heterodyne sync clear ERR: ").append(ex).append("\n");
             }
         }
 
