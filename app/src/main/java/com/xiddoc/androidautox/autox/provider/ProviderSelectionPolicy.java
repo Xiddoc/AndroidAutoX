@@ -23,11 +23,12 @@ package com.xiddoc.androidautox.autox.provider;
  * <h2>Two-phase provisional / reevaluate model</h2>
  * <p>The two honored-flags ({@link ProviderCapabilities#trustedDisplayHonored} /
  * {@link ProviderCapabilities#inputInjectionHonored}) are structurally unobservable before the
- * Car App SDK delivers a surface. During the provisional phase they are conservatively
- * {@code false}; a provisional snapshot with LSPosed active therefore still resolves to
- * {@code LSPOSED} (LSPosed is installed/active, the honored-flags are simply not yet observed),
- * and the call-site enables the trusted-display hook on that provisional decision before the
- * display is created. After the surface exists the caller folds in the real honored-flags via
+ * Car App SDK delivers a surface. During the provisional phase the call-site feeds them
+ * OPTIMISTICALLY equal to {@code lsposedModuleActive}; a provisional snapshot with LSPosed active
+ * therefore resolves to {@code LSPOSED} (LSPosed is installed/active and trusted until a device
+ * read proves otherwise), and the call-site enables the trusted-display hook on that provisional
+ * decision before the display is created. After the surface exists the caller folds in the real
+ * honored-flags via
  * {@link AutoXProviders#reevaluate(boolean, boolean)}: if either hook turns out ineffective the
  * decision flips to {@code BLOCKED} naming that hook.
  *
@@ -96,10 +97,12 @@ public final class ProviderSelectionPolicy {
      *   <li>LSPosed active and both honored (when observable) → {@link Provider#LSPOSED}.</li>
      * </ol>
      *
-     * <p>During the provisional (pre-surface) phase the two honored-flags are {@code false} but
-     * are NOT yet meaningful, so the call-site treats a provisional LSPosed-active snapshot as
-     * {@code LSPOSED}; the {@code BLOCKED}-on-ineffective-hook branches only matter once
-     * {@link AutoXProviders#reevaluate(boolean, boolean)} has folded in the observed values.
+     * <p>During the provisional (pre-surface) phase the two honored-flags are not yet observable.
+     * The call-site ({@code AutoXProviderFactory.probe}) feeds them OPTIMISTICALLY equal to
+     * {@code lsposedModuleActive} — LSPosed is the privileged mechanism, trusted until a real
+     * device read proves otherwise — so a provisional LSPosed-active snapshot resolves to
+     * {@code LSPOSED} here. The {@code BLOCKED}-on-ineffective-hook branches only matter once
+     * {@link AutoXProviders#reevaluate(boolean, boolean)} has folded in the real observed values.
      *
      * @param caps detected capabilities; must not be null
      * @return the {@link Decision} (provider + reason)

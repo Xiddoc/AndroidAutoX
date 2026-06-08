@@ -129,12 +129,14 @@ public class AutoXProvidersTest {
         StubDisplay display = new StubDisplay();
         StubAudio audio = new StubAudio();
 
-        // Provisional bundle on an LSPosed device: at start trusted/injection are false but
-        // LSPosed is active => provisionally LSPOSED already. (Provisional honored-flags are not
-        // yet meaningful.)
+        // Provisional bundle on an LSPosed device: the factory feeds the honored-flags
+        // OPTIMISTICALLY true when LSPosed is active, so the provisional decision is already
+        // LSPOSED (it does not start BLOCKED). See provisionalLsposedInputs_resolveToLsposed
+        // in ProviderSelectionPolicyTest which locks in the factory's actual provisional inputs.
         AutoXProviders provisional = new AutoXProviders(settings, input, display, audio,
-                blockedDecision(), true, false, true, true, true);
+                lsposedDecision(), true, false, true, true, true);
         assertTrue(provisional.isProvisional());
+        assertEquals(Provider.LSPOSED, provisional.provider());
 
         // Surface arrives: both hooks honored => LSPOSED.
         AutoXProviders settled = provisional.reevaluate(true, true);

@@ -17,10 +17,10 @@ package com.xiddoc.androidautox.autox.provider;
  * and whether cross-display input injection is honored — are <em>structurally</em>
  * unobservable (there is no display or injected event yet). The factory therefore returns a
  * <b>provisional</b> bundle (see {@link #isProvisional()}) whose decision was computed with
- * those two inputs conservatively {@code false}; with LSPosed active that provisionally
- * reports {@link ProviderSelectionPolicy.Provider#LSPOSED} (LSPosed is active; the honored
- * flags are simply not yet observed), and {@link ProviderSelectionPolicy.Provider#BLOCKED}
- * when LSPosed is inactive.
+ * those two inputs fed OPTIMISTICALLY equal to {@code lsposedModuleActive}; with LSPosed active
+ * that provisionally reports {@link ProviderSelectionPolicy.Provider#LSPOSED} (LSPosed is active
+ * and trusted until a device read proves otherwise), and
+ * {@link ProviderSelectionPolicy.Provider#BLOCKED} when LSPosed is inactive.
  *
  * <p>Once the surface exists (Wave-2 call site, {@code AutoXScreen.onSurfaceAvailable}) the
  * caller observes the real trusted-display / injection state and calls

@@ -32,7 +32,8 @@ import com.topjohnwu.superuser.Shell;
  * <ol>
  *   <li>{@link #probe(Context)} — runs the cheap <em>static</em> probes only
  *       (LSPosed-active, platform-signed, root-available), feeds trusted-display /
- *       input-injection as conservatively {@code false}, and returns a <b>provisional</b>
+ *       input-injection OPTIMISTICALLY equal to LSPosed-active (trusted until a device read
+ *       proves otherwise), and returns a <b>provisional</b>
  *       {@link AutoXProviders} ({@link AutoXProviders#isProvisional()} {@code true}) with an
  *       {@link UnboundDisplayProvider} placeholder. With LSPosed active this is provisionally
  *       {@link ProviderSelectionPolicy.Provider#LSPOSED}; without it,
@@ -83,9 +84,10 @@ public final class AutoXProviderFactory {
     /**
      * Probes the cheap static capabilities and returns a <b>provisional</b>
      * {@link AutoXProviders}. The decision is computed with trusted-display and
-     * input-injection conservatively {@code false} (no surface exists yet); the Wave-2 call
-     * site must call {@link AutoXProviders#reevaluate(boolean, boolean)} once the surface
-     * arrives to obtain the final, non-provisional decision.
+     * input-injection fed OPTIMISTICALLY equal to LSPosed-active (no surface exists yet, so we
+     * trust the LSPosed hooks until a device read proves otherwise); the Wave-2 call site must
+     * call {@link AutoXProviders#reevaluate(boolean, boolean)} once the surface arrives to obtain
+     * the final, non-provisional decision.
      *
      * @param context a non-null application / service context
      * @return the provisional provider set + selection decision
@@ -119,10 +121,16 @@ public final class AutoXProviderFactory {
         DisplayProvider display = new UnboundDisplayProvider();
 
         // No Surface yet at session start: the trusted-display and injection capabilities are
-        // structurally unobservable. Feed them conservatively false; the Wave-2 call site
-        // re-runs the decision via AutoXProviders.reevaluate(...) once the surface exists.
-        boolean trustedDisplayHonored = false;
-        boolean injectionHonored = false;
+        // structurally unobservable. When LSPosed is active we feed them OPTIMISTICALLY true:
+        // LSPosed is the privileged mechanism, so we trust the hook is effective until a real
+        // device read proves otherwise — this makes the provisional decision resolve to LSPOSED
+        // (the intent) instead of BLOCKED. When LSPosed is inactive the values are irrelevant
+        // (selection blocks on lsposedModuleActive first). The Wave-2 call site re-runs the
+        // decision via AutoXProviders.reevaluate(...) once the surface exists.
+        // TODO(device-verify): replace optimistic true with the real trusted-flag
+        // (DisplayInfo.flags & FLAG_TRUSTED) and post-injection reads.
+        boolean trustedDisplayHonored = lsposedActive;
+        boolean injectionHonored = lsposedActive;
 
         // settingsWritable is NOT determined by a live privileged write — that round-trip
         // would be a side-effecting, observer-firing write that (a) can false-negative on
@@ -222,13 +230,6 @@ public final class AutoXProviderFactory {
     }
 
     /**
-     * Placeholder {@link DisplayProvider} returned by the factory at session start, before
-     * any {@link android.view.Surface} exists. Reports {@link DisplayProvider#NO_DISPLAY}
-     * (the typed unbound signal) and an untrusted state; all mutating calls are no-ops. The
-     * real {@code RootDisplayProvider} is built later by the call-site wiring once the
-     * surface is delivered (future WS4 work).
-     */
-    /**
      * No-op {@link InputProvider} wired in when LSPosed is inactive. AutoX is BLOCKED in that
      * case (no silent root-injection fallback), so this never injects and reports the injection
      * hook as not honored, keeping the selection decision at
@@ -246,6 +247,13 @@ public final class AutoXProviderFactory {
         }
     }
 
+    /**
+     * Placeholder {@link DisplayProvider} returned by the factory at session start, before
+     * any {@link android.view.Surface} exists. Reports {@link DisplayProvider#NO_DISPLAY}
+     * (the typed unbound signal) and an untrusted state; all mutating calls are no-ops.
+     * {@code AutoXScreen} owns the real {@code VirtualDisplayController}; the DisplayProvider-seam
+     * migration that would bind a real display here is future WS4 work.
+     */
     static final class UnboundDisplayProvider implements DisplayProvider {
         @Override
         public int create(com.xiddoc.androidautox.autox.AutoXDisplaySpec spec) {

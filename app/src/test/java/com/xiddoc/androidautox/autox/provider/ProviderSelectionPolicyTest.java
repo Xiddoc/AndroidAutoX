@@ -78,6 +78,49 @@ public class ProviderSelectionPolicyTest {
         assertTrue(d.reason.contains("LSPosed"));
     }
 
+    /**
+     * Locks in BLOCKER-1's fix: AutoXProviderFactory.probe(), when LSPosed is active, feeds the
+     * two surface-time honored-flags OPTIMISTICALLY {@code true} (no surface exists yet, but
+     * LSPosed is the privileged mechanism we trust until a device read proves otherwise). Running
+     * those exact provisional inputs through CapabilityDecider + select(...) MUST resolve to
+     * LSPOSED, not BLOCKED — otherwise the car surface would permanently show "requires LSPosed".
+     */
+    @Test
+    public void provisionalLsposedInputs_resolveToLsposed() {
+        // Mirror AutoXProviderFactory.probe()'s provisional inputs on an LSPosed-active device:
+        //   lsposedActive = true; trusted/injection fed optimistically = lsposedActive (true);
+        //   platformSigned / rootAvailable / settingsWritable do not affect the decision.
+        boolean lsposedActive = true;
+        ProviderCapabilities provisional = CapabilityDecider.decide(
+                lsposedActive,
+                /* platformSigned= */ false,
+                /* rootAvailable= */ true,
+                /* trustedDisplayHonored= */ lsposedActive,
+                /* injectionHonored= */ lsposedActive,
+                /* settingsWritable= */ true);
+        Decision d = ProviderSelectionPolicy.select(provisional);
+        assertEquals(Provider.LSPOSED, d.provider);
+    }
+
+    /**
+     * Mirror image: with LSPosed inactive the factory's provisional inputs (optimistic flags
+     * collapse to false) MUST resolve to BLOCKED with the "requires LSPosed" reason.
+     */
+    @Test
+    public void provisionalNoLsposedInputs_resolveToBlocked() {
+        boolean lsposedActive = false;
+        ProviderCapabilities provisional = CapabilityDecider.decide(
+                lsposedActive,
+                /* platformSigned= */ false,
+                /* rootAvailable= */ true,
+                /* trustedDisplayHonored= */ lsposedActive,
+                /* injectionHonored= */ lsposedActive,
+                /* settingsWritable= */ true);
+        Decision d = ProviderSelectionPolicy.select(provisional);
+        assertEquals(Provider.BLOCKED, d.provider);
+        assertTrue(d.reason.contains("requires LSPosed"));
+    }
+
     @Test
     public void nullCaps_throws() {
         try {
