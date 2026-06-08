@@ -24,6 +24,13 @@ import java.util.Map;
  */
 public final class IpcCommand {
 
+    /**
+     * Sentinel returned by {@link #displayId()} when no valid display id is present. Equal to
+     * {@code HookGatePolicy.NO_DISPLAY_ID} (-1, never a valid Android display id) so the gate
+     * treats it as "no display known"; defined locally to keep this class import-free.
+     */
+    public static final int NO_DISPLAY_ID = -1;
+
     /** Reserved separator between the type token and the argument list. */
     private static final char TYPE_SEP = '|';
     /** Reserved separator between key=value argument pairs. */
@@ -31,14 +38,27 @@ public final class IpcCommand {
     /** Reserved separator between an argument key and its value. */
     private static final char KV_SEP = '=';
 
+    /**
+     * Argument key carrying the AutoX virtual-display id a command is scoped to.
+     *
+     * <p>The display-scoped commands ({@link Type#ALLOW_INPUT_INJECTION},
+     * {@link Type#SET_DISPLAY_IME}, {@link Type#LAUNCH_ON_DISPLAY}) all carry this key so the
+     * LSPosed hooks can gate on AutoX's own display id (see
+     * {@code HookGatePolicy.shouldActForDisplayId}). The value is the decimal display id as a
+     * string; {@link #displayId()} parses it back.
+     */
+    public static final String ARG_DISPLAY_ID = "displayId";
+
     /** The set of commands the app can issue to the LSPosed module. */
     public enum Type {
         /** Honor {@code VIRTUAL_DISPLAY_FLAG_TRUSTED} for AutoX displays. */
         ENABLE_TRUSTED_DISPLAY,
         /** Allow {@code injectInputEvent} to target a specific display. */
         ALLOW_INPUT_INJECTION,
-        /** Set whether the IME may show on a given display. */
+        /** Set whether the IME (and system decors) may show on a given display. */
         SET_DISPLAY_IME,
+        /** Permit launching an arbitrary activity on a specific (AutoX) display. */
+        LAUNCH_ON_DISPLAY,
         /** Bind a UID's audio to a specific output device. */
         SET_UID_AFFINITY
     }
@@ -81,6 +101,43 @@ public final class IpcCommand {
         return of(type, Collections.<String, String>emptyMap());
     }
 
+    /**
+     * Creates a display-scoped command: the given {@code displayId} is stored under
+     * {@link #ARG_DISPLAY_ID} (first, so it leads the encoded arg list), followed by any
+     * {@code extraArgs} in their iteration order.
+     *
+     * @param type      the command type; must not be null
+     * @param displayId the AutoX virtual-display id this command is scoped to; must be
+     *                  {@code >= 0} (a valid Android display id)
+     * @param extraArgs additional key/value arguments; must not be null (may be empty) and
+     *                  must not redefine {@link #ARG_DISPLAY_ID}
+     * @return a command whose {@link #displayId()} returns {@code displayId}
+     * @throws IllegalArgumentException on a null type/extraArgs, a negative {@code displayId},
+     *                                  an {@code extraArgs} entry re-using {@link #ARG_DISPLAY_ID},
+     *                                  or an otherwise invalid key/value
+     */
+    public static IpcCommand forDisplay(Type type, int displayId, Map<String, String> extraArgs) {
+        if (extraArgs == null) {
+            throw new IllegalArgumentException("extraArgs must not be null");
+        }
+        if (displayId < 0) {
+            throw new IllegalArgumentException("displayId must be >= 0: " + displayId);
+        }
+        if (extraArgs.containsKey(ARG_DISPLAY_ID)) {
+            throw new IllegalArgumentException(
+                    "extraArgs must not redefine reserved key '" + ARG_DISPLAY_ID + "'");
+        }
+        Map<String, String> merged = new LinkedHashMap<String, String>();
+        merged.put(ARG_DISPLAY_ID, Integer.toString(displayId));
+        merged.putAll(extraArgs);
+        return of(type, merged);
+    }
+
+    /** Creates a display-scoped command with no extra arguments beyond the display id. */
+    public static IpcCommand forDisplay(Type type, int displayId) {
+        return forDisplay(type, displayId, Collections.<String, String>emptyMap());
+    }
+
     private static void validateToken(String what, String token) {
         if (token == null || token.isEmpty()) {
             throw new IllegalArgumentException(what + " must not be null/empty");
@@ -111,6 +168,35 @@ public final class IpcCommand {
      */
     public String arg(String key) {
         return args.get(key);
+    }
+
+    /**
+     * Returns the display id this command is scoped to, parsed from its {@link #ARG_DISPLAY_ID}
+     * argument.
+     *
+     * <p>Fail-safe (never throws): returns {@link #NO_DISPLAY_ID} when the argument is absent,
+     * blank, or not a parseable non-negative integer. This is the exact value the LSPosed gate
+     * ({@code HookGatePolicy}) treats as "no display known", so a malformed/absent id makes the
+     * hook no-op rather than acting on an unintended display.
+     *
+     * @return the parsed display id ({@code >= 0}), or {@link #NO_DISPLAY_ID} if absent/invalid
+     */
+    public int displayId() {
+        String raw = args.get(ARG_DISPLAY_ID);
+        if (raw == null) {
+            return NO_DISPLAY_ID;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return NO_DISPLAY_ID;
+        }
+        int parsed;
+        try {
+            parsed = Integer.parseInt(trimmed);
+        } catch (NumberFormatException e) {
+            return NO_DISPLAY_ID;
+        }
+        return parsed < 0 ? NO_DISPLAY_ID : parsed;
     }
 
     /**

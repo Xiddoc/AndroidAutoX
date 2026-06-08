@@ -60,12 +60,6 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
     static final String IPC_PREFS_KEY = "commands";
     /** The system_server package name. */
     static final String SYSTEM_SERVER_PACKAGE = "android";
-    /**
-     * IPC command argument key carrying the AutoX virtual-display id that the per-display
-     * hooks (shouldShowIme / shouldShowSystemDecors / launch-on-display / input injection)
-     * must scope to. Absent/unparseable → {@link HookGatePolicy#NO_DISPLAY_ID} → hook no-ops.
-     */
-    static final String ARG_DISPLAY_ID = "displayId";
 
     private final XSharedPreferences prefs;
 
@@ -156,7 +150,7 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
         });
     }
 
-    /** Lets injectInputEvent target an arbitrary display when enabled. */
+    /** Lets injectInputEvent target AutoX's display when enabled. */
     private void hookInputInjection(ClassLoader cl, HookDescriptor d) {
         XposedHelpers.findAndHookMethod(d.className, cl, d.methodName, new XC_MethodHook() {
             @Override
@@ -164,13 +158,11 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
                 try {
                     boolean enabled = isCommandEnabled(IpcCommand.Type.ALLOW_INPUT_INJECTION);
                     int autoxDisplayId = autoxDisplayId(IpcCommand.Type.ALLOW_INPUT_INJECTION);
-                    int hookedDisplayId = firstInt(param.args);
-                    // Gate to AutoX's display id (pure HookGatePolicy) before allowing the
-                    // injection bypass — never a system-wide injection relaxation.
-                    if (HookGatePolicy.shouldActForDisplayId(
-                            enabled, hookedDisplayId, autoxDisplayId)) {
-                        InputInjectionBridge.allow(param);
-                    }
+                    // The bridge runs the pure HookGatePolicy gate internally (mirroring
+                    // TrustedFlagBridge) and only relaxes the frame for AutoX's display id —
+                    // never a system-wide injection relaxation.
+                    InputInjectionBridge.allow(
+                            param, Build.VERSION.SDK_INT, enabled, autoxDisplayId);
                 } catch (Throwable t) {
                     XposedBridge.log(t); // fail closed
                 }
@@ -215,8 +207,8 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
             case DISPLAY_SHOULD_SHOW_SYSTEM_DECORS:
                 return IpcCommand.Type.SET_DISPLAY_IME;
             default:
-                // launch-on-display is scoped via the trusted-display enablement command.
-                return IpcCommand.Type.ENABLE_TRUSTED_DISPLAY;
+                // launch-on-display is now its own first-class, display-scoped command.
+                return IpcCommand.Type.LAUNCH_ON_DISPLAY;
         }
     }
 
@@ -235,8 +227,8 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
 
     /**
      * Reads the AutoX display id carried in the first enabled IPC command of {@code type}
-     * via its {@link #ARG_DISPLAY_ID} argument. Returns {@link HookGatePolicy#NO_DISPLAY_ID}
-     * when no such command is present or the argument is absent/unparseable.
+     * via {@link IpcCommand#displayId()}. Returns {@link HookGatePolicy#NO_DISPLAY_ID}
+     * when no such command is present or its display-id arg is absent/unparseable.
      */
     private int autoxDisplayId(IpcCommand.Type type) {
         if (prefs == null || type == null) {
@@ -257,7 +249,8 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
                 try {
                     IpcCommand cmd = IpcCommand.decode(line);
                     if (cmd.getType() == type) {
-                        return parseDisplayId(cmd.arg(ARG_DISPLAY_ID));
+                        // IpcCommand.displayId() is fail-safe: NO_DISPLAY_ID when absent/invalid.
+                        return cmd.displayId();
                     }
                 } catch (IllegalArgumentException ignored) {
                     // malformed line — skip
@@ -267,17 +260,6 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
             XposedBridge.log(t);
         }
         return HookGatePolicy.NO_DISPLAY_ID;
-    }
-
-    private static int parseDisplayId(String raw) {
-        if (raw == null) {
-            return HookGatePolicy.NO_DISPLAY_ID;
-        }
-        try {
-            return Integer.parseInt(raw.trim());
-        } catch (NumberFormatException e) {
-            return HookGatePolicy.NO_DISPLAY_ID;
-        }
     }
 
     /**
