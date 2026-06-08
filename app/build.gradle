@@ -318,6 +318,10 @@ def jacocoExclusions = [
         '**/provider/lsposed/AutoXXposedModule*.*',
         '**/provider/lsposed/TrustedFlagBridge*.*',
         '**/provider/lsposed/InputInjectionBridge*.*',
+        // App-side writer for the LSPosed IPC channel: Android Context / SharedPreferences
+        // glue (incl. world-readable MODE_WORLD_READABLE), untestable off-device. All command
+        // construction/validation it performs lives in the pure (100%-tested) IpcCommand.
+        '**/provider/lsposed/IpcCommandWriter*.*',
         '**/de/robv/android/xposed/**',              // Xposed API stub (src/xposedStub/java, compileOnly; not our code, no tests)
 
         // --- WS6 audio-routing glue ---

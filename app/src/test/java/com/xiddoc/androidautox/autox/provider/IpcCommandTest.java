@@ -52,7 +52,9 @@ public class IpcCommandTest {
         // exercise enum synthetic methods
         assertEquals(IpcCommand.Type.SET_DISPLAY_IME,
                 IpcCommand.Type.valueOf("SET_DISPLAY_IME"));
-        assertEquals(4, IpcCommand.Type.values().length);
+        assertEquals(IpcCommand.Type.LAUNCH_ON_DISPLAY,
+                IpcCommand.Type.valueOf("LAUNCH_ON_DISPLAY"));
+        assertEquals(5, IpcCommand.Type.values().length);
     }
 
     @Test
@@ -183,5 +185,104 @@ public class IpcCommandTest {
         assertFalse(a.equals(null));
         assertFalse(a.equals("x"));
         assertTrue(a.toString().contains("SET_DISPLAY_IME"));
+    }
+
+    // ------------------------------------------------------------------
+    // forDisplay(...) + displayId()
+    // ------------------------------------------------------------------
+
+    @Test
+    public void forDisplay_noExtraArgs_putsDisplayIdFirst() {
+        IpcCommand c = IpcCommand.forDisplay(IpcCommand.Type.ALLOW_INPUT_INJECTION, 7);
+        assertEquals("ALLOW_INPUT_INJECTION|displayId=7", c.encode());
+        assertEquals(7, c.displayId());
+        assertEquals(c, IpcCommand.decode(c.encode()));
+    }
+
+    @Test
+    public void forDisplay_zeroId_isValid() {
+        IpcCommand c = IpcCommand.forDisplay(IpcCommand.Type.SET_DISPLAY_IME, 0);
+        assertEquals(0, c.displayId());
+    }
+
+    @Test
+    public void forDisplay_withExtraArgs_displayIdLeadsThenExtras() {
+        IpcCommand c = IpcCommand.forDisplay(IpcCommand.Type.LAUNCH_ON_DISPLAY, 3,
+                args("pkg", "com.example.app"));
+        assertEquals("LAUNCH_ON_DISPLAY|displayId=3;pkg=com.example.app", c.encode());
+        assertEquals(3, c.displayId());
+        assertEquals("com.example.app", c.arg("pkg"));
+    }
+
+    @Test
+    public void forDisplay_nullExtraArgs_throws() {
+        try {
+            IpcCommand.forDisplay(IpcCommand.Type.SET_DISPLAY_IME, 1, null);
+            fail();
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("extraArgs"));
+        }
+    }
+
+    @Test
+    public void forDisplay_negativeId_throws() {
+        try {
+            IpcCommand.forDisplay(IpcCommand.Type.SET_DISPLAY_IME, -1);
+            fail();
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("displayId"));
+        }
+    }
+
+    @Test
+    public void forDisplay_extraArgsRedefiningDisplayId_throws() {
+        try {
+            IpcCommand.forDisplay(IpcCommand.Type.SET_DISPLAY_IME, 2,
+                    args(IpcCommand.ARG_DISPLAY_ID, "9"));
+            fail();
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("reserved key"));
+        }
+    }
+
+    @Test
+    public void displayId_absentArg_returnsSentinel() {
+        IpcCommand c = IpcCommand.of(IpcCommand.Type.ENABLE_TRUSTED_DISPLAY);
+        assertEquals(IpcCommand.NO_DISPLAY_ID, c.displayId());
+    }
+
+    @Test
+    public void displayId_blankValue_returnsSentinel() {
+        // A whitespace-only value passes token validation (only null/empty rejected) but
+        // trims to empty in displayId().
+        IpcCommand c = IpcCommand.of(IpcCommand.Type.SET_DISPLAY_IME,
+                args(IpcCommand.ARG_DISPLAY_ID, "   "));
+        assertEquals(IpcCommand.NO_DISPLAY_ID, c.displayId());
+    }
+
+    @Test
+    public void displayId_nonNumericValue_returnsSentinel() {
+        IpcCommand c = IpcCommand.of(IpcCommand.Type.SET_DISPLAY_IME,
+                args(IpcCommand.ARG_DISPLAY_ID, "abc"));
+        assertEquals(IpcCommand.NO_DISPLAY_ID, c.displayId());
+    }
+
+    @Test
+    public void displayId_negativeValue_returnsSentinel() {
+        IpcCommand c = IpcCommand.of(IpcCommand.Type.SET_DISPLAY_IME,
+                args(IpcCommand.ARG_DISPLAY_ID, "-3"));
+        assertEquals(IpcCommand.NO_DISPLAY_ID, c.displayId());
+    }
+
+    @Test
+    public void displayId_validValue_parses() {
+        IpcCommand c = IpcCommand.of(IpcCommand.Type.SET_DISPLAY_IME,
+                args(IpcCommand.ARG_DISPLAY_ID, "42"));
+        assertEquals(42, c.displayId());
+    }
+
+    @Test
+    public void noDisplayIdSentinel_isNegativeOne() {
+        assertEquals(-1, IpcCommand.NO_DISPLAY_ID);
     }
 }
