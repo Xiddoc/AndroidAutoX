@@ -1768,6 +1768,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Passively re-check the AutoX gate on every return to the screen: the tap path is
+        // already live/correct, but the label can go stale while backgrounded (e.g. root granted
+        // in another app), so refresh from the persisted prefs here.
+        refreshAutoXButtonState(getSharedPreferences("autox_prefs", Context.MODE_PRIVATE));
+    }
+
+    @Override
     protected void onDestroy() {
         // Drop any in-flight background reconcile result so we never touch a destroyed activity.
         activityDestroyed = true;
@@ -3422,7 +3431,8 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
      * Refreshes the AutoX toggle button label and status icon to reflect the current
      * persisted enabled state in {@code prefs}.
      *
-     * <p>Called once during {@code onCreate} and again each time the toggle is tapped.
+     * <p>Called during {@code onCreate}, on every {@code onResume} (so the label can't go
+     * stale while backgrounded), and again each time the toggle is tapped.
      * The status icon follows the same convention as other tweak icons:
      * 2 = applied/enabled (green), 0 = not applied (red).
      */
