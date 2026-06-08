@@ -16,7 +16,9 @@ import org.junit.Test;
 /**
  * 100% line + branch tests for the pure {@link AutoXProviders} holder: null-guards on
  * every argument, all accessors, the {@code provider}/{@code reason}/{@code isDegraded}/
- * {@code usesLsposed} predicates for all three decisions, and {@code toString}.
+ * {@code usesLsposed}/{@code isProvisional} predicates for all three decisions,
+ * {@code toString}, and the pure {@link AutoXProviders#reevaluate(boolean, boolean)}
+ * recompute across the static-probe input combinations.
  */
 public class AutoXProvidersTest {
 
@@ -72,7 +74,8 @@ public class AutoXProvidersTest {
         StubAudio audio = new StubAudio();
         Decision d = rootDecision();
 
-        AutoXProviders p = new AutoXProviders(settings, input, display, audio, d);
+        AutoXProviders p = new AutoXProviders(settings, input, display, audio, d,
+                false, false, true, true, false);
 
         assertSame(settings, p.settings());
         assertSame(input, p.input());
@@ -108,44 +111,136 @@ public class AutoXProvidersTest {
     }
 
     @Test
-    public void toString_includesTheDecision() {
+    public void provisionalFlag_isExposed_bothValues() {
+        AutoXProviders provisional = new AutoXProviders(
+                new StubSettings(), new StubInput(), new StubDisplay(), new StubAudio(),
+                degradedDecision(), false, false, true, true, true);
+        assertTrue(provisional.isProvisional());
+
+        AutoXProviders settled = new AutoXProviders(
+                new StubSettings(), new StubInput(), new StubDisplay(), new StubAudio(),
+                rootDecision(), false, false, true, true, false);
+        assertFalse(settled.isProvisional());
+    }
+
+    @Test
+    public void toString_includesDecisionAndProvisional() {
         AutoXProviders p = build(lsposedDecision());
         assertTrue(p.toString().contains("AutoXProviders"));
         assertTrue(p.toString().contains("decision="));
+        assertTrue(p.toString().contains("provisional="));
+    }
+
+    // --- reevaluate(...) : pure recompute, carries instances, clears provisional ---
+
+    @Test
+    public void reevaluate_rootDevice_promotesDegradedToRootReflection_andClearsProvisional() {
+        StubSettings settings = new StubSettings();
+        StubInput input = new StubInput();
+        StubDisplay display = new StubDisplay();
+        StubAudio audio = new StubAudio();
+
+        // Provisional bundle from a capable root device: trusted/injection false at start
+        // => DEGRADED provisionally.
+        AutoXProviders provisional = new AutoXProviders(settings, input, display, audio,
+                degradedDecision(), false, false, true, true, true);
+        assertTrue(provisional.isDegraded());
+        assertTrue(provisional.isProvisional());
+
+        // Surface arrives: both capabilities honored => ROOT_REFLECTION.
+        AutoXProviders settled = provisional.reevaluate(true, true);
+        assertEquals(Provider.ROOT_REFLECTION, settled.provider());
+        assertFalse(settled.isDegraded());
+        assertFalse(settled.isProvisional());
+
+        // Provider instances carry over unchanged.
+        assertSame(settings, settled.settings());
+        assertSame(input, settled.input());
+        assertSame(display, settled.display());
+        assertSame(audio, settled.audio());
+    }
+
+    @Test
+    public void reevaluate_lsposed_staysLsposed_regardlessOfSurfaceProbes() {
+        AutoXProviders provisional = new AutoXProviders(
+                new StubSettings(), new StubInput(), new StubDisplay(), new StubAudio(),
+                lsposedDecision(), true, false, false, true, true);
+
+        AutoXProviders settled = provisional.reevaluate(false, false);
+        assertEquals(Provider.LSPOSED, settled.provider());
+        assertFalse(settled.isProvisional());
+    }
+
+    @Test
+    public void reevaluate_rootDevice_trustedButInjectionDropped_staysDegraded() {
+        AutoXProviders provisional = new AutoXProviders(
+                new StubSettings(), new StubInput(), new StubDisplay(), new StubAudio(),
+                degradedDecision(), false, false, true, true, true);
+
+        AutoXProviders settled = provisional.reevaluate(true, false);
+        assertEquals(Provider.DEGRADED, settled.provider());
+        assertFalse(settled.isProvisional());
+    }
+
+    @Test
+    public void reevaluate_noPrivilegedPath_staysDegraded_evenIfProbesHonored() {
+        AutoXProviders provisional = new AutoXProviders(
+                new StubSettings(), new StubInput(), new StubDisplay(), new StubAudio(),
+                degradedDecision(), false, false, false, false, true);
+
+        AutoXProviders settled = provisional.reevaluate(true, true);
+        assertEquals(Provider.DEGRADED, settled.provider());
+        assertFalse(settled.isProvisional());
+    }
+
+    @Test
+    public void reevaluate_platformSignedPath_promotesToRootReflection() {
+        AutoXProviders provisional = new AutoXProviders(
+                new StubSettings(), new StubInput(), new StubDisplay(), new StubAudio(),
+                degradedDecision(), false, true, false, true, true);
+
+        AutoXProviders settled = provisional.reevaluate(true, true);
+        assertEquals(Provider.ROOT_REFLECTION, settled.provider());
+        assertFalse(settled.isProvisional());
     }
 
     @Test
     public void nullSettings_throws() {
         assertThrows(() -> new AutoXProviders(
-                null, new StubInput(), new StubDisplay(), new StubAudio(), rootDecision()),
+                null, new StubInput(), new StubDisplay(), new StubAudio(), rootDecision(),
+                false, false, true, true, false),
                 "settings");
     }
 
     @Test
     public void nullInput_throws() {
         assertThrows(() -> new AutoXProviders(
-                new StubSettings(), null, new StubDisplay(), new StubAudio(), rootDecision()),
+                new StubSettings(), null, new StubDisplay(), new StubAudio(), rootDecision(),
+                false, false, true, true, false),
                 "input");
     }
 
     @Test
     public void nullDisplay_throws() {
         assertThrows(() -> new AutoXProviders(
-                new StubSettings(), new StubInput(), null, new StubAudio(), rootDecision()),
+                new StubSettings(), new StubInput(), null, new StubAudio(), rootDecision(),
+                false, false, true, true, false),
                 "display");
     }
 
     @Test
     public void nullAudio_throws() {
         assertThrows(() -> new AutoXProviders(
-                new StubSettings(), new StubInput(), new StubDisplay(), null, rootDecision()),
+                new StubSettings(), new StubInput(), new StubDisplay(), null, rootDecision(),
+                false, false, true, true, false),
                 "audio");
     }
 
     @Test
     public void nullDecision_throws() {
         assertThrows(() -> new AutoXProviders(
-                new StubSettings(), new StubInput(), new StubDisplay(), new StubAudio(), null),
+                new StubSettings(), new StubInput(), new StubDisplay(), new StubAudio(), null,
+                false, false, true, true, false),
                 "decision");
     }
 
@@ -153,7 +248,8 @@ public class AutoXProvidersTest {
 
     private static AutoXProviders build(Decision d) {
         return new AutoXProviders(
-                new StubSettings(), new StubInput(), new StubDisplay(), new StubAudio(), d);
+                new StubSettings(), new StubInput(), new StubDisplay(), new StubAudio(), d,
+                false, false, true, true, false);
     }
 
     private interface ThrowingRunnable {

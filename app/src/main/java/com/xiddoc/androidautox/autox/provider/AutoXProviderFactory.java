@@ -2,9 +2,9 @@ package com.xiddoc.androidautox.autox.provider;
 
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.hardware.input.InputManager;
 import android.media.AudioManager;
-import android.provider.Settings;
 import android.util.Log;
 
 import com.xiddoc.androidautox.autox.ReflectiveGestureInjector;
@@ -12,60 +12,54 @@ import com.xiddoc.androidautox.autox.ReflectiveGestureInjector;
 import com.topjohnwu.superuser.Shell;
 
 /**
- * EXCLUDED GLUE: selects the privileged-provider set for an AutoX session at session
- * start.
+ * EXCLUDED GLUE: selects the privileged-provider set for an AutoX session.
  *
- * <p>{@link #create(Context)} is the entry point. It:
+ * <h2>Two-phase API</h2>
+ * <p>The two projection-critical capabilities (trusted virtual display honored, cross-display
+ * input injection honored) are structurally unobservable at session start — there is no
+ * {@link android.view.Surface}, display, or injected event yet. Computing the full decision
+ * then would always report {@link ProviderSelectionPolicy.Provider#DEGRADED} even on a
+ * capable root device, which is misleading. The factory therefore exposes two phases:
+ *
  * <ol>
- *   <li><b>Probes live capabilities</b> using the existing excluded glue and the system
- *       services obtained from the {@link Context}: whether a root path exists (libsu
- *       {@link Shell}), whether the app is platform-signed, whether the LSPosed module is
- *       active in {@code system_server}, whether a protected-settings write round-trips
- *       (write-probe via {@link RootSystemSettingsProvider}), and the input / display
- *       providers' honored-state probes
- *       ({@link ReflectiveGestureInjector#isInjectionHonored()},
- *       {@code RootDisplayProvider#isTrustedDisplayHonored()}).</li>
- *   <li><b>Assembles those probe booleans into a {@link ProviderCapabilities}</b> via the
- *       pure {@link CapabilityDecider} — <em>no</em> probe→caps→decision mapping lives in
- *       this class; all of it is in pure, 100%-tested code.</li>
- *   <li><b>Selects the provider set</b> via the pure {@link ProviderSelectionPolicy}.</li>
- *   <li>Returns an immutable {@link AutoXProviders} bundling the chosen providers plus the
- *       {@link ProviderSelectionPolicy.Decision}.</li>
+ *   <li>{@link #probe(Context)} — runs the cheap <em>static</em> probes only
+ *       (LSPosed-active, platform-signed, root-available), feeds trusted-display /
+ *       input-injection as conservatively {@code false}, and returns a <b>provisional</b>
+ *       {@link AutoXProviders} ({@link AutoXProviders#isProvisional()} {@code true}) with an
+ *       {@link UnboundDisplayProvider} placeholder.</li>
+ *   <li>{@link AutoXProviders#reevaluate(boolean, boolean)} — the Wave-2 call site
+ *       ({@code AutoXScreen.onSurfaceAvailable}) invokes this once the real display exists and
+ *       the trusted / injection state is observable; it purely recomputes the decision via
+ *       {@link CapabilityDecider} + {@link ProviderSelectionPolicy}.</li>
  * </ol>
  *
+ * <p>{@link #create(Context)} is a thin convenience alias for {@link #probe(Context)}.
+ *
+ * <p>All probe→capability→decision logic lives in the pure, fully-tested
+ * {@link CapabilityDecider} / {@link ProviderSelectionPolicy} / {@link AutoXProviders}; this
+ * class only collects live booleans and assembles instances.
+ *
+ * <h2>Threading</h2>
+ * <p>Root detection uses {@link Shell#getCachedShell()} (non-blocking — root is already
+ * acquired in the splash flow), so {@link #probe(Context)} does not block on shell
+ * acquisition and is safe to call from the main thread.
+ *
  * <h2>Display provider caveat</h2>
- * <p>A {@code RootDisplayProvider} needs a {@link android.view.Surface}, which is only
- * available once the Car App SDK delivers a {@code SurfaceContainer} — strictly after this
- * factory runs at session start. So {@link #create(Context)} cannot construct the real
- * display provider or run the trusted-display write-probe itself. It therefore returns a
- * lightweight {@link UnboundDisplayProvider} placeholder (reporting {@code NO_DISPLAY} /
- * not-trusted) and feeds the trusted-display capability as {@code false} into the decider;
- * the call-site wiring (a later task, in {@code AutoXScreen.onSurfaceAvailable}) will build
- * the real {@code RootDisplayProvider} with the live surface and may re-evaluate the
- * decision once the surface exists.
+ * <p>A {@code RootDisplayProvider} needs a {@link android.view.Surface}, available only once
+ * the Car App SDK delivers a {@code SurfaceContainer} — strictly after this factory runs. So
+ * the factory returns a lightweight {@link UnboundDisplayProvider} placeholder (reporting
+ * {@link DisplayProvider#NO_DISPLAY} / not-trusted). {@code AutoXScreen} continues to own its
+ * {@code VirtualDisplayController} for now; the WS4 DisplayProvider-seam migration is future
+ * work.
  *
- * <p>Excluded from the JaCoCo coverage gate: every method here touches live Android
- * framework services ({@link Context}, {@link ContentResolver}, {@link InputManager},
- * {@link AudioManager}) and libsu {@link Shell}, none of which are exercisable in the JVM
- * unit-test environment. All probe→capability→decision logic lives in the pure,
- * fully-tested {@link CapabilityDecider} / {@link ProviderSelectionPolicy}; the holder is
- * the pure {@link AutoXProviders}.
- *
- * <p>// TODO(device-verify): confirm on a real rooted / LSPosed device the platform-signed
- * detection, the LSPosed self-hook marker, the settings write-probe round-trip, and that
- * the input / display honored-probes report correctly after the first real injection /
- * display creation.
+ * <p>Excluded from the JaCoCo coverage gate: every method here touches live Android framework
+ * services ({@link Context}, {@link ContentResolver}, {@link InputManager},
+ * {@link AudioManager}, {@link PackageManager}) and libsu {@link Shell}, none exercisable in
+ * the JVM unit-test environment.
  */
 public final class AutoXProviderFactory {
 
     private static final String TAG = "AndroidAutoX";
-
-    /**
-     * Benign {@code Settings.Global} key written and read back to detect whether protected
-     * settings writes succeed. Chosen because it is an integer key already present on every
-     * device, so the write-probe restores its own prior value and leaves no residue.
-     */
-    private static final String SETTINGS_PROBE_KEY = Settings.Global.AUTO_TIME;
 
     /**
      * System property / marker the LSPosed module would expose; checked reflectively. The
@@ -77,13 +71,17 @@ public final class AutoXProviderFactory {
     }
 
     /**
-     * Probes the live system and returns the selected {@link AutoXProviders}.
+     * Probes the cheap static capabilities and returns a <b>provisional</b>
+     * {@link AutoXProviders}. The decision is computed with trusted-display and
+     * input-injection conservatively {@code false} (no surface exists yet); the Wave-2 call
+     * site must call {@link AutoXProviders#reevaluate(boolean, boolean)} once the surface
+     * arrives to obtain the final, non-provisional decision.
      *
      * @param context a non-null application / service context
-     * @return the chosen provider set + selection decision
+     * @return the provisional provider set + selection decision
      * @throws IllegalArgumentException if {@code context} is null
      */
-    public static AutoXProviders create(Context context) {
+    public static AutoXProviders probe(Context context) {
         if (context == null) {
             throw new IllegalArgumentException("context must not be null");
         }
@@ -96,22 +94,31 @@ public final class AutoXProviderFactory {
         // the same app-side impls — the LSPosed hooks relax the system_server checks, the
         // app still calls the framework APIs through these. For DEGRADED they are still
         // returned (best-effort) but the decision flags the degradation.
+        // TODO(task-6): select LSPosed-backed impls when decision.provider == LSPOSED. The
+        // bundle's seam types (SystemSettingsProvider / InputProvider) are exactly what the
+        // future LSPosed-backed impls will implement, so this is a drop-in swap point.
         SystemSettingsProvider settings = new RootSystemSettingsProvider(resolver);
         InputProvider input = new ReflectiveGestureInjector(inputManager);
         AudioRouter audio = new RootAudioRouter(context, audioManager);
         DisplayProvider display = new UnboundDisplayProvider();
 
-        // --- live probes (booleans only; meaning is decided by the pure decider) ---
+        // --- cheap static probes (booleans only; meaning is decided by the pure decider) ---
         boolean lsposedActive = probeLsposedActive();
         boolean platformSigned = probePlatformSignature(context);
         boolean rootAvailable = probeRootAvailable();
-        // No Surface yet at session start — the real trusted-display probe runs once a
-        // surface is delivered (later call-site wiring). Conservatively false here.
-        boolean trustedDisplayHonored = display.isTrustedDisplayHonored();
-        // No gesture has been injected yet, so the injector reports "unproven" (false)
-        // until the first real injection. Conservatively reflects that here.
-        boolean injectionHonored = input.isInjectionHonored();
-        boolean settingsWritable = probeSettingsWritable(settings);
+
+        // No Surface yet at session start: the trusted-display and injection capabilities are
+        // structurally unobservable. Feed them conservatively false; the Wave-2 call site
+        // re-runs the decision via AutoXProviders.reevaluate(...) once the surface exists.
+        boolean trustedDisplayHonored = false;
+        boolean injectionHonored = false;
+
+        // settingsWritable is NOT determined by a live privileged write — that round-trip
+        // would be a side-effecting, observer-firing write that (a) can false-negative on
+        // privileged devices when writing back the same value and (b) is never even read by
+        // ProviderSelectionPolicy.select(...) today. Derive it conservatively from the static
+        // privileged-path signals instead, with no write to any user-facing setting.
+        boolean settingsWritable = rootAvailable || platformSigned || lsposedActive;
 
         // Pure mapping: probe booleans -> capabilities (CapabilityDecider) -> decision
         // (ProviderSelectionPolicy). NOTHING is decided in this excluded class.
@@ -124,8 +131,23 @@ public final class AutoXProviderFactory {
                 settingsWritable);
         ProviderSelectionPolicy.Decision decision = ProviderSelectionPolicy.select(caps);
 
-        Log.i(TAG, "AutoX provider selection: " + decision + " from " + caps);
-        return new AutoXProviders(settings, input, display, audio, decision);
+        Log.i(TAG, "AutoX provisional provider selection: " + decision + " from " + caps);
+        return new AutoXProviders(settings, input, display, audio, decision,
+                lsposedActive, platformSigned, rootAvailable, settingsWritable,
+                /* provisional= */ true);
+    }
+
+    /**
+     * Thin convenience alias for {@link #probe(Context)}. Returns a provisional bundle; the
+     * caller must {@link AutoXProviders#reevaluate(boolean, boolean)} after the surface
+     * arrives.
+     *
+     * @param context a non-null application / service context
+     * @return the provisional provider set + selection decision
+     * @throws IllegalArgumentException if {@code context} is null
+     */
+    public static AutoXProviders create(Context context) {
+        return probe(context);
     }
 
     // ------------------------------------------------------------------
@@ -149,56 +171,51 @@ public final class AutoXProviderFactory {
     }
 
     /**
-     * Best-effort detection of whether the app is signed with the platform signature, i.e.
-     * shares a UID / signature with the system. Approximated by checking whether the app
-     * holds a signature-level permission that only platform-signed apps are granted.
-     * Returns {@code false} on any failure.
+     * Best-effort detection of whether the app is signed with the <em>platform</em>
+     * signature, i.e. shares the system's signing certificate. Uses
+     * {@link PackageManager#checkSignatures(String, String)} against the {@code "android"}
+     * package: {@link PackageManager#SIGNATURE_MATCH} means our signing cert equals the
+     * platform cert. Fail-closed ({@code false}) on any exception.
+     *
+     * <p>Note: this is signature parity, distinct from holding {@code INJECT_EVENTS} (an
+     * injection capability that root can also confer) — the two must not be conflated.
+     *
+     * <p>// TODO(device-verify): confirm on a real device that checkSignatures("android", pkg)
+     * returns SIGNATURE_MATCH for a genuinely platform-signed build and not for a root-only
+     * install. If this cannot be verified off-device, the conservative path is that
+     * platformSigned stays false and selection relies on rootAvailable.
      */
     private static boolean probePlatformSignature(Context context) {
         try {
-            // INJECT_EVENTS is signature|privileged; a third-party app is never granted it
-            // unless it shares the platform signature. PackageManager.checkPermission returns
-            // PERMISSION_GRANTED (0) only when actually held.
-            int granted = context.getPackageManager().checkPermission(
-                    "android.permission.INJECT_EVENTS", context.getPackageName());
-            return granted == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            PackageManager pm = context.getPackageManager();
+            return pm.checkSignatures("android", context.getPackageName())
+                    == PackageManager.SIGNATURE_MATCH;
         } catch (Throwable t) {
             return false;
         }
     }
 
     /**
-     * Best-effort detection of a usable root path via libsu. Returns {@code true} only if a
-     * shell with real root status is available. Never throws.
+     * Best-effort detection of a usable root path via libsu, <em>without blocking</em>. Uses
+     * {@link Shell#getCachedShell()} (the splash flow already acquired root), so this never
+     * spawns/awaits {@code su} on the calling thread. A null cached shell is treated as
+     * not-root. Never throws.
      */
     private static boolean probeRootAvailable() {
         try {
-            return Shell.getShell().isRoot();
+            Shell cached = Shell.getCachedShell();
+            return cached != null && cached.isRoot();
         } catch (Throwable t) {
             return false;
         }
-    }
-
-    /**
-     * Write-probe: reads the current value of {@link #SETTINGS_PROBE_KEY}, writes it back,
-     * and reports whether the round-trip succeeded (write {@code OK}). Restores nothing
-     * destructively — it writes back the value it just read. Returns {@code false} if the
-     * key is unreadable or the write is denied.
-     */
-    private static boolean probeSettingsWritable(SystemSettingsProvider settings) {
-        SettingsResult read = settings.getGlobalInt(SETTINGS_PROBE_KEY);
-        if (!read.isOk()) {
-            return false;
-        }
-        SettingsResult write = settings.putGlobalInt(SETTINGS_PROBE_KEY, read.value);
-        return write.isOk();
     }
 
     /**
      * Placeholder {@link DisplayProvider} returned by the factory at session start, before
-     * any {@link android.view.Surface} exists. Reports no display and an untrusted state;
-     * all mutating calls are no-ops. The real {@code RootDisplayProvider} is built later by
-     * the call-site wiring once the surface is delivered.
+     * any {@link android.view.Surface} exists. Reports {@link DisplayProvider#NO_DISPLAY}
+     * (the typed unbound signal) and an untrusted state; all mutating calls are no-ops. The
+     * real {@code RootDisplayProvider} is built later by the call-site wiring once the
+     * surface is delivered (future WS4 work).
      */
     static final class UnboundDisplayProvider implements DisplayProvider {
         @Override
