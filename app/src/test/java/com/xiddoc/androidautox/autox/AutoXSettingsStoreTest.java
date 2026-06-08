@@ -9,6 +9,7 @@ import static org.junit.Assert.assertTrue;
 import android.content.SharedPreferences;
 
 import com.xiddoc.androidautox.FakeSharedPreferences;
+import com.xiddoc.androidautox.autox.ime.ImeDisplaySettingsSpec;
 
 import org.junit.Test;
 
@@ -529,5 +530,166 @@ public class AutoXSettingsStoreTest {
                 com.xiddoc.androidautox.autox.provider.SettingsEntry.RevertStrategy.RESTORE_PRIOR,
                 entry.revertStrategy);
         assertEquals(0, entry.revertValue());
+    }
+
+    // -------------------------------------------------------------------------
+    // Convenience getters: null -> ImeDisplaySettingsSpec.VALUE_UNSET (int form)
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void getPriorShouldShowImeOrUnset_absent_returnsValueUnset() {
+        assertEquals(ImeDisplaySettingsSpec.VALUE_UNSET,
+                AutoXSettingsStore.getPriorShouldShowImeOrUnset(prefs(), 42));
+    }
+
+    @Test
+    public void getPriorShouldShowImeOrUnset_present_returnsStoredValue() {
+        SharedPreferences p = prefs();
+        AutoXSettingsStore.setPriorShouldShowIme(p, 42, 0);
+        assertEquals(0, AutoXSettingsStore.getPriorShouldShowImeOrUnset(p, 42));
+        AutoXSettingsStore.setPriorShouldShowIme(p, 42, 1);
+        assertEquals(1, AutoXSettingsStore.getPriorShouldShowImeOrUnset(p, 42));
+    }
+
+    @Test
+    public void getPriorShouldShowSystemDecorsOrUnset_absent_returnsValueUnset() {
+        assertEquals(ImeDisplaySettingsSpec.VALUE_UNSET,
+                AutoXSettingsStore.getPriorShouldShowSystemDecorsOrUnset(prefs(), 42));
+    }
+
+    @Test
+    public void getPriorShouldShowSystemDecorsOrUnset_present_returnsStoredValue() {
+        SharedPreferences p = prefs();
+        AutoXSettingsStore.setPriorShouldShowSystemDecors(p, 42, 0);
+        assertEquals(0, AutoXSettingsStore.getPriorShouldShowSystemDecorsOrUnset(p, 42));
+        AutoXSettingsStore.setPriorShouldShowSystemDecors(p, 42, 1);
+        assertEquals(1, AutoXSettingsStore.getPriorShouldShowSystemDecorsOrUnset(p, 42));
+    }
+
+    // -------------------------------------------------------------------------
+    // End-to-end: store per-display priors flow into ImeDisplaySettingsSpec
+    // (absent -> VALUE_UNSET -> forAbsentKey/WRITE_DEFAULT; present -> RESTORE_PRIOR)
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void perDisplayPriors_absent_flowIntoImeSpec_asUnsetRevertingToDisabled() {
+        SharedPreferences p = prefs();
+        int displayId = 42;
+        // Nothing captured -> both convenience getters return VALUE_UNSET.
+        ImeDisplaySettingsSpec spec = ImeDisplaySettingsSpec.forDisplay(displayId)
+                .withPriorValues(
+                        AutoXSettingsStore.getPriorShouldShowSystemDecorsOrUnset(p, displayId),
+                        AutoXSettingsStore.getPriorShouldShowImeOrUnset(p, displayId));
+        // Revert order: IME first, then decors. Both were UNSET -> WRITE_DEFAULT (disabled).
+        com.xiddoc.androidautox.autox.provider.SettingsEntry imeRevert = spec.revertEntries().get(0);
+        com.xiddoc.androidautox.autox.provider.SettingsEntry decorRevert =
+                spec.revertEntries().get(1);
+        assertEquals(
+                com.xiddoc.androidautox.autox.provider.SettingsEntry.RevertStrategy.WRITE_DEFAULT,
+                imeRevert.revertStrategy);
+        assertEquals(
+                com.xiddoc.androidautox.autox.provider.SettingsEntry.RevertStrategy.WRITE_DEFAULT,
+                decorRevert.revertStrategy);
+        assertEquals(ImeDisplaySettingsSpec.VALUE_DISABLED, imeRevert.revertValue());
+        assertEquals(ImeDisplaySettingsSpec.VALUE_DISABLED, decorRevert.revertValue());
+    }
+
+    @Test
+    public void perDisplayPriors_present_flowIntoImeSpec_asRestorePrior() {
+        SharedPreferences p = prefs();
+        int displayId = 42;
+        AutoXSettingsStore.setPriorShouldShowSystemDecors(p, displayId, 0);
+        AutoXSettingsStore.setPriorShouldShowIme(p, displayId, 1);
+        ImeDisplaySettingsSpec spec = ImeDisplaySettingsSpec.forDisplay(displayId)
+                .withPriorValues(
+                        AutoXSettingsStore.getPriorShouldShowSystemDecorsOrUnset(p, displayId),
+                        AutoXSettingsStore.getPriorShouldShowImeOrUnset(p, displayId));
+        com.xiddoc.androidautox.autox.provider.SettingsEntry imeRevert = spec.revertEntries().get(0);
+        com.xiddoc.androidautox.autox.provider.SettingsEntry decorRevert =
+                spec.revertEntries().get(1);
+        assertEquals(
+                com.xiddoc.androidautox.autox.provider.SettingsEntry.RevertStrategy.RESTORE_PRIOR,
+                imeRevert.revertStrategy);
+        assertEquals(1, imeRevert.revertValue());
+        assertEquals(
+                com.xiddoc.androidautox.autox.provider.SettingsEntry.RevertStrategy.RESTORE_PRIOR,
+                decorRevert.revertStrategy);
+        assertEquals(0, decorRevert.revertValue());
+    }
+
+    // -------------------------------------------------------------------------
+    // clear()/clearPriors() leave per-display priors stranded (locked contract)
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void clear_leavesPerDisplayPriorIntact() {
+        SharedPreferences p = prefs();
+        AutoXSettingsStore.setPriorShouldShowIme(p, 42, 1);
+        AutoXSettingsStore.clear(p);
+        // Per-display priors are NOT wiped by clear() — caller must use clearPriorsForDisplay.
+        assertEquals(Integer.valueOf(1), AutoXSettingsStore.getPriorShouldShowIme(p, 42));
+    }
+
+    @Test
+    public void clearPriors_leavesPerDisplayPriorIntact() {
+        SharedPreferences p = prefs();
+        AutoXSettingsStore.setPriorShouldShowSystemDecors(p, 42, 0);
+        AutoXSettingsStore.clearPriors(p);
+        assertEquals(Integer.valueOf(0),
+                AutoXSettingsStore.getPriorShouldShowSystemDecors(p, 42));
+    }
+
+    // -------------------------------------------------------------------------
+    // displayId <= 0 guard on the four per-display methods
+    // -------------------------------------------------------------------------
+
+    @Test(expected = IllegalArgumentException.class)
+    public void setPriorShouldShowIme_rejectsNonPositiveDisplayId() {
+        AutoXSettingsStore.setPriorShouldShowIme(prefs(), 0, 1);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void getPriorShouldShowIme_rejectsNonPositiveDisplayId() {
+        AutoXSettingsStore.getPriorShouldShowIme(prefs(), -1);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void setPriorShouldShowSystemDecors_rejectsNonPositiveDisplayId() {
+        AutoXSettingsStore.setPriorShouldShowSystemDecors(prefs(), 0, 1);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void getPriorShouldShowSystemDecors_rejectsNonPositiveDisplayId() {
+        AutoXSettingsStore.getPriorShouldShowSystemDecors(prefs(), -5);
+    }
+
+    // -------------------------------------------------------------------------
+    // Defensive readPrior branch: presence flag true but value key absent
+    // -------------------------------------------------------------------------
+
+    /**
+     * Corrupted/partially-written prefs: the presence companion is true but the int value key
+     * is missing. The getter must return the neutral default ({@code 0}), not null.
+     */
+    @Test
+    public void readPrior_presenceTrueButValueAbsent_returnsNeutralDefault() {
+        SharedPreferences p = prefs();
+        p.edit().putBoolean(
+                AutoXSettingsStore.KEY_PRIOR_FORCE_RESIZABLE + AutoXSettingsStore.SUFFIX_PRESENT,
+                true).apply();
+        assertEquals(Integer.valueOf(0), AutoXSettingsStore.getPriorForceResizable(p));
+    }
+
+    // -------------------------------------------------------------------------
+    // Per-display parity: value present without presence flag reads as null
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void priorShouldShowIme_valueWithoutPresenceFlag_readsAsNull() {
+        SharedPreferences p = prefs();
+        p.edit().putInt(
+                String.format(AutoXSettingsStore.KEY_PRIOR_SHOULD_SHOW_IME_TEMPLATE, 42), 1)
+                .apply();
+        assertNull(AutoXSettingsStore.getPriorShouldShowIme(p, 42));
     }
 }
