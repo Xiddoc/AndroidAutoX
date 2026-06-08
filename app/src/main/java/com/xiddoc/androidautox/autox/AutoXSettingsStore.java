@@ -62,6 +62,28 @@ public final class AutoXSettingsStore {
     /** Per-display key template for the prior {@code shouldShowIme} value. */
     static final String KEY_PRIOR_SHOULD_SHOW_IME_TEMPLATE = "autox_prior_should_show_ime_%d";
 
+    // -------------------------------------------------------------------------
+    // WS6 audio-routing state (persisted so revert survives process death)
+    //
+    // The per-UID audio affinity AutoX applies at session start must be cleared on
+    // revert. The transient RouteDecision in AutoXScreen is lost on process death, so
+    // the data needed to reconstruct a ClearAffinity revert is persisted here: the
+    // guest UID and the device type/address that were routed. Absent is modeled with a
+    // presence companion flag, identical to the prior-value encoding above.
+    // -------------------------------------------------------------------------
+
+    /** UID of the guest app whose audio was routed for the active session. */
+    static final String KEY_AUDIO_UID = "autox_audio_uid";
+
+    /** Car audio device type (the {@code CarAudioDevice} enum name) used for the route. */
+    static final String KEY_AUDIO_DEVICE = "autox_audio_device";
+
+    /** Car audio device address used for the route. */
+    static final String KEY_AUDIO_ADDRESS = "autox_audio_address";
+
+    /** Presence companion for the persisted audio-routing state. */
+    static final String KEY_AUDIO_PRESENT = "autox_audio__present";
+
     /**
      * Neutral fallback returned by {@link #readPrior} for the unreachable case of a present
      * flag set true but the int value key missing (corrupted/partially-written prefs). It is
@@ -352,6 +374,121 @@ public final class AutoXSettingsStore {
     }
 
     // -------------------------------------------------------------------------
+    // WS6 audio-routing state
+    // -------------------------------------------------------------------------
+
+    /**
+     * Immutable snapshot of the audio routing applied for a session, persisted so a revert
+     * can be reconstructed after process death. {@code deviceAddress} may be {@code null}
+     * (e.g. an unusable/absent address), which is faithfully round-tripped.
+     */
+    public static final class AudioRouteState {
+        /** The guest app UID that was routed. */
+        public final int uid;
+        /** The {@code CarAudioDevice} enum name routed to. Never null. */
+        public final String deviceName;
+        /** The device address routed to; may be {@code null}. */
+        public final String deviceAddress;
+
+        /**
+         * @param uid           the guest app UID that was routed
+         * @param deviceName    the {@code CarAudioDevice} enum name; must not be null
+         * @param deviceAddress the device address; may be null
+         */
+        public AudioRouteState(int uid, String deviceName, String deviceAddress) {
+            if (deviceName == null) {
+                throw new IllegalArgumentException("deviceName must not be null");
+            }
+            this.uid = uid;
+            this.deviceName = deviceName;
+            this.deviceAddress = deviceAddress;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof AudioRouteState)) return false;
+            AudioRouteState s = (AudioRouteState) o;
+            return uid == s.uid
+                    && deviceName.equals(s.deviceName)
+                    && (deviceAddress == null
+                            ? s.deviceAddress == null
+                            : deviceAddress.equals(s.deviceAddress));
+        }
+
+        @Override
+        public int hashCode() {
+            int h = uid;
+            h = 31 * h + deviceName.hashCode();
+            h = 31 * h + (deviceAddress == null ? 0 : deviceAddress.hashCode());
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "AudioRouteState{uid=" + uid + ", deviceName='" + deviceName
+                    + "', deviceAddress='" + deviceAddress + "'}";
+        }
+    }
+
+    /**
+     * Persists the audio routing applied for the active session so {@code revertAudioRouting}
+     * can reconstruct a clear after process death.
+     *
+     * @param prefs the shared preferences to write to; must not be null.
+     * @param state the routing state to persist; must not be null.
+     */
+    public static void setAudioRouteState(SharedPreferences prefs, AudioRouteState state) {
+        if (state == null) {
+            throw new IllegalArgumentException("state must not be null");
+        }
+        SharedPreferences.Editor editor = prefs.edit()
+                .putInt(KEY_AUDIO_UID, state.uid)
+                .putString(KEY_AUDIO_DEVICE, state.deviceName)
+                .putBoolean(KEY_AUDIO_PRESENT, true);
+        if (state.deviceAddress == null) {
+            editor.remove(KEY_AUDIO_ADDRESS);
+        } else {
+            editor.putString(KEY_AUDIO_ADDRESS, state.deviceAddress);
+        }
+        editor.apply();
+    }
+
+    /**
+     * Returns the persisted audio routing state, or {@code null} if none was captured.
+     *
+     * @param prefs the shared preferences to read from; must not be null.
+     * @return the persisted {@link AudioRouteState}, or {@code null} if absent.
+     */
+    public static AudioRouteState getAudioRouteState(SharedPreferences prefs) {
+        if (!prefs.getBoolean(KEY_AUDIO_PRESENT, false)) {
+            return null;
+        }
+        int uid = prefs.getInt(KEY_AUDIO_UID, -1);
+        String deviceName = prefs.getString(KEY_AUDIO_DEVICE, null);
+        if (deviceName == null) {
+            // Corrupted/partially-written state: treat as absent.
+            return null;
+        }
+        String address = prefs.getString(KEY_AUDIO_ADDRESS, null);
+        return new AudioRouteState(uid, deviceName, address);
+    }
+
+    /**
+     * Clears the persisted audio routing state.
+     *
+     * @param prefs the shared preferences to write to; must not be null.
+     */
+    public static void clearAudioRouteState(SharedPreferences prefs) {
+        prefs.edit()
+                .remove(KEY_AUDIO_UID)
+                .remove(KEY_AUDIO_DEVICE)
+                .remove(KEY_AUDIO_ADDRESS)
+                .remove(KEY_AUDIO_PRESENT)
+                .apply();
+    }
+
+    // -------------------------------------------------------------------------
     // Bulk clear
     // -------------------------------------------------------------------------
 
@@ -389,7 +526,11 @@ public final class AutoXSettingsStore {
     public static void clear(SharedPreferences prefs) {
         SharedPreferences.Editor editor = prefs.edit()
                 .remove(KEY_ENABLED)
-                .remove(KEY_TARGET_PACKAGE);
+                .remove(KEY_TARGET_PACKAGE)
+                .remove(KEY_AUDIO_UID)
+                .remove(KEY_AUDIO_DEVICE)
+                .remove(KEY_AUDIO_ADDRESS)
+                .remove(KEY_AUDIO_PRESENT);
         removePrior(editor, KEY_PRIOR_FORCE_RESIZABLE);
         removePrior(editor, KEY_PRIOR_ENABLE_FREEFORM);
         editor.apply();
