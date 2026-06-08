@@ -7,30 +7,41 @@ import android.hardware.input.InputManager;
 import android.media.AudioManager;
 import android.util.Log;
 
-import com.xiddoc.androidautox.autox.ReflectiveGestureInjector;
+import com.xiddoc.androidautox.autox.GestureSpec;
+import com.xiddoc.androidautox.autox.provider.lsposed.LsposedInputInjector;
 
 import com.topjohnwu.superuser.Shell;
 
 /**
  * EXCLUDED GLUE: selects the privileged-provider set for an AutoX session.
  *
+ * <h2>LSPosed-first single path</h2>
+ * <p>AutoX requires root (baseline) AND LSPosed. The trusted-display flag and cross-display
+ * input injection go through LSPosed exclusively (there is no stable root-only path), so the
+ * {@link InputProvider} is the LSPosed-backed {@link LsposedInputInjector} when LSPosed is
+ * active and a no-op {@link BlockedInputProvider} otherwise (AutoX is BLOCKED then, so no
+ * injector is needed). Settings writes stay on root ({@link RootSystemSettingsProvider}); audio
+ * routing stays {@link RootAudioRouter}.
+ *
  * <h2>Two-phase API</h2>
  * <p>The two projection-critical capabilities (trusted virtual display honored, cross-display
  * input injection honored) are structurally unobservable at session start — there is no
- * {@link android.view.Surface}, display, or injected event yet. Computing the full decision
- * then would always report {@link ProviderSelectionPolicy.Provider#DEGRADED} even on a
- * capable root device, which is misleading. The factory therefore exposes two phases:
+ * {@link android.view.Surface}, display, or injected event yet. The factory therefore exposes
+ * two phases:
  *
  * <ol>
  *   <li>{@link #probe(Context)} — runs the cheap <em>static</em> probes only
  *       (LSPosed-active, platform-signed, root-available), feeds trusted-display /
  *       input-injection as conservatively {@code false}, and returns a <b>provisional</b>
  *       {@link AutoXProviders} ({@link AutoXProviders#isProvisional()} {@code true}) with an
- *       {@link UnboundDisplayProvider} placeholder.</li>
+ *       {@link UnboundDisplayProvider} placeholder. With LSPosed active this is provisionally
+ *       {@link ProviderSelectionPolicy.Provider#LSPOSED}; without it,
+ *       {@link ProviderSelectionPolicy.Provider#BLOCKED}.</li>
  *   <li>{@link AutoXProviders#reevaluate(boolean, boolean)} — the Wave-2 call site
  *       ({@code AutoXScreen.onSurfaceAvailable}) invokes this once the real display exists and
  *       the trusted / injection state is observable; it purely recomputes the decision via
- *       {@link CapabilityDecider} + {@link ProviderSelectionPolicy}.</li>
+ *       {@link CapabilityDecider} + {@link ProviderSelectionPolicy}. If a hook is ineffective
+ *       the decision flips to {@link ProviderSelectionPolicy.Provider#BLOCKED}.</li>
  * </ol>
  *
  * <p>{@link #create(Context)} is a thin convenience alias for {@link #probe(Context)}.
@@ -45,12 +56,11 @@ import com.topjohnwu.superuser.Shell;
  * acquisition and is safe to call from the main thread.
  *
  * <h2>Display provider caveat</h2>
- * <p>A {@code RootDisplayProvider} needs a {@link android.view.Surface}, available only once
- * the Car App SDK delivers a {@code SurfaceContainer} — strictly after this factory runs. So
- * the factory returns a lightweight {@link UnboundDisplayProvider} placeholder (reporting
- * {@link DisplayProvider#NO_DISPLAY} / not-trusted). {@code AutoXScreen} continues to own its
- * {@code VirtualDisplayController} for now; the WS4 DisplayProvider-seam migration is future
- * work.
+ * <p>The display needs a {@link android.view.Surface}, available only once the Car App SDK
+ * delivers a {@code SurfaceContainer} — strictly after this factory runs. So the factory
+ * returns a lightweight {@link UnboundDisplayProvider} placeholder (reporting
+ * {@link DisplayProvider#NO_DISPLAY} / not-trusted). {@code AutoXScreen} owns its
+ * {@code VirtualDisplayController}; the WS4 DisplayProvider-seam migration is future work.
  *
  * <p>Excluded from the JaCoCo coverage gate: every method here touches live Android framework
  * services ({@link Context}, {@link ContentResolver}, {@link InputManager},
@@ -90,22 +100,23 @@ public final class AutoXProviderFactory {
         InputManager inputManager = context.getSystemService(InputManager.class);
         AudioManager audioManager = context.getSystemService(AudioManager.class);
 
-        // Concrete (best-effort) provider impls. For LSPOSED and ROOT_REFLECTION these are
-        // the same app-side impls — the LSPosed hooks relax the system_server checks, the
-        // app still calls the framework APIs through these. For DEGRADED they are still
-        // returned (best-effort) but the decision flags the degradation.
-        // TODO(task-6): select LSPosed-backed impls when decision.provider == LSPOSED. The
-        // bundle's seam types (SystemSettingsProvider / InputProvider) are exactly what the
-        // future LSPosed-backed impls will implement, so this is a drop-in swap point.
-        SystemSettingsProvider settings = new RootSystemSettingsProvider(resolver);
-        InputProvider input = new ReflectiveGestureInjector(inputManager);
-        AudioRouter audio = new RootAudioRouter(context, audioManager);
-        DisplayProvider display = new UnboundDisplayProvider();
-
         // --- cheap static probes (booleans only; meaning is decided by the pure decider) ---
         boolean lsposedActive = probeLsposedActive();
         boolean platformSigned = probePlatformSignature(context);
         boolean rootAvailable = probeRootAvailable();
+
+        // LSPosed-first single path: settings stay on root (the clean, stable answer) and audio
+        // stays on root; the InputProvider is the LSPosed-backed injector ONLY when LSPosed is
+        // active (the system_server hook relaxes the per-display ownership check). When LSPosed
+        // is inactive AutoX is BLOCKED, so a no-op injector is wired in — there is no root
+        // injection fallback for AutoX (the trusted-display + injection checks have no stable
+        // root path).
+        SystemSettingsProvider settings = new RootSystemSettingsProvider(resolver);
+        InputProvider input = lsposedActive
+                ? new LsposedInputInjector(inputManager)
+                : new BlockedInputProvider();
+        AudioRouter audio = new RootAudioRouter(context, audioManager);
+        DisplayProvider display = new UnboundDisplayProvider();
 
         // No Surface yet at session start: the trusted-display and injection capabilities are
         // structurally unobservable. Feed them conservatively false; the Wave-2 call site
@@ -217,6 +228,24 @@ public final class AutoXProviderFactory {
      * real {@code RootDisplayProvider} is built later by the call-site wiring once the
      * surface is delivered (future WS4 work).
      */
+    /**
+     * No-op {@link InputProvider} wired in when LSPosed is inactive. AutoX is BLOCKED in that
+     * case (no silent root-injection fallback), so this never injects and reports the injection
+     * hook as not honored, keeping the selection decision at
+     * {@link ProviderSelectionPolicy.Provider#BLOCKED}.
+     */
+    static final class BlockedInputProvider implements InputProvider {
+        @Override
+        public boolean inject(GestureSpec spec) {
+            return false;
+        }
+
+        @Override
+        public boolean isInjectionHonored() {
+            return false;
+        }
+    }
+
     static final class UnboundDisplayProvider implements DisplayProvider {
         @Override
         public int create(com.xiddoc.androidautox.autox.AutoXDisplaySpec spec) {

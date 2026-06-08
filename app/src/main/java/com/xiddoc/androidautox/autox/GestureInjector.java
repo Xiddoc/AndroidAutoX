@@ -14,8 +14,8 @@ package com.xiddoc.androidautox.autox;
  *
  * <p>This interface exists as a seam so that:
  * <ol>
- *   <li>The framework-coupled injection code ({@link ReflectiveGestureInjector}) is
- *       isolated behind a well-defined boundary and excluded from the coverage gate.</li>
+ *   <li>The framework-coupled injection code (the LSPosed-backed {@code LsposedInputInjector})
+ *       is isolated behind a well-defined boundary and excluded from the coverage gate.</li>
  *   <li>Tests can provide a no-op or recording stub without touching any Android API.</li>
  * </ol>
  *

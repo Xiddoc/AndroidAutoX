@@ -302,7 +302,6 @@ def jacocoExclusions = [
         '**/VirtualDisplayController*.*', // DisplayManager.createVirtualDisplay wrapper
         '**/AppLauncher*.*',         // ActivityOptions.setLaunchDisplayId wrapper
         '**/GestureInjector.*',      // injection interface (no executable lines, excluded for safety)
-        '**/ReflectiveGestureInjector*.*', // reflection-based InputManager injection seam
 
         // --- WS4 privileged-provider seam ---
         // Pure-logic provider classes are NOT excluded and must stay at 100%:
@@ -311,13 +310,16 @@ def jacocoExclusions = [
         // TrustedFlagPolicy, and the provider interfaces' contracts (exercised via stubs).
         // Excluded below: ONLY irreducible Android/Xposed glue.
         '**/provider/RootSystemSettingsProvider*.*', // Settings.Global/Secure plumbing (framework)
-        '**/provider/RootDisplayProvider*.*',        // DisplayManager.createVirtualDisplay + trusted-flag probe (framework)
         // LSPosed/Xposed hook glue (system_server reflection, no off-device test). NOTE the
         // pure HookGatePolicy decision class is NOT glue — it has no Android/Xposed imports
         // and is fully unit-tested, so it is carved OUT of this exclusion and must hit 100%.
         '**/provider/lsposed/AutoXXposedModule*.*',
         '**/provider/lsposed/TrustedFlagBridge*.*',
         '**/provider/lsposed/InputInjectionBridge*.*',
+        // App-side half of the LSPosed-only AutoX injection path: reflection-based
+        // InputManager#injectInputEvent (needs a real InputManager + the system_server hook),
+        // untestable off-device. The only AutoX injection provider (no root-reflection fallback).
+        '**/provider/lsposed/LsposedInputInjector*.*',
         // App-side writer for the LSPosed IPC channel: Android Context / SharedPreferences
         // glue (incl. world-readable MODE_WORLD_READABLE), untestable off-device. All command
         // construction/validation it performs lives in the pure (100%-tested) IpcCommand.
