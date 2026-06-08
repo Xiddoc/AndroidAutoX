@@ -40,6 +40,15 @@ package com.xiddoc.androidautox.autox;
 public final class LaunchBoundsCalculator {
 
     /**
+     * Default target aspect ratio (height/width) for the forced-vertical policy: 16:9
+     * portrait (≈ 1.78). Used so a portrait guest app gets a tall, centred window on a
+     * landscape head-unit display. Lives here (next to {@link #forcedVertical}) rather than in
+     * the excluded glue so the bounds <em>policy</em> — including its default ratio — is all in
+     * one tested place.
+     */
+    public static final double DEFAULT_FORCED_VERTICAL_ASPECT = 16.0 / 9.0;
+
+    /**
      * Immutable value object holding a launch bounds rectangle as
      * (left, top, right, bottom) in virtual-display pixel coordinates.
      *

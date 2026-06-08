@@ -692,4 +692,130 @@ public class AutoXSettingsStoreTest {
                 .apply();
         assertNull(AutoXSettingsStore.getPriorShouldShowIme(p, 42));
     }
+
+    // -------------------------------------------------------------------------
+    // WS6 audio-routing state
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void audioRouteState_defaultsToNull() {
+        assertNull(AutoXSettingsStore.getAudioRouteState(prefs()));
+    }
+
+    @Test
+    public void audioRouteState_roundTripsWithAddress() {
+        SharedPreferences p = prefs();
+        AutoXSettingsStore.AudioRouteState state =
+                new AutoXSettingsStore.AudioRouteState(10123, "BT_A2DP", "00:11:22:33:44:55");
+        AutoXSettingsStore.setAudioRouteState(p, state);
+
+        AutoXSettingsStore.AudioRouteState read = AutoXSettingsStore.getAudioRouteState(p);
+        assertNotNull(read);
+        assertEquals(10123, read.uid);
+        assertEquals("BT_A2DP", read.deviceName);
+        assertEquals("00:11:22:33:44:55", read.deviceAddress);
+        assertEquals(state, read);
+    }
+
+    @Test
+    public void audioRouteState_roundTripsWithNullAddress() {
+        SharedPreferences p = prefs();
+        AutoXSettingsStore.setAudioRouteState(p,
+                new AutoXSettingsStore.AudioRouteState(10123, "USB", null));
+
+        AutoXSettingsStore.AudioRouteState read = AutoXSettingsStore.getAudioRouteState(p);
+        assertNotNull(read);
+        assertEquals(10123, read.uid);
+        assertEquals("USB", read.deviceName);
+        assertNull(read.deviceAddress);
+    }
+
+    @Test
+    public void audioRouteState_overwriteClearsStaleAddress() {
+        SharedPreferences p = prefs();
+        AutoXSettingsStore.setAudioRouteState(p,
+                new AutoXSettingsStore.AudioRouteState(1, "BT_A2DP", "addr"));
+        // Overwrite with a null-address state — the stale address must not survive.
+        AutoXSettingsStore.setAudioRouteState(p,
+                new AutoXSettingsStore.AudioRouteState(2, "USB", null));
+
+        AutoXSettingsStore.AudioRouteState read = AutoXSettingsStore.getAudioRouteState(p);
+        assertNotNull(read);
+        assertEquals(2, read.uid);
+        assertNull(read.deviceAddress);
+    }
+
+    @Test
+    public void clearAudioRouteState_resetsToNull() {
+        SharedPreferences p = prefs();
+        AutoXSettingsStore.setAudioRouteState(p,
+                new AutoXSettingsStore.AudioRouteState(1, "USB", "addr"));
+        AutoXSettingsStore.clearAudioRouteState(p);
+        assertNull(AutoXSettingsStore.getAudioRouteState(p));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void setAudioRouteState_rejectsNull() {
+        AutoXSettingsStore.setAudioRouteState(prefs(), null);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void audioRouteState_constructor_rejectsNullDeviceName() {
+        new AutoXSettingsStore.AudioRouteState(1, null, "addr");
+    }
+
+    @Test
+    public void getAudioRouteState_presentFlagButDeviceNameMissing_readsAsNull() {
+        SharedPreferences p = prefs();
+        // Presence flag set but the device-name key absent (corrupted/partial write).
+        p.edit().putBoolean(AutoXSettingsStore.KEY_AUDIO_PRESENT, true)
+                .putInt(AutoXSettingsStore.KEY_AUDIO_UID, 5).apply();
+        assertNull(AutoXSettingsStore.getAudioRouteState(p));
+    }
+
+    @Test
+    public void clear_alsoClearsAudioRouteState() {
+        SharedPreferences p = prefs();
+        AutoXSettingsStore.setAudioRouteState(p,
+                new AutoXSettingsStore.AudioRouteState(1, "USB", "addr"));
+        AutoXSettingsStore.clear(p);
+        assertNull(AutoXSettingsStore.getAudioRouteState(p));
+    }
+
+    // -------------------------------------------------------------------------
+    // AudioRouteState value semantics (equals / hashCode / toString)
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void audioRouteState_equalsAndHashCode() {
+        AutoXSettingsStore.AudioRouteState a =
+                new AutoXSettingsStore.AudioRouteState(1, "USB", "addr");
+        AutoXSettingsStore.AudioRouteState b =
+                new AutoXSettingsStore.AudioRouteState(1, "USB", "addr");
+        AutoXSettingsStore.AudioRouteState diffUid =
+                new AutoXSettingsStore.AudioRouteState(2, "USB", "addr");
+        AutoXSettingsStore.AudioRouteState diffName =
+                new AutoXSettingsStore.AudioRouteState(1, "BT_A2DP", "addr");
+        AutoXSettingsStore.AudioRouteState diffAddr =
+                new AutoXSettingsStore.AudioRouteState(1, "USB", "other");
+        AutoXSettingsStore.AudioRouteState nullAddr =
+                new AutoXSettingsStore.AudioRouteState(1, "USB", null);
+        AutoXSettingsStore.AudioRouteState nullAddr2 =
+                new AutoXSettingsStore.AudioRouteState(1, "USB", null);
+
+        assertEquals(a, a);
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        assertEquals(nullAddr, nullAddr2);
+        assertEquals(nullAddr.hashCode(), nullAddr2.hashCode());
+
+        org.junit.Assert.assertNotEquals(a, diffUid);
+        org.junit.Assert.assertNotEquals(a, diffName);
+        org.junit.Assert.assertNotEquals(a, diffAddr);
+        org.junit.Assert.assertNotEquals(a, nullAddr);
+        org.junit.Assert.assertNotEquals(nullAddr, a);
+        org.junit.Assert.assertNotEquals(a, null);
+        org.junit.Assert.assertNotEquals(a, "not a state");
+        org.junit.Assert.assertNotNull(a.toString());
+    }
 }
