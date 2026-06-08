@@ -62,9 +62,36 @@ for the AutoX feature. Pure-logic classes (`AutoXDisplaySpec`, `CoordinateTransl
 `VirtualDisplayConfig`, `GestureSpec`, `AutoXTargetApp`, `AutoXAppRegistry`,
 `AppLaunchPolicy`) have no Android imports and are covered at 100% by unit tests.
 Framework-glue classes (`VirtualDisplayController`, `AppLauncher`, `GestureInjector` /
-`ReflectiveGestureInjector`, `AutoXCarAppService`, `AutoXSession`, `AutoXScreen`,
+`LsposedInputInjector`, `AutoXCarAppService`, `AutoXSession`, `AutoXScreen`,
 `AutoXForegroundService`) are excluded from the coverage gate. See
 `docs/autox-architecture.md` for the full pipeline diagram and design rationale.
+
+### Requirements: root + LSPosed (LSPosed-first single path)
+
+AutoX requires **root** (baseline) **AND** the AndroidAutoX **LSPosed** module. This is a
+deliberate single clean path — there is **no dual root-only-vs-LSPosed support**:
+
+- **Trusted-display flag + cross-display input injection go through LSPosed ONLY.** Neither
+  has a stable root-only path (a rooted app is still not the display owner from
+  `system_server`'s point of view), so the LSPosed hooks (`TrustedFlagBridge`,
+  `InputInjectionBridge`, gated to AutoX's display) relax those checks at the source. The
+  app-side injection is issued by `LsposedInputInjector` (the only AutoX `InputProvider`); the
+  former root-reflection injector and the root trusted-display reflection provider were
+  removed.
+- **Settings writes stay on root.** Per-display IME / system-decors (`Settings.Secure`) and
+  freeform/resizable (`Settings.Global`) are written via `RootSystemSettingsProvider` /
+  `settings put` — root is the clean, stable answer there, so they are NOT moved to LSPosed.
+  Audio routing (`RootAudioRouter`) likewise stays on root.
+- **When LSPosed is not active, AutoX is blocked cleanly (no silent degrade).** The pure
+  `ProviderSelectionPolicy` is binary — `LSPOSED` or `BLOCKED` (the old `ROOT_REFLECTION` /
+  `DEGRADED` outcomes are gone). The pure `AutoXEnablementPolicy` now also gates on
+  `rootAvailable` and `lsposedActive` (reasons `ROOT_UNAVAILABLE` / `LSPOSED_UNAVAILABLE`).
+  Blocking is enforced in **both** code paths: the phone UI (`MainActivity` — the toggle is
+  annotated "(Requires LSPosed)" and tapping it shows a clear dialog instead of enabling) and
+  the car surface (`AutoXScreen` — when blocked it renders a "requires LSPosed"
+  `MessageTemplate` instead of creating a virtual display).
+- **Existing Phenotype/Gearhead root tweaks are UNAFFECTED** — they need only root and have
+  nothing to do with the AutoX LSPosed gate.
 
 ## Building
 

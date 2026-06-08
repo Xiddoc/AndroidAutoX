@@ -2,6 +2,14 @@
 
 ## Status (honest summary — read first)
 
+- **AutoX requires root + LSPosed (LSPosed-first single path).** Provider selection is binary
+  (`LSPOSED` / `BLOCKED`); there is no root-only-vs-LSPosed dual support. Trusted-display +
+  cross-display input injection go through LSPosed ONLY (the root-reflection injector
+  `ReflectiveGestureInjector` and the root trusted-display provider `RootDisplayProvider` were
+  removed; injection is now `LsposedInputInjector`). Settings writes stay on root. When LSPosed
+  is inactive the feature is BLOCKED cleanly in both the phone UI (`MainActivity`) and the car
+  surface (`AutoXScreen` renders a requires-LSPosed `MessageTemplate`). Phenotype/Gearhead root
+  tweaks are unaffected.
 - **WS2–WS7 pure logic is COMPLETE and unit-tested** to the repo's 100% line+branch gate
   (specs, policies, bounds/coordinate math, host allowlist, state machine, backoff, the
   shared settings entry/applier/result, the LSPosed `HookGatePolicy`, and the new pure
@@ -19,7 +27,8 @@
   carries `// TODO(device-verify)` markers where exact hidden-API signatures/values/return
   contracts can only be confirmed on a real rooted device / DHU — e.g. reading the
   trusted-flag back off the created display (`DisplayInfo.flags & Display.FLAG_TRUSTED`;
-  `reevaluateProviders` currently defaults it conservatively to `false`), `AudioManager`
+  `reevaluateProviders` currently defaults it conservatively to `false`, so the meaningful gate
+  today is the pre-surface LSPosed check in `AutoXScreen.createDisplay`), `AudioManager`
   hidden-API reflection (`setPreferredDeviceForUid`/`removePreferredDeviceForUid`), the
   `injectInputEvent` argument/field positions, the live car-audio device type, the
   platform-signature probe, and the Car App SDK host-digest format. **Everything that can
@@ -36,9 +45,9 @@
   `// TODO(device-verify)` — do not present this as a confirmed working injection bypass.
 - **Capability probing**: there is no `ReflectiveCapabilityProbe` class. The static probes
   (LSPosed-active / platform-signed / root-available) and the surface-time signals are
-  collected by the excluded `AutoXProviderFactory` glue (and `ReflectiveGestureInjector#isInjectionHonored`)
-  and turned into a decision by the pure `CapabilityDecider` + `ProviderSelectionPolicy`,
-  packaged in the pure `AutoXProviders` value object.
+  collected by the excluded `AutoXProviderFactory` glue (and `LsposedInputInjector#isInjectionHonored`)
+  and turned into a **binary** decision (`LSPOSED` / `BLOCKED`) by the pure `CapabilityDecider` +
+  `ProviderSelectionPolicy`, packaged in the pure `AutoXProviders` value object.
 
 ## Overview
 
@@ -104,10 +113,11 @@ GestureSpec.swipe(displayId, x1, y1, x2, y2, durationMs)
     │
     ▼
 GestureInjector.inject(spec)
-    │  (ReflectiveGestureInjector in production)
+    │  (LsposedInputInjector in production — LSPosed-only path)
     ▼
 InputManager#injectInputEvent  (hidden API, via reflection)
-    │  routes to the correct window on the target display
+    │  LSPosed InputInjectionBridge hook (system_server) relaxes the per-display
+    │  ownership check for AutoX's display, so the event reaches the target window
     ▼
 Guest app receives MotionEvent
 ```
@@ -232,7 +242,7 @@ and passes it to `ActivityOptions.setLaunchBounds`.
 | `LaunchBoundsCalculator` | Pure math — forced-vertical bounds (WS3) | 100% required |
 | `SettingsEntry` / `ApplyResult` / `SettingsApplier` | Shared pure entry/result + instance applier (no Android imports) | 100% required |
 | `GestureInjector` | Interface — no executable lines | Excluded (safety) |
-| `ReflectiveGestureInjector` | Reflection / InputManager (framework) | Excluded |
+| `LsposedInputInjector` | Reflection / InputManager — LSPosed-only AutoX injection (framework) | Excluded |
 | `VirtualDisplayController` | DisplayManager (framework) | Excluded |
 | `AppLauncher` | PackageManager / ActivityOptions (framework) | Excluded |
 | `AutoXCarAppService` | CarAppService entry point (framework) | Excluded |
@@ -246,14 +256,18 @@ There is **no public Android API** for injecting touch events onto an arbitrary 
 from a third-party app. `InputManager#injectInputEvent` is a `@hide` method guarded by
 the `android.permission.INJECT_EVENTS` signature-level permission.
 
-`ReflectiveGestureInjector` uses reflection to call this method. On a stock (non-root)
-device the call will be silently dropped or throw `SecurityException`. On a rooted
-device running AndroidAutoX with elevated privileges (via libsu), the injection works.
+`LsposedInputInjector` (the only AutoX `InputProvider`) uses reflection to call this method.
+On a stock device the call is silently dropped or throws `SecurityException`. Root alone is
+**not** sufficient — a rooted app is still not the target display's owner from
+`system_server`'s point of view, so the per-display ownership check rejects the event. AutoX
+therefore relies on the LSPosed `InputInjectionBridge` hook (running inside `system_server`,
+gated to AutoX's display) to relax that check; only then does the injection reach the guest.
+There is **no root-reflection injection fallback** — when LSPosed is inactive AutoX is BLOCKED.
 
-This is intentional: the `GestureInjector` interface is the seam. Tests and non-root
-paths can provide a stub implementation. The reflection code is entirely inside
-`ReflectiveGestureInjector`, which is excluded from the coverage gate, keeping the
-untestable blast radius as small as possible.
+This is intentional: the `GestureInjector` / `InputProvider` interfaces are the seam. Tests and
+non-LSPosed paths provide a stub / no-op implementation. The reflection code is entirely inside
+`LsposedInputInjector`, which is excluded from the coverage gate, keeping the untestable blast
+radius as small as possible.
 
 ## "Native APIs over shell" decision
 
@@ -265,26 +279,36 @@ The AutoX glue layer uses only standard Android / Jetpack APIs:
 - `PowerManager.PARTIAL_WAKE_LOCK` — no `echo on > /sys/power/wake_lock`
 - `InputManager#injectInputEvent` (hidden, via reflection) — no `input tap` shell strings
 
-The only shell-adjacent path is `ReflectiveGestureInjector`, and even there the
+The only shell-adjacent path is `LsposedInputInjector`, and even there the
 invocation is a Java native-API call, not a `Runtime.exec` with a shell string.
 
-## WS4 — privileged-provider seam (root-reflection vs LSPosed)
+## WS4 — privileged-provider seam (LSPosed-first single path)
 
 WS4 abstracts every privileged action AutoX needs behind small **provider interfaces**
 (`autox/provider/`), so later workstreams depend on the seam, not on *how* the privilege
-is obtained. Two implementations sit behind the seam:
+is obtained.
 
-- **Root reflection** — best-effort use of `@hide` framework APIs from a rooted /
-  platform-signed process (`ReflectiveGestureInjector`, `RootSystemSettingsProvider`,
-  `RootDisplayProvider`). These DETECT and REPORT when a privileged operation silently
-  fails (e.g. `VIRTUAL_DISPLAY_FLAG_TRUSTED` stripped, `injectInputEvent` dropped) via
-  capability flags rather than throwing.
-- **LSPosed module** — hooks in `system_server` that relax the trusted-display,
-  input-injection, per-display IME / system-decor and launch-on-display checks at the
-  source (`autox/provider/lsposed/AutoXXposedModule`). It reads the app's commands over
-  `XSharedPreferences` using the pure `IpcCommand` schema, picks targets from the per-SDK
-  `HookTargetTable`, and **fails closed** — every hook body is try/caught so nothing ever
-  throws out of `system_server`.
+**AutoX requires root (baseline) AND LSPosed.** This is a deliberate single clean path — there
+is no dual root-only-vs-LSPosed support. The split is by *which* privileged action:
+
+- **Trusted-display flag + cross-display input injection — LSPosed ONLY.** Neither has a stable
+  root-only path (even a rooted app is not the display owner from `system_server`'s point of
+  view), so the **LSPosed module** hooks in `system_server` relax the trusted-display and
+  input-injection checks at the source (`autox/provider/lsposed/AutoXXposedModule`,
+  `TrustedFlagBridge`, `InputInjectionBridge`, each gated by the pure `HookGatePolicy` to
+  AutoX's display). The module reads the app's commands over `XSharedPreferences` using the pure
+  `IpcCommand` schema, picks targets from the per-SDK `HookTargetTable`, and **fails closed** —
+  every hook body is try/caught so nothing ever throws out of `system_server`. The app-side
+  injection is issued by `LsposedInputInjector` (the sole AutoX `InputProvider`). The former
+  root-reflection injector (`ReflectiveGestureInjector`) and the root trusted-display provider
+  (`RootDisplayProvider`) were **removed** — there is no root injection/trusted fallback.
+- **Settings writes — root.** Per-display IME / system-decors (`Settings.Secure`) and
+  freeform/resizable (`Settings.Global`) are written by `RootSystemSettingsProvider` (root is
+  the clean, stable answer; not moved to LSPosed). Audio routing (`RootAudioRouter`) likewise
+  stays on root.
+- **No LSPosed → BLOCKED (no silent degrade).** Both the phone UI (`MainActivity`) and the car
+  surface (`AutoXScreen`) block the feature with a clear "requires LSPosed" message rather than
+  degrading.
 
 ### Provider factory — two-phase selection (WIRED)
 
@@ -297,14 +321,20 @@ them from `AutoXProviderFactory` (excluded glue) in two phases:
    projection-critical capabilities (trusted-display-honored, injection-honored) as
    conservatively `false`, runs the pure `CapabilityDecider` + `ProviderSelectionPolicy`, and
    returns a **provisional** `AutoXProviders` bundle (`isProvisional() == true`) with an
-   `UnboundDisplayProvider` placeholder.
+   `UnboundDisplayProvider` placeholder. The `InputProvider` is the LSPosed-backed
+   `LsposedInputInjector` when LSPosed is active and a no-op `BlockedInputProvider` otherwise
+   (AutoX is BLOCKED then). With LSPosed active the provisional decision is `LSPOSED`; without
+   it, `BLOCKED`.
 2. **`AutoXProviders.reevaluate(trusted, injection)`** runs in `AutoXScreen.createDisplay`
    once the virtual display exists. It folds in the now-observable surface-time signals and
    purely recomputes the decision. `injectionHonored` is read from `providers.input().isInjectionHonored()`;
    `trustedDisplayHonored` is honestly defaulted to `false` because `AutoXScreen` owns its own
    `VirtualDisplayController` (the WS4 `DisplayProvider` seam is still unbound) and the trusted
-   flag has not been read back off `DisplayInfo.flags` — asserting `true` would overclaim a
-   privileged path that was never observed (`// TODO(device-verify)`).
+   flag has not been read back off `DisplayInfo.flags` (`// TODO(device-verify)`). Because of
+   that conservative default, the **meaningful gate today is the pre-surface LSPosed check**:
+   `AutoXScreen.createDisplay` refuses to create the display (and shows the requires-LSPosed
+   `MessageTemplate`) unless the provisional decision is `LSPOSED`. Once the real trusted-flag
+   read is wired, the post-surface reevaluate can additionally block an ineffective hook.
 
 `AutoXProviders` is a pure value object (not excluded) and stays at 100%; `reevaluate` only
 re-runs the pure decider/policy and carries the provider instances (and the display
@@ -324,26 +354,37 @@ placeholder) over unchanged.
 | Class | Layer | Coverage |
 |---|---|---|
 | `SettingsResult`, `ProviderCapabilities` | Pure value/result objects | 100% required |
-| `ProviderSelectionPolicy` | Pure decision: caps → `LSPOSED`/`ROOT_REFLECTION`/`DEGRADED` + reason | 100% required |
+| `ProviderSelectionPolicy` | Pure binary decision: caps → `LSPOSED`/`BLOCKED` + reason (LSPosed-first single path) | 100% required |
 | `IpcCommand` | Pure app↔module wire schema (encode/decode over XSharedPreferences) | 100% required |
 | `HookDescriptor`, `HookTargetSet`, `HookTargetTable` | Pure per-SDK (31–34) hook-target table + resolver (incl. unknown-SDK branch) | 100% required |
 | `CapabilityDecider`, `TrustedFlagPolicy` | Pure capability-from-probe (inputs from existing glue; no `ReflectiveCapabilityProbe` class) + trusted-flag math | 100% required |
 | `HookGatePolicy` | Pure act/no-act gate (primitives) so LSPosed hooks act only for AutoX's display | 100% required |
-| `AutoXProviders` | Pure value object: bundles the chosen providers + decision; `reevaluate` re-runs the decider/policy purely | 100% required |
+| `AutoXProviders` | Pure value object: bundles the chosen providers + decision; `reevaluate` re-runs the decider/policy purely; `isBlocked()` predicate | 100% required |
 | `InputProvider`/`DisplayProvider`/`SystemSettingsProvider`/`AudioRouter` | Pure interfaces (no executable lines) | n/a |
-| `RootSystemSettingsProvider`, `RootDisplayProvider` | Settings/DisplayManager framework plumbing | Excluded |
-| `ReflectiveGestureInjector` | now also implements `InputProvider` | Excluded |
-| `AutoXProviderFactory` | Probes the live system (Context/ContentResolver/InputManager/AudioManager/libsu Shell) and assembles the provider bundle; all probe→decision mapping is in the pure decider/policy | Excluded |
+| `RootSystemSettingsProvider` | Settings.Global/Secure framework plumbing (root path) | Excluded |
+| `LsposedInputInjector` | App-side half of the LSPosed-only AutoX injection path (`InputProvider`); InputManager reflection | Excluded |
+| `AutoXProviderFactory` | Probes the live system (Context/ContentResolver/InputManager/AudioManager/libsu Shell) and assembles the provider bundle (LSPosed-backed input when LSPosed active, else no-op `BlockedInputProvider`); all probe→decision mapping is in the pure decider/policy | Excluded |
 | `IpcCommandWriter` | App-side writer for the LSPosed IPC channel (Android `Context`/`SharedPreferences`, world-readable mode); command construction/validation is in the pure `IpcCommand` | Excluded |
 | `AutoXXposedModule`, `TrustedFlagBridge` | LSPosed/Xposed `system_server` reflection (each gated by the pure `HookGatePolicy` to AutoX's display) | Excluded |
 | `InputInjectionBridge` | LSPosed/Xposed `system_server` reflection: `allow()` now performs real per-SDK frame mutation (display-id extract → `HookGatePolicy` gate → stamp `mDisplayId` + conditional mode-relax), fail-closed, but UNVERIFIED on-device (best-effort field/arg-position guesses, `// TODO(device-verify)`) | Excluded |
 
 ### Selection policy
 
-`ProviderSelectionPolicy.select(ProviderCapabilities)` is total and exhaustively tested:
-LSPosed-active → `LSPOSED`; else if a privileged path exists (root or platform signature)
-AND trusted-display AND input-injection are honored → `ROOT_REFLECTION`; otherwise
-`DEGRADED` (with a specific reason: no path / trusted not honored / injection dropped).
+`ProviderSelectionPolicy.select(ProviderCapabilities)` is total, **binary**, and exhaustively
+tested (LSPosed-first single path):
+
+- LSPosed NOT active → `BLOCKED` (reason names "requires LSPosed").
+- LSPosed active but the trusted-display hook is not honored (post-surface) → `BLOCKED`
+  (reason names the ineffective trusted-display hook).
+- LSPosed active but input injection is not honored (post-surface) → `BLOCKED` (reason names
+  the ineffective injection hook).
+- LSPosed active and (when observable) both honored → `LSPOSED`.
+
+`root`/`platform-signature` no longer affect this decision — trusted-display + input injection
+are LSPosed-only. (Root is still required as a baseline by `AutoXEnablementPolicy`, and settings
+writes stay on root, but root is not a provider alternative here.) The old `ROOT_REFLECTION` /
+`DEGRADED` outcomes and the `AutoXProviders.isDegraded()` predicate were removed; the predicate
+is now `AutoXProviders.isBlocked()`.
 
 ### LSPosed IPC channel — WIRED (device-validation pending)
 
@@ -697,9 +738,10 @@ in reverse order (IME first, then system-decors).
 
 Both keys are protected by `WRITE_SECURE_SETTINGS` (a signature-level permission).
 The shared `SettingsApplier` writes them via the `SystemSettingsProvider` interface
-(WS4 seam), which is backed at runtime by either a root-reflection implementation
-(`RootSystemSettingsProvider`) or an LSPosed hook (`AutoXXposedModule`) that relaxes the
-permission check inside `system_server`.
+(WS4 seam), which is backed at runtime by the **root** implementation
+(`RootSystemSettingsProvider` / `settings put`). Settings writes deliberately stay on root —
+it is the clean, stable path — and are NOT moved to LSPosed (only the trusted-display flag and
+cross-display input injection go through LSPosed).
 
 `cmd window set-display-settings` is a documented adb/shell fallback for debugging only
 — AutoX does **not** use it at runtime. The `SystemSettingsProvider` seam is the sole
@@ -740,7 +782,7 @@ virtual display on a head unit) is still pending.
 | `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/HookGatePolicy.java` | Pure act/no-act gate scoping LSPosed hooks to AutoX's display |
 | `app/src/main/java/com/xiddoc/androidautox/autox/provider/` | WS4 provider seam (pure interfaces + policy/schema/table; pure `AutoXProviders` holder) |
 | `app/src/main/java/com/xiddoc/androidautox/autox/provider/AutoXProviderFactory.java` | WS4 excluded glue: two-phase `probe(Context)` → provisional bundle → `reevaluate` |
-| `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/` | WS4 LSPosed module glue (excluded), incl. `IpcCommandWriter` + `InputInjectionBridge` |
+| `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/` | WS4 LSPosed module glue (excluded), incl. `IpcCommandWriter`, `InputInjectionBridge`, and `LsposedInputInjector` (the only AutoX `InputProvider`) |
 | `app/src/main/java/com/xiddoc/androidautox/autox/AutoXScreen.java` | Excluded glue: wires WS3/WS5/WS6 + LSPosed apply/revert call-sites in `createDisplay`/`releaseDisplay` |
 | `app/src/main/java/com/xiddoc/androidautox/autox/AutoXSettingsStore.java` | Prior/route-state persistence so revert survives process death (pure, JUnit-tested) |
 | `app/src/main/java/com/xiddoc/androidautox/autox/PriorCaptureGate.java` · `SettingsPriorMapper.java` · `ProjectionStep.java` · `ProjectionStepPlan.java` | Pure glue-extracted helpers (WS3 / ordering) |
