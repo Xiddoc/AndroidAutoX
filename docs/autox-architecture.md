@@ -2,24 +2,52 @@
 
 ## Status (honest summary — read first)
 
+- **AutoX requires root + LSPosed (LSPosed-first single path).** Provider selection is binary
+  (`LSPOSED` / `BLOCKED`); there is no root-only-vs-LSPosed dual support. Trusted-display +
+  cross-display input injection go through LSPosed ONLY (the root-reflection injector
+  `ReflectiveGestureInjector` and the root trusted-display provider `RootDisplayProvider` were
+  removed; injection is now `LsposedInputInjector`). Settings writes stay on root. When LSPosed
+  is inactive the feature is BLOCKED cleanly in both the phone UI (`MainActivity`) and the car
+  surface (`AutoXScreen` renders a requires-LSPosed `MessageTemplate`). Phenotype/Gearhead root
+  tweaks are unaffected.
 - **WS2–WS7 pure logic is COMPLETE and unit-tested** to the repo's 100% line+branch gate
   (specs, policies, bounds/coordinate math, host allowlist, state machine, backoff, the
-  shared settings entry/applier/result, and the LSPosed `HookGatePolicy`).
-- **Runtime WIRING of that pure logic into the framework glue is PENDING** in several
-  places — notably the settings apply/revert call-sites in the AutoX enable/disable flow
-  (see the `TODO(WS3/WS5)` markers), and the LSPosed IPC `displayId` plumbing.
-- **On-device validation is PENDING for every privileged path.** The privileged glue
+  shared settings entry/applier/result, the LSPosed `HookGatePolicy`, and the new pure
+  glue-extracted helpers — `PriorCaptureGate`, `SettingsPriorMapper`, `AudioDeviceTypeMapper`,
+  `CarOutputDeviceSelector`, `ProjectionStep`/`ProjectionStepPlan`, `ImePriorCodec`).
+- **Runtime WIRING of that pure logic into the framework glue is now DONE.** The settings
+  apply/revert call-sites (WS3 freeform/globals, WS5 per-display IME/decors, WS6 audio
+  routing) and the LSPosed IPC `displayId` plumbing are wired in `AutoXScreen.createDisplay`
+  / `AutoXScreen.releaseDisplay`. The screen obtains its privileged providers from
+  `AutoXProviderFactory` (two-phase probe → reevaluate), captures+persists every prior in
+  `AutoXSettingsStore` (gated by `PriorCaptureGate`) so revert survives process death, and
+  walks the pure `ProjectionStepPlan` apply/revert order. This is code-complete and
+  unit/compile-verified — it is **not** device-proven (see next bullet).
+- **On-device validation is PENDING for every privileged path.** The privileged glue still
   carries `// TODO(device-verify)` markers where exact hidden-API signatures/values/return
-  contracts can only be confirmed on a real rooted device (API-34 `injectInputEvent` via
-  `InputManagerGlobal`, `AudioPolicy#setUidDeviceAffinity`, `DisplayInfo.flags &
-  Display.FLAG_TRUSTED`, the Car App SDK host-digest format).
-- **`InputInjectionBridge` is SCAFFOLDING, not a working bypass.** Its `allow()` is a
-  documented no-op placeholder; the per-display permission-check rewrite against the real
-  `InputManagerService` signature is not yet implemented (`// TODO(device-verify)`).
-- **Capability probing**: there is no `ReflectiveCapabilityProbe` class. Capability inputs
-  are collected by the existing excluded glue (`RootDisplayProvider#isTrustedDisplayHonored`,
-  `ReflectiveGestureInjector#isInjectionHonored`, the settings providers' `SettingsResult`)
-  and turned into a snapshot by the pure `CapabilityDecider`.
+  contracts can only be confirmed on a real rooted device / DHU — e.g. reading the
+  trusted-flag back off the created display (`DisplayInfo.flags & Display.FLAG_TRUSTED`;
+  `reevaluateProviders` currently defaults it conservatively to `false`, so the meaningful gate
+  today is the pre-surface LSPosed check in `AutoXScreen.createDisplay`), `AudioManager`
+  hidden-API reflection (`setPreferredDeviceForUid`/`removePreferredDeviceForUid`), the
+  `injectInputEvent` argument/field positions, the live car-audio device type, the
+  platform-signature probe, and the Car App SDK host-digest format. **Everything that can
+  only be confirmed on a rooted device/DHU remains device-validation pending.**
+- **`InputInjectionBridge` is implemented but UNVERIFIED on-device.** It is no longer a pure
+  no-op placeholder: `allow()` now performs real per-SDK frame mutation (extract the target
+  display id from the call frame, gate it against AutoX's display via `HookGatePolicy`, then
+  best-effort stamp `mDisplayId` and — only when the per-SDK `modeArgIndex` is pinned —
+  normalise the injection mode). It **fails closed** (any reflection/field error is swallowed,
+  never thrown out of `system_server`) and is conservative (mode relaxation is skipped while
+  the arg position is unverified, so a wrong-position write can never clobber the display id).
+  But the field name (`mDisplayId`), the argument positions, and whether stamping the id is
+  sufficient to clear the ownership check are all best-effort **guesses** marked
+  `// TODO(device-verify)` — do not present this as a confirmed working injection bypass.
+- **Capability probing**: there is no `ReflectiveCapabilityProbe` class. The static probes
+  (LSPosed-active / platform-signed / root-available) and the surface-time signals are
+  collected by the excluded `AutoXProviderFactory` glue (and `LsposedInputInjector#isInjectionHonored`)
+  and turned into a **binary** decision (`LSPOSED` / `BLOCKED`) by the pure `CapabilityDecider` +
+  `ProviderSelectionPolicy`, packaged in the pure `AutoXProviders` value object.
 
 ## Overview
 
@@ -85,10 +113,11 @@ GestureSpec.swipe(displayId, x1, y1, x2, y2, durationMs)
     │
     ▼
 GestureInjector.inject(spec)
-    │  (ReflectiveGestureInjector in production)
+    │  (LsposedInputInjector in production — LSPosed-only path)
     ▼
 InputManager#injectInputEvent  (hidden API, via reflection)
-    │  routes to the correct window on the target display
+    │  LSPosed InputInjectionBridge hook (system_server) relaxes the per-display
+    │  ownership check for AutoX's display, so the event reaches the target window
     ▼
 Guest app receives MotionEvent
 ```
@@ -146,19 +175,32 @@ per-key revert strategy:
 - `RESTORE_PRIOR` — key had a value; write it back.
 - `WRITE_DEFAULT` — key was absent; write `0` (feature off).
 
-The actual call-site that triggers revert is in the AutoX enable/disable flow
+**WIRED (device-validation pending).** The apply/revert call-sites live in `AutoXScreen`
 (framework-layer glue, excluded from the coverage gate):
 
-```java
-// TODO(WS3) call-site in AutoXScreen.onAutoXDisabled() / enable-policy disable path:
-//   List<SettingsEntry> revertEntries =
-//       FreeformGlobalSettingsSpec.revertList(priorForceResizable, priorEnableFreeform);
-//   new SettingsApplier(provider, SettingsApplier.Namespace.GLOBAL).revert(revertEntries);
-```
+- **Apply** (`AutoXScreen.applyFreeform`, called from `createDisplay`): the genuine prior
+  value of each key is read through the provider seam
+  (`AutoXProviders.settings().getGlobalInt(...)` → `SettingsResult`) and mapped to a boxed
+  `Integer` prior via the pure `SettingsPriorMapper.toPrior` (OK → value; NOT_FOUND / DENIED
+  / null → `null`). Priors are persisted in `AutoXSettingsStore`
+  (`setPriorForceResizable` / `setPriorEnableFreeform`) — but **only on a fresh session**,
+  gated by `PriorCaptureGate.shouldCapturePrior(AutoXSettingsStore.isEnabled(prefs))`. On a
+  re-entrant apply (e.g. `createDisplay` re-runs after process death) the already-persisted
+  genuine prior is re-read instead of re-captured (a live read would observe AutoX's own
+  written value and permanently strand the setting). The AutoX values are then written via
+  `new SettingsApplier(providers.settings(), Namespace.GLOBAL).apply(FreeformGlobalSettingsSpec.applyList(...))`.
+- **Revert** (`AutoXScreen.revertFreeform`, called from `releaseDisplay`): the persisted
+  priors are read back and `FreeformGlobalSettingsSpec.revertList(...)` →
+  `SettingsApplier.revert(...)` restores them (RESTORE_PRIOR / WRITE_DEFAULT), after which the
+  persisted priors are cleared.
+- **Bounds**: `forcedVerticalBounds` runs `LaunchBoundsCalculator.forcedVertical(...)` and
+  hands the resulting `Rect` to `AppLauncher.launch(pkg, displayId, bounds)`, which applies it
+  via `ActivityOptions.setLaunchBounds` (honored only when freeform windowing is enabled).
 
-The prior values must be persisted between enable and disable (e.g. in
-`AutoXSettingsStore`) so the revert can reconstruct the correct list even after a
-process restart.
+Because the priors are persisted in `AutoXSettingsStore` and the enabled flag is set last
+(after a successful apply) and cleared last (after every revert), the revert reconstructs the
+correct list even after a process restart. Device-validation of the privileged GLOBAL writes
+themselves is still pending.
 
 ### Forced-vertical bounds (§2.4)
 
@@ -180,6 +222,9 @@ and passes it to `ActivityOptions.setLaunchBounds`.
 | `FreeformGlobalSettingsSpec` | Pure spec: keys, enabled values, revert strategy (emits `SettingsEntry`) | 100% required |
 | `LaunchBoundsCalculator` | Pure math: forced-vertical bounds computation (`fullDisplay` validates but ignores `densityDpi`) | 100% required |
 | `SettingsEntry` / `ApplyResult` / `SettingsApplier` | Shared pure entry + result + instance applier (GLOBAL/SECURE) | 100% required |
+| `SettingsPriorMapper` | Pure: maps a read `SettingsResult` → boxed `Integer` prior (OK→value; NOT_FOUND/DENIED/null→null) | 100% required |
+| `PriorCaptureGate` | Pure: capture-prior vs re-apply decision keyed off the persisted enabled flag (process-death safety) | 100% required |
+| `ProjectionStep` / `ProjectionStepPlan` | Pure: the bring-up apply order + (reverse) revert order the glue iterates against | 100% required |
 
 ## Testable-logic vs excluded-glue split
 
@@ -197,7 +242,7 @@ and passes it to `ActivityOptions.setLaunchBounds`.
 | `LaunchBoundsCalculator` | Pure math — forced-vertical bounds (WS3) | 100% required |
 | `SettingsEntry` / `ApplyResult` / `SettingsApplier` | Shared pure entry/result + instance applier (no Android imports) | 100% required |
 | `GestureInjector` | Interface — no executable lines | Excluded (safety) |
-| `ReflectiveGestureInjector` | Reflection / InputManager (framework) | Excluded |
+| `LsposedInputInjector` | Reflection / InputManager — LSPosed-only AutoX injection (framework) | Excluded |
 | `VirtualDisplayController` | DisplayManager (framework) | Excluded |
 | `AppLauncher` | PackageManager / ActivityOptions (framework) | Excluded |
 | `AutoXCarAppService` | CarAppService entry point (framework) | Excluded |
@@ -211,14 +256,18 @@ There is **no public Android API** for injecting touch events onto an arbitrary 
 from a third-party app. `InputManager#injectInputEvent` is a `@hide` method guarded by
 the `android.permission.INJECT_EVENTS` signature-level permission.
 
-`ReflectiveGestureInjector` uses reflection to call this method. On a stock (non-root)
-device the call will be silently dropped or throw `SecurityException`. On a rooted
-device running AndroidAutoX with elevated privileges (via libsu), the injection works.
+`LsposedInputInjector` (the only AutoX `InputProvider`) uses reflection to call this method.
+On a stock device the call is silently dropped or throws `SecurityException`. Root alone is
+**not** sufficient — a rooted app is still not the target display's owner from
+`system_server`'s point of view, so the per-display ownership check rejects the event. AutoX
+therefore relies on the LSPosed `InputInjectionBridge` hook (running inside `system_server`,
+gated to AutoX's display) to relax that check; only then does the injection reach the guest.
+There is **no root-reflection injection fallback** — when LSPosed is inactive AutoX is BLOCKED.
 
-This is intentional: the `GestureInjector` interface is the seam. Tests and non-root
-paths can provide a stub implementation. The reflection code is entirely inside
-`ReflectiveGestureInjector`, which is excluded from the coverage gate, keeping the
-untestable blast radius as small as possible.
+This is intentional: the `GestureInjector` / `InputProvider` interfaces are the seam. Tests and
+non-LSPosed paths provide a stub / no-op implementation. The reflection code is entirely inside
+`LsposedInputInjector`, which is excluded from the coverage gate, keeping the untestable blast
+radius as small as possible.
 
 ## "Native APIs over shell" decision
 
@@ -230,26 +279,66 @@ The AutoX glue layer uses only standard Android / Jetpack APIs:
 - `PowerManager.PARTIAL_WAKE_LOCK` — no `echo on > /sys/power/wake_lock`
 - `InputManager#injectInputEvent` (hidden, via reflection) — no `input tap` shell strings
 
-The only shell-adjacent path is `ReflectiveGestureInjector`, and even there the
+The only shell-adjacent path is `LsposedInputInjector`, and even there the
 invocation is a Java native-API call, not a `Runtime.exec` with a shell string.
 
-## WS4 — privileged-provider seam (root-reflection vs LSPosed)
+## WS4 — privileged-provider seam (LSPosed-first single path)
 
 WS4 abstracts every privileged action AutoX needs behind small **provider interfaces**
 (`autox/provider/`), so later workstreams depend on the seam, not on *how* the privilege
-is obtained. Two implementations sit behind the seam:
+is obtained.
 
-- **Root reflection** — best-effort use of `@hide` framework APIs from a rooted /
-  platform-signed process (`ReflectiveGestureInjector`, `RootSystemSettingsProvider`,
-  `RootDisplayProvider`). These DETECT and REPORT when a privileged operation silently
-  fails (e.g. `VIRTUAL_DISPLAY_FLAG_TRUSTED` stripped, `injectInputEvent` dropped) via
-  capability flags rather than throwing.
-- **LSPosed module** — hooks in `system_server` that relax the trusted-display,
-  input-injection, per-display IME / system-decor and launch-on-display checks at the
-  source (`autox/provider/lsposed/AutoXXposedModule`). It reads the app's commands over
-  `XSharedPreferences` using the pure `IpcCommand` schema, picks targets from the per-SDK
-  `HookTargetTable`, and **fails closed** — every hook body is try/caught so nothing ever
-  throws out of `system_server`.
+**AutoX requires root (baseline) AND LSPosed.** This is a deliberate single clean path — there
+is no dual root-only-vs-LSPosed support. The split is by *which* privileged action:
+
+- **Trusted-display flag + cross-display input injection — LSPosed ONLY.** Neither has a stable
+  root-only path (even a rooted app is not the display owner from `system_server`'s point of
+  view), so the **LSPosed module** hooks in `system_server` relax the trusted-display and
+  input-injection checks at the source (`autox/provider/lsposed/AutoXXposedModule`,
+  `TrustedFlagBridge`, `InputInjectionBridge`, each gated by the pure `HookGatePolicy` to
+  AutoX's display). The module reads the app's commands over `XSharedPreferences` using the pure
+  `IpcCommand` schema, picks targets from the per-SDK `HookTargetTable`, and **fails closed** —
+  every hook body is try/caught so nothing ever throws out of `system_server`. The app-side
+  injection is issued by `LsposedInputInjector` (the sole AutoX `InputProvider`). The former
+  root-reflection injector (`ReflectiveGestureInjector`) and the root trusted-display provider
+  (`RootDisplayProvider`) were **removed** — there is no root injection/trusted fallback.
+- **Settings writes — root.** Per-display IME / system-decors (`Settings.Secure`) and
+  freeform/resizable (`Settings.Global`) are written by `RootSystemSettingsProvider` (root is
+  the clean, stable answer; not moved to LSPosed). Audio routing (`RootAudioRouter`) likewise
+  stays on root.
+- **No LSPosed → BLOCKED (no silent degrade).** Both the phone UI (`MainActivity`) and the car
+  surface (`AutoXScreen`) block the feature with a clear "requires LSPosed" message rather than
+  degrading.
+
+### Provider factory — two-phase selection (WIRED)
+
+`AutoXScreen` no longer constructs the `Root*`/`Reflective*` providers directly; it obtains
+them from `AutoXProviderFactory` (excluded glue) in two phases:
+
+1. **`AutoXProviderFactory.probe(Context)`** runs at screen construction (the surface does not
+   exist yet). It performs only the cheap *static* probes (LSPosed-active, platform-signed,
+   root-available — all best-effort, never blocking, never throwing), feeds the two
+   projection-critical capabilities (trusted-display-honored, injection-honored) as
+   conservatively `false`, runs the pure `CapabilityDecider` + `ProviderSelectionPolicy`, and
+   returns a **provisional** `AutoXProviders` bundle (`isProvisional() == true`) with an
+   `UnboundDisplayProvider` placeholder. The `InputProvider` is the LSPosed-backed
+   `LsposedInputInjector` when LSPosed is active and a no-op `BlockedInputProvider` otherwise
+   (AutoX is BLOCKED then). With LSPosed active the provisional decision is `LSPOSED`; without
+   it, `BLOCKED`.
+2. **`AutoXProviders.reevaluate(trusted, injection)`** runs in `AutoXScreen.createDisplay`
+   once the virtual display exists. It folds in the now-observable surface-time signals and
+   purely recomputes the decision. `injectionHonored` is read from `providers.input().isInjectionHonored()`;
+   `trustedDisplayHonored` is honestly defaulted to `false` because `AutoXScreen` owns its own
+   `VirtualDisplayController` (the WS4 `DisplayProvider` seam is still unbound) and the trusted
+   flag has not been read back off `DisplayInfo.flags` (`// TODO(device-verify)`). Because of
+   that conservative default, the **meaningful gate today is the pre-surface LSPosed check**:
+   `AutoXScreen.createDisplay` refuses to create the display (and shows the requires-LSPosed
+   `MessageTemplate`) unless the provisional decision is `LSPOSED`. Once the real trusted-flag
+   read is wired, the post-surface reevaluate can additionally block an ineffective hook.
+
+`AutoXProviders` is a pure value object (not excluded) and stays at 100%; `reevaluate` only
+re-runs the pure decider/policy and carries the provider instances (and the display
+placeholder) over unchanged.
 
 ### Provider interfaces (the contract later workstreams depend on)
 
@@ -265,22 +354,68 @@ is obtained. Two implementations sit behind the seam:
 | Class | Layer | Coverage |
 |---|---|---|
 | `SettingsResult`, `ProviderCapabilities` | Pure value/result objects | 100% required |
-| `ProviderSelectionPolicy` | Pure decision: caps → `LSPOSED`/`ROOT_REFLECTION`/`DEGRADED` + reason | 100% required |
+| `ProviderSelectionPolicy` | Pure binary decision: caps → `LSPOSED`/`BLOCKED` + reason (LSPosed-first single path) | 100% required |
 | `IpcCommand` | Pure app↔module wire schema (encode/decode over XSharedPreferences) | 100% required |
 | `HookDescriptor`, `HookTargetSet`, `HookTargetTable` | Pure per-SDK (31–34) hook-target table + resolver (incl. unknown-SDK branch) | 100% required |
 | `CapabilityDecider`, `TrustedFlagPolicy` | Pure capability-from-probe (inputs from existing glue; no `ReflectiveCapabilityProbe` class) + trusted-flag math | 100% required |
 | `HookGatePolicy` | Pure act/no-act gate (primitives) so LSPosed hooks act only for AutoX's display | 100% required |
+| `AutoXProviders` | Pure value object: bundles the chosen providers + decision; `reevaluate` re-runs the decider/policy purely; `isBlocked()` predicate | 100% required |
 | `InputProvider`/`DisplayProvider`/`SystemSettingsProvider`/`AudioRouter` | Pure interfaces (no executable lines) | n/a |
-| `RootSystemSettingsProvider`, `RootDisplayProvider` | Settings/DisplayManager framework plumbing | Excluded |
-| `ReflectiveGestureInjector` | now also implements `InputProvider` | Excluded |
-| `AutoXXposedModule`, `TrustedFlagBridge`, `InputInjectionBridge` | LSPosed/Xposed `system_server` reflection (each gated by the pure `HookGatePolicy` to AutoX's display; `InputInjectionBridge.allow()` is a no-op placeholder) | Excluded |
+| `RootSystemSettingsProvider` | Settings.Global/Secure framework plumbing (root path) | Excluded |
+| `LsposedInputInjector` | App-side half of the LSPosed-only AutoX injection path (`InputProvider`); InputManager reflection | Excluded |
+| `AutoXProviderFactory` | Probes the live system (Context/ContentResolver/InputManager/AudioManager/libsu Shell) and assembles the provider bundle (LSPosed-backed input when LSPosed active, else no-op `BlockedInputProvider`); all probe→decision mapping is in the pure decider/policy | Excluded |
+| `IpcCommandWriter` | App-side writer for the LSPosed IPC channel (Android `Context`/`SharedPreferences`, world-readable mode); command construction/validation is in the pure `IpcCommand` | Excluded |
+| `AutoXXposedModule`, `TrustedFlagBridge` | LSPosed/Xposed `system_server` reflection (each gated by the pure `HookGatePolicy` to AutoX's display) | Excluded |
+| `InputInjectionBridge` | LSPosed/Xposed `system_server` reflection: `allow()` now performs real per-SDK frame mutation (display-id extract → `HookGatePolicy` gate → stamp `mDisplayId` + conditional mode-relax), fail-closed, but UNVERIFIED on-device (best-effort field/arg-position guesses, `// TODO(device-verify)`) | Excluded |
 
 ### Selection policy
 
-`ProviderSelectionPolicy.select(ProviderCapabilities)` is total and exhaustively tested:
-LSPosed-active → `LSPOSED`; else if a privileged path exists (root or platform signature)
-AND trusted-display AND input-injection are honored → `ROOT_REFLECTION`; otherwise
-`DEGRADED` (with a specific reason: no path / trusted not honored / injection dropped).
+`ProviderSelectionPolicy.select(ProviderCapabilities)` is total, **binary**, and exhaustively
+tested (LSPosed-first single path):
+
+- LSPosed NOT active → `BLOCKED` (reason names "requires LSPosed").
+- LSPosed active but the trusted-display hook is not honored (post-surface) → `BLOCKED`
+  (reason names the ineffective trusted-display hook).
+- LSPosed active but input injection is not honored (post-surface) → `BLOCKED` (reason names
+  the ineffective injection hook).
+- LSPosed active and (when observable) both honored → `LSPOSED`.
+
+`root`/`platform-signature` no longer affect this decision — trusted-display + input injection
+are LSPosed-only. (Root is still required as a baseline by `AutoXEnablementPolicy`, and settings
+writes stay on root, but root is not a provider alternative here.) The old `ROOT_REFLECTION` /
+`DEGRADED` outcomes and the `AutoXProviders.isDegraded()` predicate were removed; the predicate
+is now `AutoXProviders.isBlocked()`.
+
+### LSPosed IPC channel — WIRED (device-validation pending)
+
+When the (provisional) decision is `LSPOSED`, `AutoXScreen` drives the app-side
+`IpcCommandWriter` to publish commands into a shared-prefs channel the `AutoXXposedModule`
+reads from `system_server` via `XSharedPreferences`. The channel is:
+
+- **World-READABLE, NOT world-writable.** The writer always requests `MODE_WORLD_READABLE` so
+  that, when the app is loaded as an LSPosed module, LSPosed's hook makes the file readable
+  from `system_server`; the file stays owned by the app's UID at `0644`, so no other app can
+  forge or tamper with the commands.
+- **Untrusted + display-id gated (second line of defence).** Every command is treated as
+  UNTRUSTED by the module: each display-scoped command is gated by the pure `HookGatePolicy`
+  against AutoX's own display id and fails closed, so a forged/stale command cannot relax any
+  per-display hook on a display that is not AutoX's.
+
+**Call ordering (matters).** `enableTrustedDisplay()` carries no id (it is scoped by display
+*name* in the module) and is written **before** `createVirtualDisplay`
+(`AutoXScreen.maybeEnableTrustedDisplayHook`, gated on the stable provisional `LSPOSED`
+selection), so the trusted-flag hook can act as the display is created. The id-scoped commands
+— `allowInputInjection(id)`, `setDisplayImeAndDecors(id, true)`, `launchOnDisplay(id, pkg)` —
+are written only **after** the display exists and its id is known
+(`AutoXScreen.maybeApplyLsposedDisplayCommands`). On teardown `clearLsposedCommands` empties
+the channel (`clear()`); after a process death it reconstructs a fresh writer to clear a stale
+channel.
+
+The `IpcCommand` schema gained a `LAUNCH_ON_DISPLAY` command type (relaxes the launch-on-display
+caller check) and a fail-safe `displayId()` accessor that parses the `displayId` argument back
+(returning `NO_DISPLAY_ID` / `-1` on absent/blank/non-parseable values, which the gate treats as
+"no display known"). `InputInjectionBridge.allow()` is implemented (real per-SDK frame mutation)
+but UNVERIFIED on-device — see the status block and the WS4 table.
 
 ### Xposed API dependency
 
@@ -292,8 +427,11 @@ resulting APK is identical. The module is declared via manifest `xposedmodule` /
 `xposedminversion` / `xposeddescription` / `xposedscope` (scope `android` = system_server)
 meta-data plus `assets/xposed_init` naming `AutoXXposedModule`.
 
-> Real LSPosed/device acceptance (trusted display + input injection actually working on a
-> head unit) is pending human validation; WS4 is verified here by unit tests + compilation.
+> The provider seam and its call-site wiring (`AutoXProviderFactory` two-phase probe →
+> `AutoXScreen` reevaluate, the LSPosed `IpcCommandWriter` channel) are wired and verified here
+> by unit tests + compilation. Real LSPosed/device acceptance — the trusted display, input
+> injection, and per-display hooks actually working on a head unit — is **device-validation
+> pending** (the `// TODO(device-verify)` markers in the bridges remain).
 
 ## WS6 — Audio routing (per-UID device affinity)
 
@@ -343,13 +481,36 @@ RootAudioRouter  (excluded glue — AudioManager reflection, needs device)
 3. **Null / blank address** → `NoRoute` (device address is required to locate the sink).
 4. **Valid UID + BT_A2DP or USB + non-blank address** → `SetAffinity` apply / `ClearAffinity` revert.
 
-### Revert-on-disable guarantee
+### Call-site wiring — WIRED (device-validation pending)
+
+The routing is wired into `AutoXScreen` (excluded glue):
+
+- **Apply** (`AutoXScreen.applyAudioRouting`, called from `createDisplay` after the guest app
+  launches — skipped if the launch failed, since there is no live UID): resolves the guest
+  UID via `PackageManager.getPackageUid(...)`, enumerates the live output devices via
+  `AudioManager.getDevices(GET_DEVICES_OUTPUTS)`, picks the first car sink with the pure
+  `CarOutputDeviceSelector.firstCarDeviceIndex(...)`, maps its type to a `CarAudioDevice` with
+  the pure `AudioDeviceTypeMapper.fromAudioDeviceInfoType(...)`, runs `AudioRoutePolicy.decide`,
+  and applies via `AudioRouteApplier.apply(decision, providers.audio())`.
+- **Revert** (`AutoXScreen.revertAudioRouting`, called from `releaseDisplay`): clears the
+  per-UID affinity via `AudioRouteApplier.revert(decision, providers.audio())`.
+
+### Revert-on-disable guarantee (process-death safe)
 
 `AudioRouteApplier.revert(decision, router)` is called when AutoX is disabled or the
 projection session ends. The `ClearAffinity` revert step releases the binding so the
 guest app's audio returns to default routing immediately — no device restart required.
 If routing was never applied (NoRoute decision), `revert` returns `false` without
 touching the AudioManager, so the phone's audio state is never disturbed.
+
+**Crash-safe revert.** The transient `RouteDecision` held in `AutoXScreen` is lost on a
+process death, so — consistent with the WS3/WS5 priors — the applied route is now PERSISTED in
+`AutoXSettingsStore` (the `AudioRouteState` record: routed UID + `CarAudioDevice` enum name +
+device address), written only when a real route was applied. On a cold-start teardown
+`revertAudioRouting` reconstructs the `ClearAffinity` decision from the persisted state (via
+`AudioRoutePolicy.decide`) so the affinity is still cleared, then clears the persisted state so
+it is not re-reverted. The privileged `AudioPolicy`/`setPreferredDeviceForUid` reflection itself
+remains device-verify pending.
 
 ### Phone playback unaffected
 
@@ -365,6 +526,9 @@ impossible at the applier layer.
 |---|---|---|
 | `AudioRoutePolicy` | Pure logic (no Android imports) — enum + decision + value objects | 100% required |
 | `AudioRouteApplier` | Pure logic — dispatches RouteStep to AudioRouter | 100% required |
+| `AudioDeviceTypeMapper` | Pure: maps an `AudioDeviceInfo` type int → `CarAudioDevice` (BT_A2DP / USB / NONE) | 100% required |
+| `CarOutputDeviceSelector` | Pure: first-match selection of a car output device from a list of device-type ints | 100% required |
+| `AudioRouteState` (`AutoXSettingsStore`) | Persisted routed UID + device name/address so the clear survives process death | 100% required |
 | `AudioRouter` | Interface — no executable lines | n/a |
 | `RootAudioRouter` | AudioManager + hidden-API reflection (framework, needs device) | Excluded |
 
@@ -574,30 +738,38 @@ in reverse order (IME first, then system-decors).
 
 Both keys are protected by `WRITE_SECURE_SETTINGS` (a signature-level permission).
 The shared `SettingsApplier` writes them via the `SystemSettingsProvider` interface
-(WS4 seam), which is backed at runtime by either a root-reflection implementation
-(`RootSystemSettingsProvider`) or an LSPosed hook (`AutoXXposedModule`) that relaxes the
-permission check inside `system_server`.
+(WS4 seam), which is backed at runtime by the **root** implementation
+(`RootSystemSettingsProvider` / `settings put`). Settings writes deliberately stay on root —
+it is the clean, stable path — and are NOT moved to LSPosed (only the trusted-display flag and
+cross-display input injection go through LSPosed).
 
 `cmd window set-display-settings` is a documented adb/shell fallback for debugging only
 — AutoX does **not** use it at runtime. The `SystemSettingsProvider` seam is the sole
 implementation path.
 
-#### TODO — call-site wiring (excluded glue)
+#### Apply / Revert call-site wiring — WIRED (device-validation pending)
 
-The IME spec/reader/applier are pure logic and fully tested, but they must still be wired
-into the excluded framework-glue classes at session start/stop (PENDING):
+The IME spec/reader/applier are wired into `AutoXScreen` at session start/stop (excluded
+from the coverage gate, so device/human-validated rather than unit-tested):
 
-- **`AutoXScreen.onSurfaceAvailable`** (excluded): after `VirtualDisplayController` creates
-  the trusted virtual display and returns its `displayId`, build
-  `ImeDisplaySettingsSpec.forDisplay(displayId)`, populate priors via
-  `new ImeSettingsReader(provider).readPriors(spec)`, then
-  `new SettingsApplier(provider, Namespace.SECURE).apply(specWithPriors.applyEntries())`.
-  Persist the populated spec's priors on the session state.
-- **`AutoXScreen.onSurfaceDestroyed`** (excluded): rebuild the populated spec from the
-  persisted priors and call `SettingsApplier.revert(spec.revertEntries())`.
+- **Apply** (`AutoXScreen.applyImeSettings`, called from `createDisplay` once the
+  `displayId` is known): builds `ImeDisplaySettingsSpec.forDisplay(displayId)`; on a fresh
+  session (gated by `PriorCaptureGate`) it reads the genuine per-display priors via
+  `new ImeSettingsReader(providers.settings()).readPriors(spec)` and persists them in
+  `AutoXSettingsStore` (`setPriorShouldShowSystemDecors` / `setPriorShouldShowIme`), mapping
+  the spec's sentinel-int prior to a boxed `Integer` through the pure `ImePriorCodec.toBoxedPrior`
+  (`VALUE_UNSET → null`). It then writes the AutoX values via
+  `new SettingsApplier(providers.settings(), Namespace.SECURE).apply(spec.applyEntries())`
+  (system-decors first, then IME).
+- **Revert** (`AutoXScreen.revertImeSettings`, called from `releaseDisplay`): rebuilds the
+  spec from the persisted per-display priors
+  (`AutoXSettingsStore.getPriorShouldShow...OrUnset` → `withPriorValues`) and calls
+  `SettingsApplier.revert(spec.revertEntries())` (IME first, then decors), then clears the
+  per-display priors via `clearPriorsForDisplay`.
 
-These wiring points are in `AutoXScreen` (excluded from coverage gate) and therefore
-require human or device validation rather than unit tests.
+Per-display priors are persisted in `AutoXSettingsStore` so the revert survives process
+death. Device-validation of the privileged SECURE writes (and the IME actually routing to the
+virtual display on a head unit) is still pending.
 
 ## Key files
 
@@ -608,8 +780,14 @@ require human or device validation rather than unit tests.
 | `app/src/main/java/com/xiddoc/androidautox/autox/LaunchBoundsCalculator.java` | WS3 pure forced-vertical bounds computation |
 | `app/src/main/java/com/xiddoc/androidautox/autox/provider/SettingsEntry.java` · `ApplyResult.java` · `SettingsApplier.java` | Shared pure entry/result + instance applier (GLOBAL/SECURE) |
 | `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/HookGatePolicy.java` | Pure act/no-act gate scoping LSPosed hooks to AutoX's display |
-| `app/src/main/java/com/xiddoc/androidautox/autox/provider/` | WS4 provider seam (pure interfaces + policy/schema/table) |
-| `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/` | WS4 LSPosed module glue (excluded) |
+| `app/src/main/java/com/xiddoc/androidautox/autox/provider/` | WS4 provider seam (pure interfaces + policy/schema/table; pure `AutoXProviders` holder) |
+| `app/src/main/java/com/xiddoc/androidautox/autox/provider/AutoXProviderFactory.java` | WS4 excluded glue: two-phase `probe(Context)` → provisional bundle → `reevaluate` |
+| `app/src/main/java/com/xiddoc/androidautox/autox/provider/lsposed/` | WS4 LSPosed module glue (excluded), incl. `IpcCommandWriter`, `InputInjectionBridge`, and `LsposedInputInjector` (the only AutoX `InputProvider`) |
+| `app/src/main/java/com/xiddoc/androidautox/autox/AutoXScreen.java` | Excluded glue: wires WS3/WS5/WS6 + LSPosed apply/revert call-sites in `createDisplay`/`releaseDisplay` |
+| `app/src/main/java/com/xiddoc/androidautox/autox/AutoXSettingsStore.java` | Prior/route-state persistence so revert survives process death (pure, JUnit-tested) |
+| `app/src/main/java/com/xiddoc/androidautox/autox/PriorCaptureGate.java` · `SettingsPriorMapper.java` · `ProjectionStep.java` · `ProjectionStepPlan.java` | Pure glue-extracted helpers (WS3 / ordering) |
+| `app/src/main/java/com/xiddoc/androidautox/autox/AudioDeviceTypeMapper.java` · `CarOutputDeviceSelector.java` | WS6 pure audio device-type mapping / first-match selection |
+| `app/src/main/java/com/xiddoc/androidautox/autox/ime/ImePriorCodec.java` | WS5 pure sentinel-int ↔ boxed-Integer prior codec |
 | `app/src/xposedStub/java/` | Local compileOnly Xposed API stub (offline `-PuseXposedStub=true` fallback) |
 | `app/src/main/assets/xposed_init` | LSPosed module entry-class pointer |
 | `app/src/main/java/com/xiddoc/androidautox/autox/HostAllowlist.java` | WS7: pure host allowlist (allowlist data + digest normalization + matching) |

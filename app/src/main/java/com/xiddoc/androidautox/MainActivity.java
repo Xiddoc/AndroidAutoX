@@ -58,6 +58,7 @@ import java.util.regex.Pattern;
 
 import com.xiddoc.androidautox.CarRemoverActivity.CarRemover;
 import com.xiddoc.androidautox.Utils.BottomDialog;
+import com.xiddoc.androidautox.autox.AutoXEnablementPolicy;
 import com.xiddoc.androidautox.autox.AutoXSettingsStore;
 
 @SuppressWarnings("ALL")
@@ -810,6 +811,15 @@ public class MainActivity extends AppCompatActivity {
         autoXToggleButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                // If AutoX is already enabled, always allow disabling it. When enabling, gate on
+                // root + LSPosed via the pure AutoXEnablementPolicy (LSPosed-first single path):
+                // block cleanly with a clear message instead of silently degrading.
+                boolean currentlyEnabled = AutoXSettingsStore.isEnabled(autoXPrefs);
+                if (!currentlyEnabled && !canEnableAutoX(autoXPrefs)) {
+                    showAutoXBlockedDialog();
+                    refreshAutoXButtonState(autoXPrefs);
+                    return;
+                }
                 AutoXSettingsStore.toggleEnabled(autoXPrefs);
                 refreshAutoXButtonState(autoXPrefs);
             }
@@ -1755,6 +1765,15 @@ public class MainActivity extends AppCompatActivity {
         // thread; if root isn't available the checks return UNKNOWN and behaviour is unchanged.
         reconcileTweakStatusesInBackground();
 
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Passively re-check the AutoX gate on every return to the screen: the tap path is
+        // already live/correct, but the label can go stale while backgrounded (e.g. root granted
+        // in another app), so refresh from the persisted prefs here.
+        refreshAutoXButtonState(getSharedPreferences("autox_prefs", Context.MODE_PRIVATE));
     }
 
     @Override
@@ -3412,15 +3431,110 @@ appendText(logs, "\n\n--  Restoring ownership of the database   --");
      * Refreshes the AutoX toggle button label and status icon to reflect the current
      * persisted enabled state in {@code prefs}.
      *
-     * <p>Called once during {@code onCreate} and again each time the toggle is tapped.
+     * <p>Called during {@code onCreate}, on every {@code onResume} (so the label can't go
+     * stale while backgrounded), and again each time the toggle is tapped.
      * The status icon follows the same convention as other tweak icons:
      * 2 = applied/enabled (green), 0 = not applied (red).
      */
     private void refreshAutoXButtonState(SharedPreferences prefs) {
         boolean enabled = AutoXSettingsStore.isEnabled(prefs);
-        autoXToggleButton.setText(getString(
-                enabled ? R.string.autox_button_disable : R.string.autox_button_enable));
-        changeStatus(autoXToggleStatus, enabled ? 2 : 0, false);
+        if (enabled) {
+            autoXToggleButton.setText(getString(R.string.autox_button_disable));
+            changeStatus(autoXToggleStatus, 2, false);
+            return;
+        }
+        // Not enabled: annotate the button when AutoX cannot be enabled (no LSPosed / no root),
+        // so the blocked state is visible before the user taps. Status icon stays "not applied".
+        if (!canEnableAutoX(prefs)) {
+            autoXToggleButton.setText(getString(R.string.autox_button_enable)
+                    + " (" + getString(R.string.autox_requires_lsposed) + ")");
+        } else {
+            autoXToggleButton.setText(getString(R.string.autox_button_enable));
+        }
+        changeStatus(autoXToggleStatus, 0, false);
+    }
+
+    /**
+     * Pure-policy gate for whether AutoX may be enabled from the phone UI. Detects root +
+     * LSPosed (best-effort, non-blocking glue) and feeds them into {@link AutoXEnablementPolicy}
+     * with {@code enabled}/{@code providerAvailable} forced true so the result reflects ONLY the
+     * activation prerequisites this UI cares about (root + LSPosed + a chosen target).
+     *
+     * <p>All decision logic lives in the pure policy; this method only collects live booleans.
+     *
+     * @return {@code true} iff AutoX may be enabled now (root + LSPosed present + target chosen)
+     */
+    private boolean canEnableAutoX(SharedPreferences prefs) {
+        boolean targetChosen = AutoXSettingsStore.getTargetPackage(prefs) != null;
+        boolean rootAvailable = probeRootAvailableBestEffort();
+        boolean lsposedActive = probeLsposedActiveBestEffort();
+        // providerAvailable is treated as true here (Android Auto presence is checked at connect
+        // time on the car surface); the UI gate is specifically about root + LSPosed + target.
+        return AutoXEnablementPolicy.evaluate(
+                /* enabled= */ true, targetChosen, rootAvailable, lsposedActive,
+                /* providerAvailable= */ true).canProject;
+    }
+
+    /**
+     * Shows a clear dialog explaining why AutoX cannot be enabled, mapping the first failing
+     * prerequisite (via the pure {@link AutoXEnablementPolicy}) to an actionable message.
+     * Reminds the user to reboot after enabling the LSPosed module.
+     */
+    private void showAutoXBlockedDialog() {
+        SharedPreferences prefs = getSharedPreferences("autox_prefs", Context.MODE_PRIVATE);
+        boolean targetChosen = AutoXSettingsStore.getTargetPackage(prefs) != null;
+        AutoXEnablementPolicy.Reason reason = AutoXEnablementPolicy.evaluate(
+                true, targetChosen, probeRootAvailableBestEffort(),
+                probeLsposedActiveBestEffort(), true).reason;
+        int msgRes;
+        switch (reason) {
+            case ROOT_UNAVAILABLE:
+                msgRes = R.string.autox_blocked_no_root;
+                break;
+            case NO_TARGET_CHOSEN:
+                msgRes = R.string.autox_no_target;
+                break;
+            case LSPOSED_UNAVAILABLE:
+            default:
+                msgRes = R.string.autox_blocked_no_lsposed;
+                break;
+        }
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(R.string.autox_blocked_title)
+                .setMessage(msgRes)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+    }
+
+    /**
+     * Best-effort, NON-blocking root probe for the UI gate: uses libsu's cached shell so it never
+     * spawns/awaits {@code su} on the main thread. A null/non-root cached shell reads as no root.
+     * Never throws. (The blocking, prompt-triggering check is {@link #hasRootAccess()}.)
+     */
+    private static boolean probeRootAvailableBestEffort() {
+        try {
+            com.topjohnwu.superuser.Shell cached =
+                    com.topjohnwu.superuser.Shell.getCachedShell();
+            return cached != null && cached.isRoot();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Best-effort detection of whether the LSPosed module is active. The module runs in
+     * {@code system_server}, so the app cannot observe its hooks directly; we check whether the
+     * Xposed bridge class is loadable in this process (LSPosed injects it into hooked processes).
+     * Mirrors {@code AutoXProviderFactory.probeLsposedActive()}. Returns {@code false} on failure.
+     */
+    private static boolean probeLsposedActiveBestEffort() {
+        try {
+            Class.forName("de.robv.android.xposed.XposedBridge", false,
+                    MainActivity.class.getClassLoader());
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     public void showRebootButton() {

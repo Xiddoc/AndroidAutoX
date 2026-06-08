@@ -109,6 +109,24 @@ public final class ImeDisplaySettingsSpec {
         return displayId;
     }
 
+    /**
+     * Returns the recorded prior value for the system-decors key: {@link #VALUE_ENABLED},
+     * {@link #VALUE_DISABLED}, or {@link #VALUE_UNSET} when the key was absent before AutoX
+     * touched it.
+     */
+    public int getPriorSystemDecors() {
+        return priorSystemDecors;
+    }
+
+    /**
+     * Returns the recorded prior value for the IME key: {@link #VALUE_ENABLED},
+     * {@link #VALUE_DISABLED}, or {@link #VALUE_UNSET} when the key was absent before AutoX
+     * touched it.
+     */
+    public int getPriorIme() {
+        return priorIme;
+    }
+
     /** Returns the {@code Settings.Secure} key for the {@code shouldShowIme} flag. */
     public String imeKey() {
         return String.format(KEY_TEMPLATE_SHOULD_SHOW_IME, displayId);
