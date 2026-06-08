@@ -2,6 +2,8 @@ package com.xiddoc.androidautox.autox;
 
 import android.content.SharedPreferences;
 
+import com.xiddoc.androidautox.autox.provider.SettingsEntry;
+
 /**
  * Persistence for AutoX virtual-display settings.
  *
@@ -26,6 +28,33 @@ public final class AutoXSettingsStore {
 
     /** Preference key for the target package name. */
     static final String KEY_TARGET_PACKAGE = "autox_target_package";
+
+    // -------------------------------------------------------------------------
+    // Prior-value keys (captured at apply-time so revert survives process death)
+    //
+    // SharedPreferences cannot store a "null int", so absent-vs-present is encoded
+    // explicitly: each int value lives under KEY_PRIOR_* and a companion boolean
+    // KEY_PRIOR_*__present records whether a value was captured at all. A missing
+    // (or false) presence flag means "the key was absent" → getter returns null →
+    // the revert maps to WRITE_DEFAULT. A true presence flag means "the key had this
+    // value (possibly 0)" → getter returns the boxed int → revert maps to
+    // RESTORE_PRIOR. This faithfully distinguishes absent / present-0 / present-nonzero.
+    // -------------------------------------------------------------------------
+
+    /** Suffix appended to a prior-value key to record absent-vs-present. */
+    static final String SUFFIX_PRESENT = "__present";
+
+    /** Prior value of the global {@code force_resizable_activities} flag. */
+    static final String KEY_PRIOR_FORCE_RESIZABLE = "autox_prior_force_resizable";
+
+    /** Prior value of the global {@code enable_freeform_support} flag. */
+    static final String KEY_PRIOR_ENABLE_FREEFORM = "autox_prior_enable_freeform";
+
+    /** Per-display key template for the prior {@code shouldShowSystemDecors} value. */
+    static final String KEY_PRIOR_SYSTEM_DECORS_TEMPLATE = "autox_prior_system_decors_%d";
+
+    /** Per-display key template for the prior {@code shouldShowIme} value. */
+    static final String KEY_PRIOR_SHOULD_SHOW_IME_TEMPLATE = "autox_prior_should_show_ime_%d";
 
     private AutoXSettingsStore() {
     }
@@ -108,19 +137,183 @@ public final class AutoXSettingsStore {
     }
 
     // -------------------------------------------------------------------------
+    // Prior values — global single-value flags
+    // -------------------------------------------------------------------------
+
+    /**
+     * Persists the prior value of {@code force_resizable_activities} captured at apply-time.
+     *
+     * @param prefs the shared preferences to write to; must not be null.
+     * @param prior the captured prior value, or {@code null} if the key was absent.
+     */
+    public static void setPriorForceResizable(SharedPreferences prefs, Integer prior) {
+        writePrior(prefs, KEY_PRIOR_FORCE_RESIZABLE, prior);
+    }
+
+    /**
+     * Returns the persisted prior value of {@code force_resizable_activities}.
+     *
+     * @param prefs the shared preferences to read from; must not be null.
+     * @return the captured prior int, or {@code null} if it was absent / never captured.
+     */
+    public static Integer getPriorForceResizable(SharedPreferences prefs) {
+        return readPrior(prefs, KEY_PRIOR_FORCE_RESIZABLE);
+    }
+
+    /**
+     * Persists the prior value of {@code enable_freeform_support} captured at apply-time.
+     *
+     * @param prefs the shared preferences to write to; must not be null.
+     * @param prior the captured prior value, or {@code null} if the key was absent.
+     */
+    public static void setPriorEnableFreeform(SharedPreferences prefs, Integer prior) {
+        writePrior(prefs, KEY_PRIOR_ENABLE_FREEFORM, prior);
+    }
+
+    /**
+     * Returns the persisted prior value of {@code enable_freeform_support}.
+     *
+     * @param prefs the shared preferences to read from; must not be null.
+     * @return the captured prior int, or {@code null} if it was absent / never captured.
+     */
+    public static Integer getPriorEnableFreeform(SharedPreferences prefs) {
+        return readPrior(prefs, KEY_PRIOR_ENABLE_FREEFORM);
+    }
+
+    // -------------------------------------------------------------------------
+    // Prior values — per-display flags
+    // -------------------------------------------------------------------------
+
+    /**
+     * Persists the prior per-display {@code shouldShowSystemDecors} value captured at
+     * apply-time, keyed by {@code displayId}.
+     *
+     * @param prefs     the shared preferences to write to; must not be null.
+     * @param displayId the virtual display ID.
+     * @param prior     the captured prior value, or {@code null} if the key was absent.
+     */
+    public static void setPriorShouldShowSystemDecors(SharedPreferences prefs, int displayId,
+                                                      Integer prior) {
+        writePrior(prefs, systemDecorsKey(displayId), prior);
+    }
+
+    /**
+     * Returns the persisted prior per-display {@code shouldShowSystemDecors} value for
+     * {@code displayId}.
+     *
+     * @param prefs     the shared preferences to read from; must not be null.
+     * @param displayId the virtual display ID.
+     * @return the captured prior int, or {@code null} if it was absent / never captured.
+     */
+    public static Integer getPriorShouldShowSystemDecors(SharedPreferences prefs, int displayId) {
+        return readPrior(prefs, systemDecorsKey(displayId));
+    }
+
+    /**
+     * Persists the prior per-display {@code shouldShowIme} value captured at apply-time,
+     * keyed by {@code displayId}.
+     *
+     * @param prefs     the shared preferences to write to; must not be null.
+     * @param displayId the virtual display ID.
+     * @param prior     the captured prior value, or {@code null} if the key was absent.
+     */
+    public static void setPriorShouldShowIme(SharedPreferences prefs, int displayId,
+                                             Integer prior) {
+        writePrior(prefs, shouldShowImeKey(displayId), prior);
+    }
+
+    /**
+     * Returns the persisted prior per-display {@code shouldShowIme} value for
+     * {@code displayId}.
+     *
+     * @param prefs     the shared preferences to read from; must not be null.
+     * @param displayId the virtual display ID.
+     * @return the captured prior int, or {@code null} if it was absent / never captured.
+     */
+    public static Integer getPriorShouldShowIme(SharedPreferences prefs, int displayId) {
+        return readPrior(prefs, shouldShowImeKey(displayId));
+    }
+
+    /**
+     * Clears the persisted per-display priors ({@code shouldShowSystemDecors} and
+     * {@code shouldShowIme}) for a single {@code displayId}.
+     *
+     * @param prefs     the shared preferences to write to; must not be null.
+     * @param displayId the virtual display ID whose priors to wipe.
+     */
+    public static void clearPriorsForDisplay(SharedPreferences prefs, int displayId) {
+        removePrior(prefs.edit(), systemDecorsKey(displayId))
+                .remove(shouldShowImeKey(displayId))
+                .remove(shouldShowImeKey(displayId) + SUFFIX_PRESENT)
+                .apply();
+    }
+
+    // -------------------------------------------------------------------------
+    // Absent-vs-present encode/decode (presence companion key)
+    // -------------------------------------------------------------------------
+
+    private static void writePrior(SharedPreferences prefs, String key, Integer prior) {
+        SharedPreferences.Editor editor = prefs.edit();
+        if (prior == null) {
+            // Absent: drop both the value and the presence flag so the getter returns null.
+            editor.remove(key).remove(key + SUFFIX_PRESENT);
+        } else {
+            editor.putInt(key, prior).putBoolean(key + SUFFIX_PRESENT, true);
+        }
+        editor.apply();
+    }
+
+    private static Integer readPrior(SharedPreferences prefs, String key) {
+        if (!prefs.getBoolean(key + SUFFIX_PRESENT, false)) {
+            return null;
+        }
+        return prefs.getInt(key, SettingsEntry.DEFAULT_REVERT_VALUE);
+    }
+
+    private static SharedPreferences.Editor removePrior(SharedPreferences.Editor editor,
+                                                        String key) {
+        return editor.remove(key).remove(key + SUFFIX_PRESENT);
+    }
+
+    private static String systemDecorsKey(int displayId) {
+        return String.format(KEY_PRIOR_SYSTEM_DECORS_TEMPLATE, displayId);
+    }
+
+    private static String shouldShowImeKey(int displayId) {
+        return String.format(KEY_PRIOR_SHOULD_SHOW_IME_TEMPLATE, displayId);
+    }
+
+    // -------------------------------------------------------------------------
     // Bulk clear
     // -------------------------------------------------------------------------
 
     /**
-     * Clears both the enabled flag and the target-package selection, resetting all AutoX
-     * settings to their defaults.
+     * Clears the global prior-value flags ({@code force_resizable_activities} and
+     * {@code enable_freeform_support}) and their presence companions. Per-display priors are
+     * keyed by display ID; wipe those with {@link #clearPriorsForDisplay}.
+     *
+     * @param prefs the shared preferences to write to; must not be null.
+     */
+    public static void clearPriors(SharedPreferences prefs) {
+        SharedPreferences.Editor editor = prefs.edit();
+        removePrior(editor, KEY_PRIOR_FORCE_RESIZABLE);
+        removePrior(editor, KEY_PRIOR_ENABLE_FREEFORM);
+        editor.apply();
+    }
+
+    /**
+     * Clears the enabled flag, the target-package selection, and the global prior-value flags,
+     * resetting AutoX's global settings to their defaults. Per-display priors are keyed by
+     * display ID and are wiped via {@link #clearPriorsForDisplay}.
      *
      * @param prefs the shared preferences to write to; must not be null.
      */
     public static void clear(SharedPreferences prefs) {
-        prefs.edit()
+        SharedPreferences.Editor editor = prefs.edit()
                 .remove(KEY_ENABLED)
-                .remove(KEY_TARGET_PACKAGE)
-                .apply();
+                .remove(KEY_TARGET_PACKAGE);
+        removePrior(editor, KEY_PRIOR_FORCE_RESIZABLE);
+        removePrior(editor, KEY_PRIOR_ENABLE_FREEFORM);
+        editor.apply();
     }
 }
