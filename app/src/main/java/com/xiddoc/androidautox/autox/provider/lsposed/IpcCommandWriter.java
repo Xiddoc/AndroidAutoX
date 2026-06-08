@@ -50,13 +50,36 @@ import java.util.Map;
  * write is wrapped fail-closed: any {@link SecurityException} / {@link Throwable} from the
  * platform is swallowed and surfaced as a {@code false} return rather than crashing the app.
  *
- * <h2>State model</h2>
+ * <h2>Write integrity (security)</h2>
+ * <p>The channel is world-<b>READABLE</b> but <b>NOT world-writable</b>. The backing prefs file
+ * stays owned by the app's own UID at mode {@code 0644} (and, on the preferred LSPosed
+ * remote-prefs path, the remote store is app-private to <em>write</em>) — so although
+ * {@code system_server} can read the channel, no other app can forge or tamper with the commands
+ * in it. As a second, independent line of defence the module treats <b>every</b> command as
+ * UNTRUSTED: each display-scoped command is gated by {@link HookGatePolicy} against AutoX's own
+ * display id and <b>fails closed</b>. Consequently a forged or stale command cannot relax input
+ * injection (or any per-display hook) on a display that is not AutoX's — the display-id scoping is
+ * the second line of defence behind the file's write-protection.
+ *
+ * <h2>State model — single active AutoX display</h2>
  * <p>The channel is a <b>set of currently-active commands</b>, persisted as the union of:
  * one optional {@link IpcCommand.Type#ENABLE_TRUSTED_DISPLAY} command, plus at most one
  * display-scoped command of each display-scoped type ({@link IpcCommand.Type#ALLOW_INPUT_INJECTION},
- * {@link IpcCommand.Type#SET_DISPLAY_IME}, {@link IpcCommand.Type#LAUNCH_ON_DISPLAY}) keyed by the
- * AutoX display id. Each {@code enable*}/{@code set*}/{@code launch*} call rewrites the channel so
- * the module always sees the latest scoping; {@link #clear()} empties it on AutoX teardown.
+ * {@link IpcCommand.Type#SET_DISPLAY_IME}, {@link IpcCommand.Type#LAUNCH_ON_DISPLAY}). The channel
+ * therefore models <b>exactly one active AutoX display at a time</b>: re-projecting onto a new
+ * display id overwrites the prior command of that type, and the module honors the (single) command
+ * of each type it finds. Each {@code enable*}/{@code set*}/{@code launch*} call rewrites the channel
+ * so the module always sees the latest scoping; {@link #clear()} empties it on AutoX teardown, and
+ * {@link #clearType(IpcCommand.Type)} retracts a single concern.
+ *
+ * <h2>Call ordering &amp; Wave-2 seam</h2>
+ * <p>{@link #enableTrustedDisplay()} is scoped by display <b>name</b> (the display id does not
+ * exist yet) and MUST be written <b>before</b> {@code createVirtualDisplay}, so the trusted-flag
+ * hook can act as the display is created. The id-scoped commands —
+ * {@link #allowInputInjection(int)}, {@link #setDisplayImeAndDecors(int, boolean)},
+ * {@link #launchOnDisplay(int, String)} — may only be written <b>after</b> the virtual display
+ * exists and its id is known. Wiring {@code Provider.LSPOSED -> new IpcCommandWriter(context)} is
+ * the Wave-2 call-site's responsibility and is <b>not</b> done here.
  */
 @SuppressWarnings("deprecation") // MODE_WORLD_READABLE is intentional — see class Javadoc.
 public final class IpcCommandWriter {
@@ -125,12 +148,44 @@ public final class IpcCommandWriter {
      * @param pkg       the guest app package to launch; must not be null/blank or contain a
      *                  reserved separator ({@code | ; =})
      * @return {@code true} if the channel was written
+     * @throws IllegalArgumentException if {@code pkg} is null/blank or contains a reserved
+     *                                  separator. NIT 11: a bad package is a programming error in
+     *                                  the call-site, so it is thrown <b>eagerly</b> and kept
+     *                                  distinct from the fail-closed {@code false} a disk/prefs
+     *                                  error returns — callers must pass a valid package.
      */
     public boolean launchOnDisplay(int displayId, String pkg) {
         Map<String, String> extra = new LinkedHashMap<String, String>();
         extra.put("pkg", pkg);
-        return upsert(IpcCommand.Type.LAUNCH_ON_DISPLAY,
-                IpcCommand.forDisplay(IpcCommand.Type.LAUNCH_ON_DISPLAY, displayId, extra));
+        // Build (and validate) the command OUTSIDE the fail-closed upsert: an invalid package is a
+        // programming error and must surface as IllegalArgumentException, not be swallowed as a
+        // false return that looks like a transient disk failure.
+        IpcCommand cmd =
+                IpcCommand.forDisplay(IpcCommand.Type.LAUNCH_ON_DISPLAY, displayId, extra);
+        return upsert(IpcCommand.Type.LAUNCH_ON_DISPLAY, cmd);
+    }
+
+    /**
+     * Retracts a single command {@code type} from the channel, leaving every other active command
+     * in place (SHOULD 5: symmetric, per-command revert). After this the module sees no command of
+     * {@code type} and its corresponding gate returns "not enabled", so <em>that one</em> platform
+     * behaviour is restored while the rest of the AutoX session stays scoped.
+     *
+     * <p>This is the general-purpose counterpart to the write-only {@link #allowInputInjection(int)}
+     * / {@link #launchOnDisplay(int, String)} / {@link #enableTrustedDisplay()} setters and the
+     * {@code setDisplayImeAndDecors(id, false)} disable; it lets a Wave-2 call-site retract one
+     * concern without {@link #clear() clearing} the whole channel. Fail-closed: returns
+     * {@code false} (never throws) on a null type or any platform/prefs error.
+     *
+     * @param type the command type to retract; a {@code null} type is a no-op returning
+     *             {@code false}
+     * @return {@code true} if the channel was rewritten without that command type
+     */
+    public boolean clearType(IpcCommand.Type type) {
+        if (type == null) {
+            return false; // fail closed
+        }
+        return removeType(type);
     }
 
     /**
@@ -142,7 +197,10 @@ public final class IpcCommandWriter {
      */
     public boolean clear() {
         try {
-            prefs().edit().putString(AutoXXposedModule.IPC_PREFS_KEY, "").commit();
+            // apply() (async) is sufficient: the module re-reads via XSharedPreferences change
+            // detection (hasFileChanged/reload), so durability-before-return is not required. See
+            // NIT 12. apply() never throws on the calling thread, so a true return means enqueued.
+            prefs().edit().putString(AutoXXposedModule.IPC_PREFS_KEY, "").apply();
             return true;
         } catch (Throwable t) {
             return false; // fail closed — never crash the app on a prefs write
@@ -196,7 +254,12 @@ public final class IpcCommandWriter {
         return out;
     }
 
-    /** Encodes the command map (newline-separated) and commits it to the world-readable file. */
+    /**
+     * Encodes the command map (newline-separated) and writes it to the world-readable file via
+     * {@code apply()} (async). The module re-reads through {@code XSharedPreferences} change
+     * detection, so durability-before-return is not required (NIT 12); {@code apply()} also never
+     * throws on the calling thread, so a {@code true} return means the write was enqueued.
+     */
     private boolean write(Map<IpcCommand.Type, IpcCommand> commands) {
         StringBuilder sb = new StringBuilder();
         boolean first = true;
@@ -207,9 +270,10 @@ public final class IpcCommandWriter {
             sb.append(cmd.encode());
             first = false;
         }
-        return prefs().edit()
+        prefs().edit()
                 .putString(AutoXXposedModule.IPC_PREFS_KEY, sb.toString())
-                .commit();
+                .apply();
+        return true;
     }
 
     /**
