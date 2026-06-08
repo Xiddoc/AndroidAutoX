@@ -170,8 +170,9 @@ public final class AutoXProviders {
 
     /**
      * @return {@code true} if this bundle's decision is provisional — computed from the
-     *         cheap static probes only, with trusted-display and input-injection
-     *         conservatively {@code false} because no surface existed yet. Provisional until
+     *         cheap static probes only, with trusted-display and input-injection fed
+     *         optimistically equal to LSPosed-active because no surface existed yet (trusted
+     *         until a device read proves otherwise). Provisional until
      *         {@link #reevaluate(boolean, boolean)} is called after the surface arrives.
      */
     public boolean isProvisional() {
