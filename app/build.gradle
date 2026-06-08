@@ -327,6 +327,13 @@ def jacocoExclusions = [
         // (setPreferredDeviceForUid / removePreferredDeviceForUid) that are unavailable in
         // the JVM unit-test environment.  All routing decisions live in the tested pure layer.
         '**/provider/RootAudioRouter*.*',            // AudioManager hidden-API reflection (framework, needs device)
+
+        // Provider selection factory (excluded glue): touches live Context / ContentResolver /
+        // InputManager / AudioManager / libsu Shell to probe capabilities and instantiate the
+        // Root*/Reflective* providers — none exercisable off-device. ALL probe->capabilities->
+        // decision mapping lives in the pure, 100%-tested CapabilityDecider + ProviderSelectionPolicy;
+        // the AutoXProviders holder is a pure value object and is NOT excluded (it stays at 100%).
+        '**/provider/AutoXProviderFactory*.*',       // probes live system, assembles providers (framework + libsu)
 ]
 
 // Debug-variant javac output (and kotlin, if any is ever added) form the class
