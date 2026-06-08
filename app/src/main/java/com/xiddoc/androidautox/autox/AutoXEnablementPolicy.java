@@ -12,6 +12,11 @@ package com.xiddoc.androidautox.autox;
  * <ul>
  *   <li><b>enabled</b> — the user has toggled AutoX on via {@link AutoXSettingsStore}.</li>
  *   <li><b>targetChosen</b> — a target package has been persisted (non-null, non-empty).</li>
+ *   <li><b>rootAvailable</b> — a root path is available (the AutoX baseline requirement).</li>
+ *   <li><b>lsposedActive</b> — the AndroidAutoX LSPosed module is active in
+ *       {@code system_server}. AutoX's trusted-display + cross-display input injection have no
+ *       stable root-only path, so they go through LSPosed exclusively; without it AutoX is
+ *       blocked cleanly (no silent degrade).</li>
  *   <li><b>providerAvailable</b> — the Android Auto host is available and can receive a
  *       {@code CarAppService} connection (e.g. AA is installed and its version is
  *       compatible). In the current implementation this is always {@code true} on a device
@@ -20,7 +25,7 @@ package com.xiddoc.androidautox.autox;
  * </ul>
  *
  * <h3>Decision</h3>
- * All three inputs must be {@code true} for projection to be allowed.
+ * All inputs must be {@code true} for projection to be allowed.
  */
 public final class AutoXEnablementPolicy {
 
@@ -51,6 +56,19 @@ public final class AutoXEnablementPolicy {
          * Actionable fix: open the app picker and select a target app.
          */
         NO_TARGET_CHOSEN,
+
+        /**
+         * Root access is not available (AutoX's baseline requirement).
+         * Actionable fix: grant root (Magisk) to AndroidAutoX.
+         */
+        ROOT_UNAVAILABLE,
+
+        /**
+         * The AndroidAutoX LSPosed module is not active in {@code system_server}.
+         * AutoX requires it for the trusted-display flag and cross-display input injection.
+         * Actionable fix: install/enable the LSPosed module, scope it to system_server, reboot.
+         */
+        LSPOSED_UNAVAILABLE,
 
         /**
          * The Android Auto provider (Gearhead) is not available on this device.
@@ -94,24 +112,37 @@ public final class AutoXEnablementPolicy {
      * <ol>
      *   <li>Feature enabled?</li>
      *   <li>Target package chosen?</li>
+     *   <li>Root available? (baseline requirement)</li>
+     *   <li>LSPosed module active? (privileged display/input relaxation)</li>
      *   <li>Provider available?</li>
      * </ol>
      * The first failing check determines the returned {@link Reason}.
      *
      * @param enabled           whether the user has enabled AutoX.
      * @param targetChosen      whether a target package name has been persisted.
+     * @param rootAvailable     whether a root path is available (baseline requirement).
+     * @param lsposedActive     whether the AndroidAutoX LSPosed module is active in
+     *                          {@code system_server}.
      * @param providerAvailable whether the Android Auto host is available on the device.
      * @return a {@link Decision} describing whether projection is allowed and why not if
      *         it is blocked.
      */
     public static Decision evaluate(boolean enabled,
                                     boolean targetChosen,
+                                    boolean rootAvailable,
+                                    boolean lsposedActive,
                                     boolean providerAvailable) {
         if (!enabled) {
             return new Decision(false, Reason.NOT_ENABLED);
         }
         if (!targetChosen) {
             return new Decision(false, Reason.NO_TARGET_CHOSEN);
+        }
+        if (!rootAvailable) {
+            return new Decision(false, Reason.ROOT_UNAVAILABLE);
+        }
+        if (!lsposedActive) {
+            return new Decision(false, Reason.LSPOSED_UNAVAILABLE);
         }
         if (!providerAvailable) {
             return new Decision(false, Reason.PROVIDER_UNAVAILABLE);
