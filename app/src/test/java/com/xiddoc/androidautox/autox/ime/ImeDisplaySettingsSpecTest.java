@@ -49,6 +49,24 @@ public class ImeDisplaySettingsSpecTest {
         assertEquals("display_should_show_system_decors_7", spec.decorKey());
     }
 
+    // prior-value getters
+
+    @Test
+    public void priorGetters_freshSpec_bothUnset() {
+        ImeDisplaySettingsSpec spec = ImeDisplaySettingsSpec.forDisplay(3);
+        assertEquals(ImeDisplaySettingsSpec.VALUE_UNSET, spec.getPriorSystemDecors());
+        assertEquals(ImeDisplaySettingsSpec.VALUE_UNSET, spec.getPriorIme());
+    }
+
+    @Test
+    public void priorGetters_reflectWithPriorValues() {
+        ImeDisplaySettingsSpec spec = ImeDisplaySettingsSpec.forDisplay(3)
+                .withPriorValues(ImeDisplaySettingsSpec.VALUE_ENABLED,
+                        ImeDisplaySettingsSpec.VALUE_DISABLED);
+        assertEquals(ImeDisplaySettingsSpec.VALUE_ENABLED, spec.getPriorSystemDecors());
+        assertEquals(ImeDisplaySettingsSpec.VALUE_DISABLED, spec.getPriorIme());
+    }
+
     // applyEntries
 
     @Test
