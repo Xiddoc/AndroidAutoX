@@ -7,6 +7,8 @@ import android.content.pm.PackageManager;
 import android.graphics.Rect;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
+
 /**
  * Launches a target app onto a specific virtual display using only native Android APIs.
  *
@@ -56,7 +58,16 @@ public final class AppLauncher {
     }
 
     /**
-     * Attempts to launch the given package onto the specified virtual display.
+     * Attempts to launch the given package onto the specified virtual display, optionally
+     * constraining the launched window to {@code launchBounds} (the WS3 forced-vertical case).
+     *
+     * <p>When {@code launchBounds} is non-null it is applied via
+     * {@link ActivityOptions#setLaunchBounds(Rect)} — this is only honored by the platform when
+     * freeform windowing is enabled (see {@link FreeformGlobalSettingsSpec#KEY_ENABLE_FREEFORM}),
+     * which AutoX turns on at projection start. When {@code null}, the app launches full-display.
+     * The {@link Rect} itself is built in this excluded glue from the pure
+     * {@link LaunchBoundsCalculator.Bounds} produced by
+     * {@link LaunchBoundsCalculator#forcedVertical}; no bounds <em>policy</em> lives here.
      *
      * <p>Returns {@code false} (with a warning logged) if:
      * <ul>
@@ -66,35 +77,12 @@ public final class AppLauncher {
      *       not installed or has no main activity).</li>
      * </ul>
      *
-     * @param packageName the Android package name of the app to launch
-     * @param displayId   the virtual display id (&gt; 0) to launch onto
-     * @return {@code true} if {@code startActivity} was called; {@code false} otherwise
-     */
-    public boolean launch(String packageName, int displayId) {
-        return launch(packageName, displayId, null);
-    }
-
-    /**
-     * Attempts to launch the given package onto the specified virtual display, optionally
-     * constraining the launched window to {@code launchBounds} (the WS3 forced-vertical case).
-     *
-     * <p>When {@code launchBounds} is non-null it is applied via
-     * {@link ActivityOptions#setLaunchBounds(Rect)} — this is only honored by the platform when
-     * freeform windowing is enabled (see {@link FreeformGlobalSettingsSpec#KEY_ENABLE_FREEFORM}),
-     * which AutoX turns on at projection start. When {@code null}, the app launches full-display
-     * (the original no-bounds behaviour). The {@link Rect} itself is built in this excluded glue
-     * from the pure {@link LaunchBoundsCalculator.Bounds} produced by
-     * {@link LaunchBoundsCalculator#forcedVertical}; no bounds <em>policy</em> lives here.
-     *
-     * <p>Returns {@code false} (with a warning logged) under the same conditions as
-     * {@link #launch(String, int)} (policy rejection or no launch intent).
-     *
      * @param packageName  the Android package name of the app to launch
      * @param displayId    the virtual display id (&gt; 0) to launch onto
      * @param launchBounds the window bounds to request, or {@code null} for full-display
      * @return {@code true} if {@code startActivity} was called; {@code false} otherwise
      */
-    public boolean launch(String packageName, int displayId, Rect launchBounds) {
+    public boolean launch(String packageName, int displayId, @Nullable Rect launchBounds) {
         if (!AppLaunchPolicy.canLaunch(packageName, displayId)) {
             Log.w(TAG, "AppLauncher.launch: policy rejected launch of '"
                     + packageName + "' on display " + displayId);

@@ -6,7 +6,6 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
-import android.hardware.input.InputManager;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.util.Log;
@@ -29,6 +28,7 @@ import com.xiddoc.androidautox.autox.ime.ImePriorCodec;
 import com.xiddoc.androidautox.autox.ime.ImeSettingsReader;
 import com.xiddoc.androidautox.autox.provider.AutoXProviderFactory;
 import com.xiddoc.androidautox.autox.provider.AutoXProviders;
+import com.xiddoc.androidautox.autox.provider.InputProvider;
 import com.xiddoc.androidautox.autox.provider.ProviderSelectionPolicy;
 import com.xiddoc.androidautox.autox.provider.SettingsApplier;
 import com.xiddoc.androidautox.autox.provider.lsposed.IpcCommandWriter;
@@ -70,8 +70,23 @@ import com.xiddoc.androidautox.autox.provider.lsposed.IpcCommandWriter;
  * </ul>
  * Every prior value is captured at apply time and persisted in {@link AutoXSettingsStore}
  * (app-private {@code "autox_prefs"}) so the revert in {@link #releaseDisplay} survives process
- * death. {@code releaseDisplay} reverts everything best-effort (each step independently
- * try/caught) so a partial failure never leaves a setting stranded.
+ * death — including the WS6 audio routing (the routed UID + device/address are persisted via
+ * {@link AutoXSettingsStore.AudioRouteState} so a cold-start teardown can reconstruct the clear).
+ * {@code releaseDisplay} reverts everything best-effort (each step independently try/caught) so a
+ * partial failure never leaves a setting stranded.
+ *
+ * <h2>Process-death-safe prior capture</h2>
+ * <p>Priors are captured+persisted ONLY on a fresh session, gated by {@link PriorCaptureGate} on
+ * the durable {@link AutoXSettingsStore#isEnabled} flag. If {@link #createDisplay} re-runs after a
+ * process death (AutoX already enabled), it re-applies the AutoX values WITHOUT re-capturing — a
+ * re-read would observe AutoX's own written value and permanently strand the setting on revert.
+ * {@link #createDisplay} sets the enabled flag last (after a successful apply) and
+ * {@link #releaseDisplay} clears it last (after every revert).
+ *
+ * <h2>Step ordering</h2>
+ * <p>The apply order and the (reverse) revert order are pinned in the pure, unit-tested
+ * {@link ProjectionStepPlan} ({@link ProjectionStepPlan#applyOrder()} /
+ * {@link ProjectionStepPlan#revertOrder()}); the call sites here mirror it.
  *
  * <h2>Surface lifecycle — resize vs recreate</h2>
  * <ul>
@@ -102,14 +117,17 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
     /** Swipe gesture duration used when translating scroll/fling events. */
     private static final long SWIPE_DURATION_MS = 200L;
 
-    /**
-     * Target aspect ratio (height/width) for the WS3 forced-vertical launch bounds. 16:9
-     * portrait ≈ 1.78; used so a portrait guest app gets a tall centred window on a landscape
-     * head-unit display.
-     */
-    private static final double FORCED_VERTICAL_ASPECT = 16.0 / 9.0;
-
     private final AppLauncher appLauncher;
+
+    /**
+     * Fallback gesture injector used ONLY when the provider bundle is unavailable (the factory
+     * probe failed → {@code providers == null}) or when a test injects a custom injector via the
+     * DI constructor. In the normal production path gestures route through {@code providers.input()}
+     * (a single {@link InputProvider} instance) so {@link InputProvider#isInjectionHonored()}
+     * reflects the same injections {@link #reevaluateProviders} consults (MUST-FIX 4). May be null
+     * in production, where {@code providers.input()} is the real injector.
+     */
+    @Nullable
     private final GestureInjector gestureInjector;
 
     /** Privileged-provider bundle (settings / input / audio). Provisional until reevaluated. */
@@ -148,10 +166,11 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
      * @param carContext the {@link CarContext} provided by the framework
      */
     public AutoXScreen(@NonNull CarContext carContext) {
-        this(carContext,
-                new AppLauncher(carContext),
-                new ReflectiveGestureInjector(
-                        carContext.getSystemService(InputManager.class)));
+        // Production: do NOT construct a separate ReflectiveGestureInjector — gestures route
+        // through providers.input() (the single InputProvider the factory builds), so
+        // isInjectionHonored() reflects the very injections we make (MUST-FIX 4). The fallback
+        // injector is null here; injector() falls back to it only if the provider probe failed.
+        this(carContext, new AppLauncher(carContext), null);
     }
 
     /**
@@ -160,11 +179,12 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
      *
      * @param carContext      the {@link CarContext} provided by the framework
      * @param appLauncher     launcher to place a guest app on the virtual display
-     * @param gestureInjector injector to route car touch events to the virtual display
+     * @param gestureInjector fallback injector used only when {@code providers} is null (provider
+     *                        probe failed); pass a recording/no-op stub in tests. May be null.
      */
     AutoXScreen(@NonNull CarContext carContext,
                 @NonNull AppLauncher appLauncher,
-                @NonNull GestureInjector gestureInjector) {
+                @Nullable GestureInjector gestureInjector) {
         super(carContext);
         this.appLauncher = appLauncher;
         this.gestureInjector = gestureInjector;
@@ -297,7 +317,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         AutoXDisplaySpec virtSpec = displayController.getSpec();
         GestureSpec spec = TouchRouter.routeTap(
                 carSpec, virtSpec, displayController.getDisplayId(), x, y);
-        gestureInjector.inject(spec);
+        injectGesture(spec);
     }
 
     @Override
@@ -307,7 +327,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         GestureSpec spec = TouchRouter.routeScroll(
                 carSpec, virtSpec, displayController.getDisplayId(),
                 distanceX, distanceY, SWIPE_DURATION_MS);
-        gestureInjector.inject(spec);
+        injectGesture(spec);
     }
 
     @Override
@@ -317,7 +337,22 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         GestureSpec spec = TouchRouter.routeFling(
                 carSpec, virtSpec, displayController.getDisplayId(),
                 velocityX, velocityY, SWIPE_DURATION_MS);
-        gestureInjector.inject(spec);
+        injectGesture(spec);
+    }
+
+    /**
+     * Routes {@code spec} through the SAME injector instance the provider bundle uses
+     * ({@code providers.input()}) so {@link InputProvider#isInjectionHonored()} observed in
+     * {@link #reevaluateProviders} reflects the real injections (MUST-FIX 4). Falls back to the
+     * DI-injected {@link #gestureInjector} only when the provider probe failed
+     * ({@code providers == null}); a no-op if neither is available.
+     */
+    private void injectGesture(GestureSpec spec) {
+        if (providers != null) {
+            providers.input().inject(spec);
+        } else if (gestureInjector != null) {
+            gestureInjector.inject(spec);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -354,16 +389,28 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         getCarContext().startForegroundService(
                 new Intent(getCarContext(), AutoXForegroundService.class));
 
-        // WS3: enable freeform/resizable globals (captures + persists priors).
-        applyFreeform();
+        // Process-death-safe prior capture (MUST-FIX): capture+persist the genuine priors ONLY
+        // on a fresh session. If AutoX is already enabled (e.g. createDisplay re-runs after a
+        // process death), the persisted prior is the genuine original — re-apply without
+        // re-capturing it (re-reading now would read back AutoX's own value and strand it).
+        SharedPreferences prefs = prefs();
+        boolean capturePrior = PriorCaptureGate.shouldCapturePrior(
+                AutoXSettingsStore.isEnabled(prefs));
 
-        // WS5: per-display IME + system decors (captures + persists per-display priors).
-        applyImeSettings(displayId);
+        // The apply order mirrors ProjectionStepPlan.applyOrder() (FREEFORM → IME_DECORS →
+        // LSPOSED_DISPLAY_COMMANDS → LAUNCH_APP → AUDIO_ROUTING); the revert in releaseDisplay
+        // walks ProjectionStepPlan.revertOrder() (the exact reverse).
 
-        // LSPosed: id-scoped commands now that the id is known.
+        // WS3 (FREEFORM): enable freeform/resizable globals.
+        applyFreeform(capturePrior);
+
+        // WS5 (IME_DECORS): per-display IME + system decors.
+        applyImeSettings(displayId, capturePrior);
+
+        // LSPosed (LSPOSED_DISPLAY_COMMANDS): id-scoped commands now that the id is known.
         maybeApplyLsposedDisplayCommands(displayId);
 
-        // Launch the default app onto the new display, with WS3 forced-vertical bounds.
+        // (LAUNCH_APP) Launch the default app onto the new display, with WS3 forced-vertical bounds.
         AutoXTargetApp defaultApp = AutoXAppRegistry.defaults().get(0);
         Rect bounds = forcedVerticalBounds(spec);
         boolean launched = appLauncher.launch(defaultApp.packageName, displayId, bounds);
@@ -372,12 +419,31 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
                     + "' could not be launched — app may not be installed on this device");
         }
 
-        // WS6: route the guest app's audio to the car output device (after launch so the UID
-        // is resolvable).
-        applyAudioRouting(defaultApp.packageName);
+        // WS6 (AUDIO_ROUTING): route the guest app's audio to the car output device (after
+        // launch so the UID is resolvable). Skip when the app did not actually start — there is
+        // no live UID to route (SHOULD 8).
+        if (launched) {
+            applyAudioRouting(defaultApp.packageName);
+        }
+
+        // Mark the session enabled so a re-entrant createDisplay (post process-death) gates the
+        // prior capture off. Done last so a mid-apply crash leaves enabled=false and the next
+        // run still captures the genuine priors.
+        AutoXSettingsStore.setEnabled(prefs, true);
     }
 
-    /** LSPosed Task 6: write the trusted-display hook command (no id) before display creation. */
+    /**
+     * LSPosed Task 6: write the trusted-display hook command (no id) before display creation.
+     *
+     * <p>Provisional-gate note (SHOULD 7): this runs in {@code createDisplay} BEFORE
+     * {@link #reevaluateProviders}, so it intentionally keys off the <em>provisional</em>
+     * {@code provider()} decision — which is driven by the stable {@code lsposedActive} static
+     * probe (LSPosed is either installed/active or not; that does not change at surface time).
+     * The two surface-time signals that a reevaluate folds in (trusted-display + injection) are
+     * exactly the ones this hook exists to make observable, so gating on the post-reevaluate
+     * decision would be circular. Keying off the stable provisional LSPOSED selection is the
+     * reliable choice for this pre-create gate.
+     */
     private void maybeEnableTrustedDisplayHook() {
         if (providers == null
                 || providers.provider() != ProviderSelectionPolicy.Provider.LSPOSED) {
@@ -397,64 +463,90 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         if (providers == null || displayController == null) {
             return;
         }
-        // Best observable signal for the trusted flag: the (root) display provider exposes it,
-        // but AutoXScreen owns its own VirtualDisplayController for now (display seam is unbound),
-        // so we use the controller's flag observation if available. The controller does not expose
-        // a probe yet, so pass best-effort true (the display was created with FLAG_TRUSTED) and
-        // leave the device-verify note.
+        // MUST-FIX: do NOT assume the trusted flag was honored. AutoXScreen owns its own
+        // VirtualDisplayController (the WS4 DisplayProvider seam is unbound) and we have not
+        // observed DisplayInfo.flags, so the trusted flag is UNPROVEN. Default to the
+        // conservative false — matching the provisional phase's stance — so a device that
+        // silently dropped FLAG_TRUSTED is not wrongly flipped off DEGRADED. Asserting true here
+        // would overclaim a privileged path that was never observed.
         // TODO(device-verify): read DisplayInfo.flags & Display.FLAG_TRUSTED on the created
-        // display to confirm the trusted flag was actually honored, rather than assuming it.
-        boolean trustedHonored = true;
+        // display (fail-closed: only set true if the bit is actually present) and feed it here.
+        boolean trustedHonored = false;
         boolean injectionHonored = providers.input().isInjectionHonored();
         providers = providers.reevaluate(trustedHonored, injectionHonored);
         Log.i(TAG, "AutoXScreen: reevaluated providers = " + providers);
     }
 
     /**
-     * WS3 apply: read current global flags via the provider, persist priors, then enable both
-     * via the GLOBAL {@link SettingsApplier}.
+     * WS3 apply: enable freeform/force-resizable globals via the GLOBAL {@link SettingsApplier}.
+     *
+     * <p>Process-death safe (MUST-FIX): the device's genuine prior values are captured+persisted
+     * ONLY on a fresh session — gated by {@link PriorCaptureGate#shouldCapturePrior(boolean)} on
+     * {@link AutoXSettingsStore#isEnabled}. On a re-entrant apply (e.g. {@code createDisplay} runs
+     * again after process death) the persisted prior is read and re-used, never overwritten with
+     * AutoX's own already-applied value (which would strand the setting on revert).
+     *
+     * @param capturePrior whether to capture+persist the prior now (fresh session) or read the
+     *                     existing persisted prior (re-apply)
      */
-    private void applyFreeform() {
+    private void applyFreeform(boolean capturePrior) {
         if (providers == null) return;
         try {
             SharedPreferences prefs = prefs();
-            Integer priorForceResizable = SettingsPriorMapper.toPrior(
-                    providers.settings().getGlobalInt(FreeformGlobalSettingsSpec.KEY_FORCE_RESIZABLE));
-            Integer priorEnableFreeform = SettingsPriorMapper.toPrior(
-                    providers.settings().getGlobalInt(FreeformGlobalSettingsSpec.KEY_ENABLE_FREEFORM));
-
-            AutoXSettingsStore.setPriorForceResizable(prefs, priorForceResizable);
-            AutoXSettingsStore.setPriorEnableFreeform(prefs, priorEnableFreeform);
+            Integer priorForceResizable;
+            Integer priorEnableFreeform;
+            if (capturePrior) {
+                priorForceResizable = SettingsPriorMapper.toPrior(providers.settings()
+                        .getGlobalInt(FreeformGlobalSettingsSpec.KEY_FORCE_RESIZABLE));
+                priorEnableFreeform = SettingsPriorMapper.toPrior(providers.settings()
+                        .getGlobalInt(FreeformGlobalSettingsSpec.KEY_ENABLE_FREEFORM));
+                AutoXSettingsStore.setPriorForceResizable(prefs, priorForceResizable);
+                AutoXSettingsStore.setPriorEnableFreeform(prefs, priorEnableFreeform);
+            } else {
+                // Re-apply: keep the already-persisted genuine prior; do NOT re-read the live
+                // (AutoX-written) value.
+                priorForceResizable = AutoXSettingsStore.getPriorForceResizable(prefs);
+                priorEnableFreeform = AutoXSettingsStore.getPriorEnableFreeform(prefs);
+            }
 
             new SettingsApplier(providers.settings(), SettingsApplier.Namespace.GLOBAL)
                     .apply(FreeformGlobalSettingsSpec.applyList(
                             priorForceResizable, priorEnableFreeform));
-            Log.i(TAG, "AutoXScreen: WS3 freeform/resizable applied");
+            Log.i(TAG, "AutoXScreen: WS3 freeform/resizable applied (capturePrior="
+                    + capturePrior + ")");
         } catch (RuntimeException e) {
             Log.w(TAG, "AutoXScreen: WS3 freeform apply failed", e);
         }
     }
 
     /**
-     * WS5 apply (Task 3 call-site): build the per-display IME spec, read+persist priors, then
-     * write system-decors then IME via the SECURE {@link SettingsApplier}.
+     * WS5 apply (Task 3 call-site): build the per-display IME spec and write system-decors then
+     * IME via the SECURE {@link SettingsApplier}.
+     *
+     * <p>Process-death safe (MUST-FIX): the genuine per-display priors are read+persisted ONLY
+     * when {@code capturePrior} is true (fresh session). On a re-apply the live read (which would
+     * now report AutoX's own values) is skipped and the applied AutoX values are simply re-written.
+     *
+     * @param displayId    the virtual display id
+     * @param capturePrior whether to capture+persist the per-display priors now
      */
-    private void applyImeSettings(int displayId) {
+    private void applyImeSettings(int displayId, boolean capturePrior) {
         if (providers == null || displayId <= 0) return;
         try {
             ImeDisplaySettingsSpec spec = ImeDisplaySettingsSpec.forDisplay(displayId);
-            ImeDisplaySettingsSpec withPriors =
-                    new ImeSettingsReader(providers.settings()).readPriors(spec);
-
-            SharedPreferences prefs = prefs();
-            AutoXSettingsStore.setPriorShouldShowSystemDecors(prefs, displayId,
-                    ImePriorCodec.toBoxedPrior(withPriors.getPriorSystemDecors()));
-            AutoXSettingsStore.setPriorShouldShowIme(prefs, displayId,
-                    ImePriorCodec.toBoxedPrior(withPriors.getPriorIme()));
-
+            if (capturePrior) {
+                ImeDisplaySettingsSpec withPriors =
+                        new ImeSettingsReader(providers.settings()).readPriors(spec);
+                SharedPreferences prefs = prefs();
+                AutoXSettingsStore.setPriorShouldShowSystemDecors(prefs, displayId,
+                        ImePriorCodec.toBoxedPrior(withPriors.getPriorSystemDecors()));
+                AutoXSettingsStore.setPriorShouldShowIme(prefs, displayId,
+                        ImePriorCodec.toBoxedPrior(withPriors.getPriorIme()));
+            }
             new SettingsApplier(providers.settings(), SettingsApplier.Namespace.SECURE)
-                    .apply(withPriors.applyEntries());
-            Log.i(TAG, "AutoXScreen: WS5 IME/decors applied for display " + displayId);
+                    .apply(spec.applyEntries());
+            Log.i(TAG, "AutoXScreen: WS5 IME/decors applied for display " + displayId
+                    + " (capturePrior=" + capturePrior + ")");
         } catch (RuntimeException e) {
             Log.w(TAG, "AutoXScreen: WS5 IME apply failed for display " + displayId, e);
         }
@@ -495,6 +587,13 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             }
             audioDecision = AudioRoutePolicy.decide(uid, device, address);
             boolean applied = AudioRouteApplier.apply(audioDecision, providers.audio());
+            // MUST-FIX: persist enough to reconstruct the ClearAffinity revert after process
+            // death (the transient audioDecision is lost on restart). Only persist when a real
+            // route was applied — a NoRoute decision has nothing to clear.
+            if (applied) {
+                AutoXSettingsStore.setAudioRouteState(prefs(),
+                        new AutoXSettingsStore.AudioRouteState(uid, device.name(), address));
+            }
             Log.i(TAG, "AutoXScreen: WS6 audio route apply=" + applied
                     + " decision=" + audioDecision);
         } catch (RuntimeException e) {
@@ -543,6 +642,16 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         // Stop the foreground service unconditionally (idempotent — a no-op if not running).
         getCarContext().stopService(
                 new Intent(getCarContext(), AutoXForegroundService.class));
+
+        // Mark the session disabled LAST, after every revert. This is the durable signal that
+        // PriorCaptureGate keys off: a future createDisplay now sees enabled=false and re-captures
+        // the genuine (restored) priors for the next session.
+        try {
+            AutoXSettingsStore.setEnabled(prefs(), false);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "AutoXScreen: failed to clear enabled flag on release", e);
+        }
+
         carSpec = null;
         currentSurface = null;
     }
@@ -583,11 +692,26 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         }
     }
 
-    /** WS6 revert: clear the per-UID audio affinity applied for this session. */
+    /**
+     * WS6 revert: clear the per-UID audio affinity applied for this session.
+     *
+     * <p>Process-death safe (MUST-FIX): if the transient {@link #audioDecision} is gone (process
+     * restarted) but persisted audio state exists, the {@code ClearAffinity} revert is
+     * reconstructed from the persisted UID/device/address via {@link AudioRoutePolicy#decide}.
+     * The persisted state is cleared afterwards so it is not re-reverted on a later teardown.
+     */
     private void revertAudioRouting() {
-        if (providers == null || audioDecision == null) return;
+        if (providers == null) return;
         try {
-            boolean reverted = AudioRouteApplier.revert(audioDecision, providers.audio());
+            AudioRoutePolicy.RouteDecision decision = audioDecision;
+            if (decision == null) {
+                decision = reconstructAudioDecision();
+            }
+            if (decision == null) {
+                return; // nothing was applied / persisted — nothing to revert.
+            }
+            boolean reverted = AudioRouteApplier.revert(decision, providers.audio());
+            AutoXSettingsStore.clearAudioRouteState(prefs());
             Log.i(TAG, "AutoXScreen: WS6 audio route revert=" + reverted);
         } catch (RuntimeException e) {
             Log.w(TAG, "AutoXScreen: WS6 audio revert failed", e);
@@ -596,9 +720,53 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         }
     }
 
-    /** LSPosed Task 6: clear the whole IPC channel on teardown. */
+    /**
+     * Rebuilds the routing decision from persisted {@link AutoXSettingsStore.AudioRouteState}
+     * so a cold-start teardown can still clear the affinity. Returns {@code null} when no audio
+     * state was persisted (nothing to revert).
+     */
+    @Nullable
+    private AudioRoutePolicy.RouteDecision reconstructAudioDecision() {
+        AutoXSettingsStore.AudioRouteState state =
+                AutoXSettingsStore.getAudioRouteState(prefs());
+        if (state == null) {
+            return null;
+        }
+        CarAudioDevice device;
+        try {
+            device = CarAudioDevice.valueOf(state.deviceName);
+        } catch (IllegalArgumentException e) {
+            // Corrupt persisted device name — fall back to a direct clear of the UID.
+            device = CarAudioDevice.NONE;
+        }
+        // decide() reproduces the same ClearAffinity(uid) revert step from the persisted inputs.
+        return AudioRoutePolicy.decide(state.uid, device, state.deviceAddress);
+    }
+
+    /**
+     * LSPosed Task 6: clear the whole IPC channel on teardown.
+     *
+     * <p>Cold-start safe (SHOULD 6): after a process death the in-memory {@link #ipcWriter} is
+     * gone, so a stale LSPosed channel from the prior session would leak. When the (provisional)
+     * decision is LSPOSED we therefore construct a fresh {@link IpcCommandWriter} and clear the
+     * channel even though {@code ipcWriter == null}. The provisional {@code lsposedActive} probe
+     * is stable, so {@code provider()} is a reliable signal here.
+     */
     private void clearLsposedCommands() {
-        if (ipcWriter == null) return;
+        if (ipcWriter == null) {
+            // No live writer. If this session is (provisionally) LSPosed, a prior session may
+            // have left a stale channel — clear it with a fresh writer.
+            if (providers != null
+                    && providers.provider() == ProviderSelectionPolicy.Provider.LSPOSED) {
+                try {
+                    new IpcCommandWriter(getCarContext().getApplicationContext()).clear();
+                    Log.i(TAG, "AutoXScreen: stale LSPosed IPC channel cleared (cold start)");
+                } catch (RuntimeException e) {
+                    Log.w(TAG, "AutoXScreen: cold-start LSPosed clear failed", e);
+                }
+            }
+            return;
+        }
         try {
             ipcWriter.clear();
             Log.i(TAG, "AutoXScreen: LSPosed IPC channel cleared");
@@ -629,7 +797,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         try {
             LaunchBoundsCalculator.Bounds b = LaunchBoundsCalculator.forcedVertical(
                     spec.getWidth(), spec.getHeight(), spec.getDensityDpi(),
-                    FORCED_VERTICAL_ASPECT);
+                    LaunchBoundsCalculator.DEFAULT_FORCED_VERTICAL_ASPECT);
             return new Rect(b.left, b.top, b.right, b.bottom);
         } catch (RuntimeException e) {
             Log.w(TAG, "AutoXScreen: forced-vertical bounds computation failed; full display", e);
@@ -665,15 +833,16 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             return null;
         }
         AudioDeviceInfo[] devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
-        if (devices == null) {
+        if (devices == null || devices.length == 0) {
             return null;
         }
-        for (AudioDeviceInfo info : devices) {
-            if (AudioDeviceTypeMapper.fromAudioDeviceInfoType(info.getType())
-                    != CarAudioDevice.NONE) {
-                return info;
-            }
+        // First-match selection lives in the pure CarOutputDeviceSelector (tested); this glue
+        // only resolves the int types and reads the address off the chosen device.
+        int[] types = new int[devices.length];
+        for (int i = 0; i < devices.length; i++) {
+            types[i] = devices[i].getType();
         }
-        return null;
+        int idx = CarOutputDeviceSelector.firstCarDeviceIndex(types);
+        return idx == CarOutputDeviceSelector.NONE_INDEX ? null : devices[idx];
     }
 }
