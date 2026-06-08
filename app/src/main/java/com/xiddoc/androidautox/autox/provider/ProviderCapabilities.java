@@ -3,8 +3,8 @@ package com.xiddoc.androidautox.autox.provider;
 /**
  * Immutable snapshot of the privileged-provider capabilities detected on the live
  * system. Produced by capability detection (the pure parts here; the live reflection in
- * the existing excluded provider glue — {@code RootDisplayProvider},
- * {@code ReflectiveGestureInjector}, the root settings providers — collected via
+ * the excluded provider glue — the created display's trusted-flag read,
+ * {@code LsposedInputInjector}, the root settings providers — collected via
  * {@link CapabilityDecider}, not via any single dedicated probe class) and consumed by the
  * pure {@link ProviderSelectionPolicy} to choose which provider set to use.
  *

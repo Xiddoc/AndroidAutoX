@@ -216,6 +216,14 @@ WARNING: This tweak has not been extensively tested and could potentially break 
     <string name="autox_target_set">Target: %1$s</string>
     <string name="autox_no_target">No target app selected</string>
 
+    <!-- AutoX LSPosed/root gating (LSPosed-first single path). "AndroidAutoX"/"LSPosed" are
+         non-translatable proper nouns. -->
+    <string name="autox_requires_lsposed">Requires LSPosed</string>
+    <string name="autox_blocked_no_lsposed">AutoX projection requires the AndroidAutoX LSPosed module. Install it in your LSPosed manager, scope it to system_server, and reboot. AutoX cannot run without it.</string>
+    <string name="autox_blocked_no_root">AutoX projection requires root access. Grant root to AndroidAutoX, then try again.</string>
+    <string name="autox_blocked_title">AutoX unavailable</string>
+    <string name="autox_carsurface_requires_lsposed">AutoX cannot project: the AndroidAutoX LSPosed module is not active. Install/enable it (scope to system_server) and reboot, then reconnect.</string>
+
     <!-- WS4: LSPosed module description shown in the LSPosed manager. -->
     <string name="xposed_module_description">Honors trusted virtual displays, cross-display input injection, per-display IME/system-decors and launch-on-display for AndroidAutoX projection.</string>
 </resources>

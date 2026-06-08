@@ -3,9 +3,9 @@ package com.xiddoc.androidautox.autox.provider;
 /**
  * Pure logic that turns raw probe inputs into a {@link ProviderCapabilities} snapshot.
  *
- * <p>The raw inputs are collected at runtime by the existing excluded provider glue — e.g.
- * {@code RootDisplayProvider#isTrustedDisplayHonored()},
- * {@code ReflectiveGestureInjector#isInjectionHonored()}, and the settings providers'
+ * <p>The raw inputs are collected at runtime by the excluded provider glue — e.g. the
+ * trusted-flag read off the created display's {@code DisplayInfo.flags},
+ * {@code LsposedInputInjector#isInjectionHonored()}, and the settings providers'
  * {@link SettingsResult} outcomes — rather than by any single dedicated probe class. (An
  * earlier draft referenced a {@code ReflectiveCapabilityProbe} that was never added.)
  *

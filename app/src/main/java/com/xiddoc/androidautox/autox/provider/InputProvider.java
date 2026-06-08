@@ -16,7 +16,8 @@ import com.xiddoc.androidautox.autox.GestureSpec;
  *
  * <p>{@link com.xiddoc.androidautox.autox.GestureInjector} is intentionally a
  * super-set-free, narrower interface; {@code InputProvider} is the WS4 provider-seam
- * extension. {@code ReflectiveGestureInjector} implements both.
+ * extension. The AutoX production impl is the LSPosed-backed {@code LsposedInputInjector}
+ * (the only supported AutoX injection path).
  */
 public interface InputProvider {
 
@@ -37,8 +38,8 @@ public interface InputProvider {
      *
      * <p>Implementations should set this from a real probe (e.g. a no-op injection to
      * the target display whose return value / side effect is inspected) rather than
-     * assuming success. The provider-selection policy uses this to decide between the
-     * LSPosed and root-reflection seams and to flag the DEGRADED case.
+     * assuming success. The binary provider-selection policy uses this to decide between
+     * {@code LSPOSED} and {@code BLOCKED} (an ineffective LSPosed injection hook → BLOCKED).
      *
      * @return {@code true} if injection to the target display is believed to work
      */

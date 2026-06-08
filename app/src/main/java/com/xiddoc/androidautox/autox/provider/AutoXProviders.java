@@ -17,8 +17,10 @@ package com.xiddoc.androidautox.autox.provider;
  * and whether cross-display input injection is honored — are <em>structurally</em>
  * unobservable (there is no display or injected event yet). The factory therefore returns a
  * <b>provisional</b> bundle (see {@link #isProvisional()}) whose decision was computed with
- * those two inputs conservatively {@code false}; on a capable root device that provisionally
- * reports {@link ProviderSelectionPolicy.Provider#DEGRADED}.
+ * those two inputs fed OPTIMISTICALLY equal to {@code lsposedModuleActive}; with LSPosed active
+ * that provisionally reports {@link ProviderSelectionPolicy.Provider#LSPOSED} (LSPosed is active
+ * and trusted until a device read proves otherwise), and
+ * {@link ProviderSelectionPolicy.Provider#BLOCKED} when LSPosed is inactive.
  *
  * <p>Once the surface exists (Wave-2 call site, {@code AutoXScreen.onSurfaceAvailable}) the
  * caller observes the real trusted-display / injection state and calls
@@ -29,16 +31,14 @@ package com.xiddoc.androidautox.autox.provider;
  *
  * <h2>What the providers are, per decision</h2>
  * <ul>
- *   <li><b>LSPOSED</b> — the same root-reflection app-side impls (the LSPosed hooks relax
- *       the {@code system_server} checks; the app still calls the framework APIs through
- *       {@link RootSystemSettingsProvider} / {@code RootDisplayProvider} /
- *       {@code ReflectiveGestureInjector} / {@link RootAudioRouter}), with the decision
- *       reporting that the privileged path is the LSPosed module.</li>
- *   <li><b>ROOT_REFLECTION</b> — the {@code Root*}/{@code Reflective*} impls driving the
- *       {@code @hide} APIs directly from a root / platform-signed process.</li>
- *   <li><b>DEGRADED</b> — best-effort {@code Root*} impls are still returned so a caller
- *       can attempt projection, but {@link #isDegraded()} is {@code true} and the decision
- *       reason explains why projection may not work, so callers can warn the user.</li>
+ *   <li><b>LSPOSED</b> — the LSPosed hooks relax the {@code system_server} trusted-display and
+ *       input-injection checks; the app injects via the LSPosed-backed {@code LsposedInputInjector}
+ *       ({@link InputProvider}), and settings writes still go through
+ *       {@link RootSystemSettingsProvider} (root is the clean, stable path for those). Audio
+ *       routing stays {@link RootAudioRouter}.</li>
+ *   <li><b>BLOCKED</b> — LSPosed is inactive, or a hook is ineffective. AutoX does NOT silently
+ *       degrade: {@link #isBlocked()} is {@code true} and the decision reason explains what is
+ *       missing so the caller can block enabling AutoX with a clear "requires LSPosed" message.</li>
  * </ul>
  *
  * <h2>Display seam caveat</h2>
@@ -170,8 +170,9 @@ public final class AutoXProviders {
 
     /**
      * @return {@code true} if this bundle's decision is provisional — computed from the
-     *         cheap static probes only, with trusted-display and input-injection
-     *         conservatively {@code false} because no surface existed yet. Provisional until
+     *         cheap static probes only, with trusted-display and input-injection fed
+     *         optimistically equal to LSPosed-active because no surface existed yet (trusted
+     *         until a device read proves otherwise). Provisional until
      *         {@link #reevaluate(boolean, boolean)} is called after the surface arrives.
      */
     public boolean isProvisional() {
@@ -206,11 +207,12 @@ public final class AutoXProviders {
     }
 
     /**
-     * @return {@code true} if the selection is {@link ProviderSelectionPolicy.Provider#DEGRADED}
-     *         — projection may not work reliably and the caller should warn the user.
+     * @return {@code true} if the selection is {@link ProviderSelectionPolicy.Provider#BLOCKED}
+     *         — AutoX cannot run (no LSPosed / hooks ineffective) and the caller must block
+     *         enabling it with a clear "requires LSPosed" message (no silent degrade).
      */
-    public boolean isDegraded() {
-        return decision.provider == ProviderSelectionPolicy.Provider.DEGRADED;
+    public boolean isBlocked() {
+        return decision.provider == ProviderSelectionPolicy.Provider.BLOCKED;
     }
 
     /**

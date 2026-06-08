@@ -1,4 +1,4 @@
-package com.xiddoc.androidautox.autox;
+package com.xiddoc.androidautox.autox.provider.lsposed;
 
 import android.hardware.input.InputManager;
 import android.os.Build;
@@ -7,46 +7,39 @@ import android.util.Log;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 
+import com.xiddoc.androidautox.autox.GestureSpec;
 import com.xiddoc.androidautox.autox.provider.InputProvider;
 
 import java.lang.reflect.Method;
 
 /**
- * {@link GestureInjector} implementation that uses the platform
- * {@code InputManager#injectInputEvent(InputEvent, int)} via reflection to dispatch
- * gestures onto a virtual display.
+ * EXCLUDED GLUE: the LSPosed-backed {@link InputProvider} for AutoX cross-display gesture
+ * injection — the ONLY supported AutoX injection path.
+ *
+ * <h2>LSPosed-first single path</h2>
+ * <p>AutoX's cross-display input injection has no stable root-only path: even a rooted app is
+ * not the display owner from {@code system_server}'s point of view, so
+ * {@code InputManagerService} rejects events targeting AutoX's virtual display. The
+ * {@link InputInjectionBridge} LSPosed hook (running inside {@code system_server}, gated to
+ * AutoX's display) relaxes that per-display ownership check. This class is the app-side half:
+ * it builds the {@link MotionEvent}s and issues the {@code InputManager#injectInputEvent} call;
+ * the LSPosed hook makes the call reach AutoX's display. It is only ever wired in when the
+ * provider selection resolves to {@link com.xiddoc.androidautox.autox.provider.ProviderSelectionPolicy.Provider#LSPOSED};
+ * when LSPosed is inactive AutoX is BLOCKED and no injector is created (no silent root fallback).
  *
  * <h2>Why reflection?</h2>
- * <p>{@code InputManager#injectInputEvent} is a {@code @hide} method absent from the
- * public SDK surface. It is the only Android-native path to inject touch events onto
- * an arbitrary display without routing through the {@code UiAutomation} API (which
- * requires an instrumentation context). No {@code Runtime.exec} / shell strings are
- * used here.
- *
- * <h2>Privilege requirement</h2>
- * <p>The method is guarded by {@code android.permission.INJECT_EVENTS} (signature
- * level). On a rooted device this can be acquired by running the app with elevated
- * privileges via libsu, but the injection call itself is a pure Java native-API call —
- * no explicit {@code su} shell is spawned. On a non-rooted device the call will be
- * silently dropped by the framework and {@link #inject} will return {@code false}.
+ * <p>{@code InputManager#injectInputEvent(InputEvent, int)} is a {@code @hide} method absent
+ * from the public SDK surface; it is the only Android-native path to inject onto an arbitrary
+ * display. No {@code Runtime.exec} / shell strings are used.
  *
  * <h2>Untestable seam</h2>
- * <p>This class is intentionally kept as thin as possible — all gesture-parameter
- * logic lives in the framework-free {@link GestureSpec} and {@link CoordinateTranslator}.
- * The class is excluded from the JaCoCo coverage gate because it cannot be exercised
- * off-device (it needs a real {@link InputManager} and the platform's input subsystem).
- *
- * <p><b>Use {@link GestureInjector} as the injection type in all non-framework code.</b>
- * Swap this implementation for a stub in tests.
- *
- * <h2>WS4 provider seam</h2>
- * <p>This class now also implements the WS4 {@link InputProvider} seam. {@link #inject}
- * satisfies both interfaces unchanged; {@link #isInjectionHonored()} reports the last
- * observed success of a real injection so the provider-selection layer can detect when
- * {@code injectInputEvent} is silently dropped (root reflection on a hardened device) and
- * fall back / degrade instead of assuming success.
+ * <p>All gesture-parameter math lives in the framework-free
+ * {@link com.xiddoc.androidautox.autox.GestureSpec} /
+ * {@link com.xiddoc.androidautox.autox.CoordinateTranslator}. This class needs a real
+ * {@link InputManager} and the platform input subsystem, so it is excluded from the JaCoCo
+ * coverage gate. Tests provide a stub {@link InputProvider}.
  */
-public final class ReflectiveGestureInjector implements GestureInjector, InputProvider {
+public final class LsposedInputInjector implements InputProvider {
 
     private static final String TAG = "AndroidAutoX";
 
@@ -54,9 +47,8 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
     private volatile boolean lastInjectionAccepted;
 
     /**
-     * {@code InputManagerCompat.INJECT_INPUT_EVENT_MODE_ASYNC} — the mode constant
-     * accepted by {@code InputManager#injectInputEvent}. Value {@code 0} corresponds
-     * to async (fire-and-forget) injection, which is sufficient for AutoX gestures.
+     * {@code InputManager.INJECT_INPUT_EVENT_MODE_ASYNC} — async (fire-and-forget) injection,
+     * sufficient for AutoX gestures. Value {@code 0}.
      */
     private static final int INJECT_MODE_ASYNC = 0;
 
@@ -64,40 +56,26 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
     private final Method injectInputEvent;
 
     /**
-     * The object the {@link #injectInputEvent} method is invoked on. On API &lt; 34 this is
-     * the {@link InputManager} passed to the constructor; on API 34+ it is the
-     * {@code android.hardware.input.InputManagerGlobal} singleton (see class Javadoc).
+     * The object the {@link #injectInputEvent} method is invoked on. On API &lt; 34 this is the
+     * {@link InputManager} passed to the constructor; on API 34+ it is the hidden
+     * {@code android.hardware.input.InputManagerGlobal} singleton.
      */
     private final Object injectTarget;
 
     /**
-     * Constructs an injector, resolving the hidden {@code injectInputEvent} method
-     * via reflection.
-     *
-     * <h3>API-34 relocation</h3>
-     * <p>On API 33 and below the method lives on {@link InputManager} itself
-     * ({@code InputManager#injectInputEvent(InputEvent, int)}). On API 34 the platform
-     * moved the implementation to the hidden singleton
-     * {@code android.hardware.input.InputManagerGlobal}; the {@link InputManager} instance
-     * method was removed, so reflecting it against {@link InputManager} throws
-     * {@link NoSuchMethodException}. We therefore choose the target by
-     * {@link Build.VERSION#SDK_INT}: on API 34+ we reflect
-     * {@code InputManagerGlobal#getInstance()} and resolve {@code injectInputEvent} on that
-     * instance; below 34 we resolve it on {@link InputManager}.
-     *
-     * <p>If resolution fails on every path, subsequent calls to {@link #inject}
-     * immediately return {@code false} with a warning logged (fail-closed — no events are
-     * dispatched and the provider reports the privilege as unproven).
+     * Constructs the injector, resolving the hidden {@code injectInputEvent} method via
+     * reflection. On API 33 and below the method lives on {@link InputManager}; on API 34 the
+     * platform moved it to {@code InputManagerGlobal}. If resolution fails on every path,
+     * {@link #inject} fails closed (returns {@code false}).
      *
      * <p>// TODO(device-verify): confirm the exact {@code InputManagerGlobal} class name,
-     * {@code getInstance()} signature, and that {@code injectInputEvent(InputEvent, int)}
-     * is still the honored entry point on a real API-34 device; the relocation is
-     * documented but the precise reflective shape can only be validated on-device.
+     * {@code getInstance()} signature, and that {@code injectInputEvent(InputEvent, int)} is
+     * still the honored entry point on a real API-34 device.
      *
      * @param inputManager the system {@link InputManager}; obtain via
      *                     {@code context.getSystemService(InputManager.class)}
      */
-    public ReflectiveGestureInjector(InputManager inputManager) {
+    public LsposedInputInjector(InputManager inputManager) {
         Object target = null;
         Method resolved = null;
         try {
@@ -118,7 +96,7 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
                 resolved.setAccessible(true);
             }
         } catch (Throwable t) {
-            Log.w(TAG, "ReflectiveGestureInjector: injectInputEvent could not be resolved on "
+            Log.w(TAG, "LsposedInputInjector: injectInputEvent could not be resolved on "
                     + "this platform (SDK " + Build.VERSION.SDK_INT + "); gesture injection "
                     + "will be a no-op.", t);
             target = null;
@@ -137,26 +115,10 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
     /**
      * {@inheritDoc}
      *
-     * <p>Builds one or more {@link MotionEvent} objects from the {@link GestureSpec}
-     * and dispatches them via the hidden {@code InputManager#injectInputEvent} method.
-     *
-     * <ul>
-     *   <li>A {@link GestureSpec.Kind#TAP} produces a DOWN event followed immediately
-     *       by an UP event at the same coordinates.</li>
-     *   <li>A {@link GestureSpec.Kind#SWIPE} produces a DOWN event, a series of MOVE
-     *       events interpolated across the gesture duration, and a final UP event.</li>
-     * </ul>
-     *
-     * <p>All events are tagged with the virtual display's id via
-     * {@link MotionEvent#setDisplayId(int)} so the input subsystem routes them to
-     * the correct window on that display.
-     *
-     * <p>Returns {@code false} and logs a warning if:
-     * <ul>
-     *   <li>The reflection target was not resolved at construction time.</li>
-     *   <li>The platform call throws {@link SecurityException} (privilege absent).</li>
-     *   <li>Any other reflection error occurs.</li>
-     * </ul>
+     * <p>Builds one or more {@link MotionEvent}s from {@code spec} and dispatches them via the
+     * hidden {@code InputManager#injectInputEvent}. A TAP produces DOWN+UP; a SWIPE produces
+     * DOWN, interpolated MOVEs, and UP. Each event is tagged with the virtual display's id so
+     * the LSPosed-relaxed input subsystem routes them to the correct window on that display.
      */
     @Override
     public boolean inject(GestureSpec spec) {
@@ -182,10 +144,10 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
     /**
      * {@inheritDoc}
      *
-     * <p>Reports {@code true} only after a real {@link #inject} call was accepted by the
-     * input subsystem. Until the first successful injection (or if the reflection target
-     * was never resolved) this returns {@code false}, so the selection layer treats the
-     * provider as unproven rather than assuming the privilege is present.
+     * <p>Reports {@code true} only after a real {@link #inject} call was accepted. Until the
+     * first successful injection (or if reflection was never resolved) this returns
+     * {@code false}, so the selection layer treats the LSPosed injection hook as unproven and
+     * BLOCKS rather than assuming success.
      */
     @Override
     public boolean isInjectionHonored() {
@@ -196,11 +158,6 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
     // Private helpers
     // ------------------------------------------------------------------
 
-    /**
-     * Builds and injects the MotionEvents for {@code spec}.
-     *
-     * @return {@code true} if every injected event was accepted by the framework
-     */
     private boolean dispatchGesture(GestureSpec spec) throws Exception {
         long now = SystemClock.uptimeMillis();
         boolean allAccepted = true;
@@ -241,14 +198,8 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
     }
 
     /**
-     * Builds a single-pointer {@link MotionEvent} for the given action, tagged with
-     * the target virtual {@code displayId}.
-     *
-     * <p>Uses the 16-argument form of {@link MotionEvent#obtain} (available since
-     * API 34) which accepts a {@code displayId} parameter, routing the event to the
-     * correct virtual display without requiring the {@code @hide} {@code setDisplayId}
-     * method. If this form is unavailable on older APIs the build will fail at compile
-     * time rather than silently misroute events at runtime.
+     * Builds a single-pointer {@link MotionEvent} for {@code action}, tagged with the target
+     * virtual {@code displayId} via the 16-arg {@link MotionEvent#obtain} (API 34+).
      */
     private static MotionEvent buildMotionEvent(int action, long downTime, long eventTime,
                                                 float x, float y, int displayId) {
@@ -262,10 +213,6 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
         pc.pressure = 1.0f;
         pc.size = 1.0f;
 
-        // 16-arg obtain: downTime, eventTime, action, pointerCount,
-        //                pointerProperties[], pointerCoords[],
-        //                metaState, buttonState, xPrecision, yPrecision,
-        //                deviceId, edgeFlags, source, displayId, flags, classification
         return MotionEvent.obtain(
                 downTime, eventTime, action,
                 1,
@@ -278,11 +225,6 @@ public final class ReflectiveGestureInjector implements GestureInjector, InputPr
                 0, 0);
     }
 
-    /**
-     * Calls the hidden {@code InputManager#injectInputEvent} via reflection.
-     *
-     * @return the boolean return value of the underlying platform call
-     */
     private boolean injectMotionEvent(MotionEvent event) throws Exception {
         try {
             Object result = injectInputEvent.invoke(injectTarget, event, INJECT_MODE_ASYNC);

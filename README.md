@@ -27,6 +27,20 @@ The ultimate All-In-One utility to tweak Android Auto behaviour.
 ## 📋 Requirements
 
 - A rooted Android device (Magisk)
+- **For the AutoX projection feature only:** [LSPosed](https://github.com/JingMatrix/LSPosed)
+  in addition to root (see below)
+
+### AutoX projection requires LSPosed
+
+The Phenotype/Gearhead tweaks need only root. The **AutoX** virtual-display projection feature
+additionally requires the AndroidAutoX **LSPosed** module — there is no root-only path for its
+trusted-display flag and cross-display input injection. Without LSPosed, AutoX is blocked
+cleanly (you'll see a "Requires LSPosed" message); it never silently degrades. To enable it:
+
+1. Install AndroidAutoX as an LSPosed module (it ships the module metadata).
+2. In your LSPosed manager, enable the module and set its scope to **system_server** (and any
+   target apps you want to project).
+3. **Reboot** for the module to take effect.
 
 ## 🚀 Usage
 

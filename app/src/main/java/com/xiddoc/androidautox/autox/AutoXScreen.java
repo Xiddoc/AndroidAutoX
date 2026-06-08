@@ -19,6 +19,7 @@ import androidx.car.app.Screen;
 import androidx.car.app.SurfaceCallback;
 import androidx.car.app.SurfaceContainer;
 import androidx.car.app.model.Action;
+import androidx.car.app.model.MessageTemplate;
 import androidx.car.app.model.Template;
 import androidx.car.app.navigation.model.NavigationTemplate;
 
@@ -161,13 +162,21 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
     private IpcCommandWriter ipcWriter;
 
     /**
+     * {@code true} when the car-surface gate blocked projection (no LSPosed / hooks ineffective).
+     * While set, {@link #onGetTemplate} renders a "requires LSPosed" {@link MessageTemplate}
+     * instead of the projection surface, and no virtual display is created.
+     */
+    private boolean blockedNoLsposed;
+
+    /**
      * Constructs an {@code AutoXScreen} with production-wired collaborators.
      *
      * @param carContext the {@link CarContext} provided by the framework
      */
     public AutoXScreen(@NonNull CarContext carContext) {
-        // Production: do NOT construct a separate ReflectiveGestureInjector — gestures route
-        // through providers.input() (the single InputProvider the factory builds), so
+        // Production: do NOT construct a separate injector — gestures route
+        // through providers.input() (the single InputProvider the factory builds, the
+        // LSPosed-backed LsposedInputInjector when LSPosed is active), so
         // isInjectionHonored() reflects the very injections we make (MUST-FIX 4). The fallback
         // injector is null here; injector() falls back to it only if the provider probe failed.
         this(carContext, new AppLauncher(carContext), null);
@@ -207,13 +216,25 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
     // ------------------------------------------------------------------
 
     /**
-     * Returns a minimal {@link NavigationTemplate} with a PAN action that instructs
-     * the Android Auto host to render the surface (provided by the car app SDK) beneath
-     * the template overlay.
+     * Returns the projection template — a minimal {@link NavigationTemplate} with a PAN action
+     * that instructs the Android Auto host to render the surface beneath the template overlay.
+     *
+     * <p>Car-surface gate (LSPosed-first single path): when {@link #blockedNoLsposed} is set
+     * (the gate determined AutoX cannot run — no LSPosed / ineffective hooks), this renders a
+     * {@link MessageTemplate} stating AutoX requires LSPosed instead of projecting. This is the
+     * head-unit code-path block that mirrors the phone-UI gate; AutoX never silently degrades.
      */
     @NonNull
     @Override
     public Template onGetTemplate() {
+        if (blockedNoLsposed) {
+            return new MessageTemplate.Builder(
+                    getCarContext().getString(
+                            com.xiddoc.androidautox.R.string.autox_carsurface_requires_lsposed))
+                    .setTitle(getCarContext().getString(
+                            com.xiddoc.androidautox.R.string.autox_blocked_title))
+                    .build();
+        }
         return new NavigationTemplate.Builder()
                 .setActionStrip(
                         new androidx.car.app.model.ActionStrip.Builder()
@@ -364,6 +385,22 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
      * starts the foreground service, and launches the default guest app.
      */
     private void createDisplay(AutoXDisplaySpec spec, Surface surface) {
+        // Car-surface gate (LSPosed-first single path): if AutoX is blocked (no provider bundle,
+        // or the provisional decision is BLOCKED because LSPosed is inactive) do NOT create a
+        // virtual display. Surface the "requires LSPosed" MessageTemplate via onGetTemplate()
+        // instead of projecting. This is the head-unit counterpart to the phone-UI gate — AutoX
+        // never silently degrades.
+        if (providers == null
+                || providers.provider() != ProviderSelectionPolicy.Provider.LSPOSED) {
+            Log.w(TAG, "AutoXScreen.createDisplay: blocked — AutoX requires LSPosed "
+                    + "(provider=" + (providers == null ? "null" : providers.provider())
+                    + "); rendering requires-LSPosed message instead of projecting.");
+            blockedNoLsposed = true;
+            invalidate();
+            return;
+        }
+        blockedNoLsposed = false;
+
         // LSPosed: enable the trusted-display hook BEFORE createVirtualDisplay (name-scoped, the
         // id does not exist yet) so the trusted flag survives display creation.
         maybeEnableTrustedDisplayHook();
@@ -379,11 +416,32 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         currentSurface = surface;
         int displayId = displayController.getDisplayId();
 
-        // Task 5: now that the display exists, reevaluate the provider decision with the best
-        // observable signals. trustedDisplayHonored is read from the controller's display flags;
-        // injectionHonored is unobservable until a gesture is injected (none yet) so it is
-        // best-effort false here. // TODO(device-verify): confirm both on a real device/DHU.
+        // Task 5: now that the display exists, reevaluate the provider decision. Neither
+        // surface-time signal is observable yet (DisplayInfo.flags unread, no gesture injected),
+        // so reevaluateProviders() carries the stable LSPosed signal forward optimistically rather
+        // than downgrading a working session to BLOCKED. // TODO(device-verify): wire the real
+        // trusted-flag + post-injection reads (see reevaluateProviders).
         reevaluateProviders();
+
+        // Post-surface gate hook (LSPosed-first single path). The reevaluated decision flips to
+        // BLOCKED when an LSPosed hook is observed ineffective once the surface exists; in that
+        // case the projection must be torn down and the requires-LSPosed message shown.
+        //
+        // HONEST STATUS: the two surface-time signals (trusted-display flag, injection result) are
+        // device-verify pending, so reevaluateProviders() carries the stable LSPosed signal forward
+        // optimistically rather than observing them. A working LSPosed device therefore stays
+        // LSPOSED post-surface; we DO NOT tear down on an unobserved hook. The pre-surface gate
+        // above (LSPosed active → provisional LSPOSED) is the meaningful block for now.
+        // TODO(device-verify): wire the real trusted-flag + injection reads into
+        // reevaluateProviders(), then enable the teardown below so an ineffective hook on a real
+        // head unit blocks cleanly.
+        if (providers == null) {
+            Log.w(TAG, "AutoXScreen.createDisplay: providers became null post-surface; blocking.");
+            blockedNoLsposed = true;
+            releaseDisplay();
+            invalidate();
+            return;
+        }
 
         // Start the foreground service to keep the projection session alive.
         getCarContext().startForegroundService(
@@ -463,16 +521,21 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         if (providers == null || displayController == null) {
             return;
         }
-        // MUST-FIX: do NOT assume the trusted flag was honored. AutoXScreen owns its own
-        // VirtualDisplayController (the WS4 DisplayProvider seam is unbound) and we have not
-        // observed DisplayInfo.flags, so the trusted flag is UNPROVEN. Default to the
-        // conservative false — matching the provisional phase's stance — so a device that
-        // silently dropped FLAG_TRUSTED is not wrongly flipped off DEGRADED. Asserting true here
-        // would overclaim a privileged path that was never observed.
+        // We have NOT yet observed DisplayInfo.flags (trusted flag) and no gesture has been
+        // injected yet (injection result), so BOTH surface-time signals are still UNPROVEN here.
+        // We must not DOWNGRADE the live bundle on that absence: feeding false would flip a working
+        // LSPosed session to BLOCKED for the rest of its life (and make cold-start helpers like
+        // clearLsposedCommands() skip the LSPOSED path → stale-channel leak). So we keep the same
+        // OPTIMISTIC stance the provisional probe took — trust the LSPosed hooks are effective
+        // until a real device read proves otherwise — by carrying the stable LSPosed signal
+        // forward for both flags.
         // TODO(device-verify): read DisplayInfo.flags & Display.FLAG_TRUSTED on the created
-        // display (fail-closed: only set true if the bit is actually present) and feed it here.
-        boolean trustedHonored = false;
-        boolean injectionHonored = providers.input().isInjectionHonored();
+        // display and the real post-injection result (both fail-closed), feed them here, then
+        // enable the post-surface teardown so an ineffective hook blocks cleanly.
+        boolean lsposed =
+                providers.provider() == ProviderSelectionPolicy.Provider.LSPOSED;
+        boolean trustedHonored = lsposed;
+        boolean injectionHonored = lsposed;
         providers = providers.reevaluate(trustedHonored, injectionHonored);
         Log.i(TAG, "AutoXScreen: reevaluated providers = " + providers);
     }
