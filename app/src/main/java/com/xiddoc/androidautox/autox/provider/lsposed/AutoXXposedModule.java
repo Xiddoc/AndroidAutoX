@@ -99,26 +99,35 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
             if (lpparam == null || !SYSTEM_SERVER_PACKAGE.equals(lpparam.packageName)) {
                 return; // we only patch system_server
             }
+            XposedDebug.i("Module", "loaded into system_server; SDK=" + Build.VERSION.SDK_INT
+                    + " modulePackage=" + MODULE_PACKAGE + " prefs="
+                    + (prefs == null ? "UNAVAILABLE" : "ok"));
             HookTargetSet targets = HookTargetTable.resolveFor(Build.VERSION.SDK_INT);
             if (!targets.resolved) {
                 XposedBridge.log("AutoX: unsupported SDK " + Build.VERSION.SDK_INT
                         + "; no hooks installed (degraded).");
+                XposedDebug.i("Module", "DEGRADED — no HookTargetSet for SDK "
+                        + Build.VERSION.SDK_INT + "; AutoX privileged paths will NOT work.");
                 return;
             }
             installHooks(lpparam.classLoader, targets);
         } catch (Throwable t) {
             // FAIL CLOSED: never propagate into system_server.
-            XposedBridge.log(t);
+            XposedDebug.e("Module", "handleLoadPackage failed (fail-closed)", t);
         }
     }
 
     private void installHooks(ClassLoader cl, HookTargetSet targets) {
+        XposedDebug.i("Module", "installing " + targets.all().size() + " hook target(s)");
         for (HookDescriptor d : targets.all().values()) {
             try {
                 installOne(cl, d);
+                XposedDebug.i("Module", "hook installed: " + d.target + " -> "
+                        + d.className + "#" + d.methodName);
             } catch (Throwable t) {
                 // Per-target guard: one missing signature must not abort the rest.
-                XposedBridge.log("AutoX: failed to install hook " + d + ": " + t);
+                XposedDebug.e("Module", "FAILED to install hook " + d
+                        + " (this target's privileged path is dead)", t);
             }
         }
     }
@@ -157,13 +166,15 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
             protected void beforeHookedMethod(MethodHookParam param) {
                 try {
                     boolean enabled = isCommandEnabled(IpcCommand.Type.ENABLE_TRUSTED_DISPLAY);
+                    XposedDebug.v("Trusted", "createVirtualDisplay frame; ipcEnabled=" + enabled
+                            + " expectedName=" + VirtualDisplayConfig.DISPLAY_NAME);
                     // The gate (pure HookGatePolicy, inside the bridge) confirms the frame's
                     // display NAME matches AutoX's before any flag is touched — no system-wide
                     // trusted-display escalation.
                     TrustedFlagBridge.forceTrustedFlag(
                             param.args, enabled, VirtualDisplayConfig.DISPLAY_NAME);
                 } catch (Throwable t) {
-                    XposedBridge.log(t); // fail closed
+                    XposedDebug.e("Trusted", "forceTrustedFlag failed (fail-closed)", t);
                 }
             }
         });
@@ -183,13 +194,16 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
                 try {
                     boolean enabled = isCommandEnabled(IpcCommand.Type.ALLOW_INPUT_INJECTION);
                     int autoxDisplayId = autoxDisplayId(IpcCommand.Type.ALLOW_INPUT_INJECTION);
+                    XposedDebug.v("Inject", "injectInputEvent frame; ipcEnabled=" + enabled
+                            + " autoxDisplayId=" + autoxDisplayId + " argc="
+                            + (param.args == null ? -1 : param.args.length));
                     // The bridge runs the pure HookGatePolicy gate internally (mirroring
                     // TrustedFlagBridge) and only relaxes the frame for AutoX's display id —
                     // never a system-wide injection relaxation. It reads the pinned per-SDK arg
                     // positions from the already-resolved descriptor (no re-resolution).
                     InputInjectionBridge.allow(param, d, enabled, autoxDisplayId);
                 } catch (Throwable t) {
-                    XposedBridge.log(t); // fail closed
+                    XposedDebug.e("Inject", "InputInjectionBridge.allow failed (fail-closed)", t);
                 }
             }
         });
@@ -214,12 +228,16 @@ public final class AutoXXposedModule implements IXposedHookLoadPackage {
                     boolean enabled = isCommandEnabled(gate);
                     int autoxDisplayId = autoxDisplayId(gate);
                     int hookedDisplayId = displayIdArg(d, param.args);
-                    if (HookGatePolicy.shouldActForDisplayId(
-                            enabled, hookedDisplayId, autoxDisplayId)) {
+                    boolean act = HookGatePolicy.shouldActForDisplayId(
+                            enabled, hookedDisplayId, autoxDisplayId);
+                    XposedDebug.v("ForceTrue", d.target + " frame; enabled=" + enabled
+                            + " hookedDisplayId=" + hookedDisplayId
+                            + " autoxDisplayId=" + autoxDisplayId + " -> force=" + act);
+                    if (act) {
                         param.setResult(Boolean.TRUE);
                     }
                 } catch (Throwable t) {
-                    XposedBridge.log(t); // fail closed
+                    XposedDebug.e("ForceTrue", d.target + " gate failed (fail-closed)", t);
                 }
             }
         });

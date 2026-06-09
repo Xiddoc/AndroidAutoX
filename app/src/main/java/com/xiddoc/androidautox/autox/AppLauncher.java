@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Rect;
-import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -39,8 +38,6 @@ import androidx.annotation.Nullable;
  * </ul>
  */
 public final class AppLauncher {
-
-    private static final String TAG = "AndroidAutoX";
 
     private final Context context;
 
@@ -84,7 +81,7 @@ public final class AppLauncher {
      */
     public boolean launch(String packageName, int displayId, @Nullable Rect launchBounds) {
         if (!AppLaunchPolicy.canLaunch(packageName, displayId)) {
-            Log.w(TAG, "AppLauncher.launch: policy rejected launch of '"
+            AutoXLog.w("Launcher", "AppLauncher.launch: policy rejected launch of '"
                     + packageName + "' on display " + displayId);
             return false;
         }
@@ -92,7 +89,7 @@ public final class AppLauncher {
         PackageManager pm = context.getPackageManager();
         Intent intent = pm.getLaunchIntentForPackage(packageName);
         if (intent == null) {
-            Log.w(TAG, "AppLauncher.launch: no launch intent for package '" + packageName
+            AutoXLog.w("Launcher", "AppLauncher.launch: no launch intent for package '" + packageName
                     + "' — app may not be installed or has no launchable activity");
             return false;
         }
@@ -106,7 +103,7 @@ public final class AppLauncher {
             options.setLaunchBounds(launchBounds);
         }
 
-        Log.d(TAG, "AppLauncher: launching '" + packageName + "' on display " + displayId
+        AutoXLog.d("Launcher", "AppLauncher: launching '" + packageName + "' on display " + displayId
                 + (launchBounds != null ? " bounds=" + launchBounds : ""));
         context.startActivity(intent, options.toBundle());
         return true;

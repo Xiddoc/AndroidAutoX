@@ -8,7 +8,7 @@ import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
-import android.util.Log;
+import android.os.Build;
 import android.view.Surface;
 
 import androidx.annotation.NonNull;
@@ -110,8 +110,6 @@ import com.xiddoc.androidautox.autox.provider.lsposed.IpcCommandWriter;
  */
 public final class AutoXScreen extends Screen implements SurfaceCallback {
 
-    private static final String TAG = "AndroidAutoX";
-
     /** App-private prefs file used by {@link AutoXSettingsStore} (matches MainActivity). */
     private static final String PREFS_NAME = "autox_prefs";
 
@@ -202,9 +200,9 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         // createDisplay once the displayId exists. Best-effort — never fail construction on it.
         try {
             this.providers = AutoXProviderFactory.probe(carContext);
-            Log.i(TAG, "AutoXScreen: provisional providers = " + providers);
+            AutoXLog.i("Screen", "AutoXScreen: provisional providers = " + providers);
         } catch (RuntimeException e) {
-            Log.e(TAG, "AutoXScreen: provider probe failed; privileged steps disabled", e);
+            AutoXLog.e("Screen", "AutoXScreen: provider probe failed; privileged steps disabled", e);
             this.providers = null;
         }
         // Register this screen as the SurfaceCallback so the host delivers surface events.
@@ -255,14 +253,14 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
      */
     @Override
     public void onSurfaceAvailable(@NonNull SurfaceContainer surfaceContainer) {
-        Log.d(TAG, "AutoXScreen.onSurfaceAvailable: "
+        AutoXLog.d("Screen", "AutoXScreen.onSurfaceAvailable: "
                 + surfaceContainer.getWidth() + "x" + surfaceContainer.getHeight()
                 + " dpi=" + surfaceContainer.getDpi());
 
         // Guard against a zero-size container (can happen during initialization).
         if (surfaceContainer.getWidth() <= 0 || surfaceContainer.getHeight() <= 0
                 || surfaceContainer.getDpi() <= 0 || surfaceContainer.getSurface() == null) {
-            Log.w(TAG, "AutoXScreen.onSurfaceAvailable: invalid container — skipping");
+            AutoXLog.w("Screen", "AutoXScreen.onSurfaceAvailable: invalid container — skipping");
             return;
         }
 
@@ -287,7 +285,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
                 newSpec.getWidth(), newSpec.getHeight(), newSpec.getDensityDpi(),
                 surfaceIdentityChanged);
 
-        Log.d(TAG, "AutoXScreen.onSurfaceAvailable: SurfaceGeometry.decide → " + action);
+        AutoXLog.d("Screen", "AutoXScreen.onSurfaceAvailable: SurfaceGeometry.decide → " + action);
 
         switch (action) {
             case NOOP:
@@ -308,13 +306,13 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
 
     @Override
     public void onVisibleAreaChanged(@NonNull Rect visibleArea) {
-        Log.d(TAG, "AutoXScreen.onVisibleAreaChanged: " + visibleArea);
+        AutoXLog.d("Screen", "AutoXScreen.onVisibleAreaChanged: " + visibleArea);
         // Stored for future use (e.g. touch-coordinate clamping to visible area).
     }
 
     @Override
     public void onStableAreaChanged(@NonNull Rect stableArea) {
-        Log.d(TAG, "AutoXScreen.onStableAreaChanged: " + stableArea);
+        AutoXLog.d("Screen", "AutoXScreen.onStableAreaChanged: " + stableArea);
         // Stored for future use (e.g. content-inset guidance for the guest app).
     }
 
@@ -324,7 +322,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
      */
     @Override
     public void onSurfaceDestroyed(@NonNull SurfaceContainer surfaceContainer) {
-        Log.d(TAG, "AutoXScreen.onSurfaceDestroyed");
+        AutoXLog.d("Screen", "AutoXScreen.onSurfaceDestroyed");
         releaseDisplay();
     }
 
@@ -392,7 +390,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         // never silently degrades.
         if (providers == null
                 || providers.provider() != ProviderSelectionPolicy.Provider.LSPOSED) {
-            Log.w(TAG, "AutoXScreen.createDisplay: blocked — AutoX requires LSPosed "
+            AutoXLog.w("Screen", "AutoXScreen.createDisplay: blocked — AutoX requires LSPosed "
                     + "(provider=" + (providers == null ? "null" : providers.provider())
                     + "); rendering requires-LSPosed message instead of projecting.");
             blockedNoLsposed = true;
@@ -409,7 +407,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         try {
             displayController = new VirtualDisplayController(dm, spec, surface);
         } catch (RuntimeException e) {
-            Log.e(TAG, "AutoXScreen.createDisplay: failed to create virtual display", e);
+            AutoXLog.e("Screen", "AutoXScreen.createDisplay: failed to create virtual display", e);
             return;
         }
         carSpec = spec;
@@ -436,12 +434,23 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         // reevaluateProviders(), then enable the teardown below so an ineffective hook on a real
         // head unit blocks cleanly.
         if (providers == null) {
-            Log.w(TAG, "AutoXScreen.createDisplay: providers became null post-surface; blocking.");
+            AutoXLog.w("Screen", "AutoXScreen.createDisplay: providers became null post-surface; blocking.");
             blockedNoLsposed = true;
             releaseDisplay();
             invalidate();
             return;
         }
+
+        // One-shot environment snapshot for the session: SDK, the (reevaluated) provider decision,
+        // display id/geometry and whether injection is honored yet — so a single AutoX log dump
+        // answers the first questions a tester asks when projection misbehaves on a real head unit.
+        AutoXLog.i("Screen", AutoXDiagnostics.report(
+                "createDisplay",
+                Build.VERSION.SDK_INT,
+                providers.provider().name(),
+                displayId,
+                spec.getWidth(), spec.getHeight(), spec.getDensityDpi(),
+                providers.input().isInjectionHonored()));
 
         // Start the foreground service to keep the projection session alive.
         getCarContext().startForegroundService(
@@ -473,7 +482,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         Rect bounds = forcedVerticalBounds(spec);
         boolean launched = appLauncher.launch(defaultApp.packageName, displayId, bounds);
         if (!launched) {
-            Log.w(TAG, "AutoXScreen: default app '" + defaultApp.packageName
+            AutoXLog.w("Screen", "AutoXScreen: default app '" + defaultApp.packageName
                     + "' could not be launched — app may not be installed on this device");
         }
 
@@ -510,9 +519,9 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         try {
             ipcWriter = new IpcCommandWriter(getCarContext().getApplicationContext());
             ipcWriter.enableTrustedDisplay();
-            Log.i(TAG, "AutoXScreen: LSPosed enableTrustedDisplay() written");
+            AutoXLog.i("Screen", "AutoXScreen: LSPosed enableTrustedDisplay() written");
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: LSPosed enableTrustedDisplay failed", e);
+            AutoXLog.w("Screen", "AutoXScreen: LSPosed enableTrustedDisplay failed", e);
         }
     }
 
@@ -537,7 +546,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         boolean trustedHonored = lsposed;
         boolean injectionHonored = lsposed;
         providers = providers.reevaluate(trustedHonored, injectionHonored);
-        Log.i(TAG, "AutoXScreen: reevaluated providers = " + providers);
+        AutoXLog.i("Screen", "AutoXScreen: reevaluated providers = " + providers);
     }
 
     /**
@@ -575,10 +584,10 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             new SettingsApplier(providers.settings(), SettingsApplier.Namespace.GLOBAL)
                     .apply(FreeformGlobalSettingsSpec.applyList(
                             priorForceResizable, priorEnableFreeform));
-            Log.i(TAG, "AutoXScreen: WS3 freeform/resizable applied (capturePrior="
+            AutoXLog.i("Screen", "AutoXScreen: WS3 freeform/resizable applied (capturePrior="
                     + capturePrior + ")");
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: WS3 freeform apply failed", e);
+            AutoXLog.w("Screen", "AutoXScreen: WS3 freeform apply failed", e);
         }
     }
 
@@ -608,10 +617,10 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             }
             new SettingsApplier(providers.settings(), SettingsApplier.Namespace.SECURE)
                     .apply(spec.applyEntries());
-            Log.i(TAG, "AutoXScreen: WS5 IME/decors applied for display " + displayId
+            AutoXLog.i("Screen", "AutoXScreen: WS5 IME/decors applied for display " + displayId
                     + " (capturePrior=" + capturePrior + ")");
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: WS5 IME apply failed for display " + displayId, e);
+            AutoXLog.w("Screen", "AutoXScreen: WS5 IME apply failed for display " + displayId, e);
         }
     }
 
@@ -624,9 +633,9 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             ipcWriter.allowInputInjection(displayId);
             ipcWriter.setDisplayImeAndDecors(displayId, true);
             ipcWriter.launchOnDisplay(displayId, AutoXAppRegistry.defaults().get(0).packageName);
-            Log.i(TAG, "AutoXScreen: LSPosed id-scoped commands written for display " + displayId);
+            AutoXLog.i("Screen", "AutoXScreen: LSPosed id-scoped commands written for display " + displayId);
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: LSPosed id-scoped commands failed", e);
+            AutoXLog.w("Screen", "AutoXScreen: LSPosed id-scoped commands failed", e);
         }
     }
 
@@ -657,10 +666,10 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
                 AutoXSettingsStore.setAudioRouteState(prefs(),
                         new AutoXSettingsStore.AudioRouteState(uid, device.name(), address));
             }
-            Log.i(TAG, "AutoXScreen: WS6 audio route apply=" + applied
+            AutoXLog.i("Screen", "AutoXScreen: WS6 audio route apply=" + applied
                     + " decision=" + audioDecision);
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: WS6 audio apply failed", e);
+            AutoXLog.w("Screen", "AutoXScreen: WS6 audio apply failed", e);
         }
     }
 
@@ -697,7 +706,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             try {
                 displayController.release();
             } catch (RuntimeException e) {
-                Log.w(TAG, "AutoXScreen: display release failed", e);
+                AutoXLog.w("Screen", "AutoXScreen: display release failed", e);
             }
             displayController = null;
         }
@@ -712,11 +721,16 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         try {
             AutoXSettingsStore.setEnabled(prefs(), false);
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: failed to clear enabled flag on release", e);
+            AutoXLog.w("Screen", "AutoXScreen: failed to clear enabled flag on release", e);
         }
 
         carSpec = null;
         currentSurface = null;
+
+        // End-of-session marker. The full ring buffer is in logcat already (each entry mirrors as
+        // it happens); this just bookmarks the teardown so `adb logcat -s AutoX` clearly delimits
+        // one projection session from the next when several are captured back to back.
+        AutoXLog.i("Screen", "releaseDisplay complete (session torn down)");
     }
 
     /** WS5 revert: rebuild the spec from persisted per-display priors and revert (IME-then-decors). */
@@ -732,9 +746,9 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             new SettingsApplier(providers.settings(), SettingsApplier.Namespace.SECURE)
                     .revert(spec.revertEntries());
             AutoXSettingsStore.clearPriorsForDisplay(prefs, displayId);
-            Log.i(TAG, "AutoXScreen: WS5 IME/decors reverted for display " + displayId);
+            AutoXLog.i("Screen", "AutoXScreen: WS5 IME/decors reverted for display " + displayId);
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: WS5 IME revert failed for display " + displayId, e);
+            AutoXLog.w("Screen", "AutoXScreen: WS5 IME revert failed for display " + displayId, e);
         }
     }
 
@@ -749,9 +763,9 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
                     .revert(FreeformGlobalSettingsSpec.revertList(
                             priorForceResizable, priorEnableFreeform));
             AutoXSettingsStore.clearPriors(prefs);
-            Log.i(TAG, "AutoXScreen: WS3 freeform/resizable reverted");
+            AutoXLog.i("Screen", "AutoXScreen: WS3 freeform/resizable reverted");
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: WS3 freeform revert failed", e);
+            AutoXLog.w("Screen", "AutoXScreen: WS3 freeform revert failed", e);
         }
     }
 
@@ -775,9 +789,9 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
             }
             boolean reverted = AudioRouteApplier.revert(decision, providers.audio());
             AutoXSettingsStore.clearAudioRouteState(prefs());
-            Log.i(TAG, "AutoXScreen: WS6 audio route revert=" + reverted);
+            AutoXLog.i("Screen", "AutoXScreen: WS6 audio route revert=" + reverted);
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: WS6 audio revert failed", e);
+            AutoXLog.w("Screen", "AutoXScreen: WS6 audio revert failed", e);
         } finally {
             audioDecision = null;
         }
@@ -823,18 +837,18 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
                     && providers.provider() == ProviderSelectionPolicy.Provider.LSPOSED) {
                 try {
                     new IpcCommandWriter(getCarContext().getApplicationContext()).clear();
-                    Log.i(TAG, "AutoXScreen: stale LSPosed IPC channel cleared (cold start)");
+                    AutoXLog.i("Screen", "AutoXScreen: stale LSPosed IPC channel cleared (cold start)");
                 } catch (RuntimeException e) {
-                    Log.w(TAG, "AutoXScreen: cold-start LSPosed clear failed", e);
+                    AutoXLog.w("Screen", "AutoXScreen: cold-start LSPosed clear failed", e);
                 }
             }
             return;
         }
         try {
             ipcWriter.clear();
-            Log.i(TAG, "AutoXScreen: LSPosed IPC channel cleared");
+            AutoXLog.i("Screen", "AutoXScreen: LSPosed IPC channel cleared");
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: LSPosed clear failed", e);
+            AutoXLog.w("Screen", "AutoXScreen: LSPosed clear failed", e);
         } finally {
             ipcWriter = null;
         }
@@ -863,7 +877,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
                     LaunchBoundsCalculator.DEFAULT_FORCED_VERTICAL_ASPECT);
             return new Rect(b.left, b.top, b.right, b.bottom);
         } catch (RuntimeException e) {
-            Log.w(TAG, "AutoXScreen: forced-vertical bounds computation failed; full display", e);
+            AutoXLog.w("Screen", "AutoXScreen: forced-vertical bounds computation failed; full display", e);
             return null;
         }
     }
@@ -877,7 +891,7 @@ public final class AutoXScreen extends Screen implements SurfaceCallback {
         try {
             return getCarContext().getPackageManager().getPackageUid(packageName, 0);
         } catch (PackageManager.NameNotFoundException e) {
-            Log.w(TAG, "AutoXScreen: cannot resolve UID for '" + packageName + "'", e);
+            AutoXLog.w("Screen", "AutoXScreen: cannot resolve UID for '" + packageName + "'", e);
             return -1;
         }
     }

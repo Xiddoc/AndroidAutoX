@@ -2,7 +2,6 @@ package com.xiddoc.androidautox.autox;
 
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
-import android.util.Log;
 import android.view.Surface;
 
 /**
@@ -31,8 +30,6 @@ import android.view.Surface;
  * </ul>
  */
 public final class VirtualDisplayController {
-
-    private static final String TAG = "AndroidAutoX";
 
     private final VirtualDisplay virtualDisplay;
 
@@ -71,7 +68,7 @@ public final class VirtualDisplayController {
             throw new IllegalArgumentException("surface must not be null");
         }
 
-        Log.d(TAG, "VirtualDisplayController: creating display " + spec
+        AutoXLog.d("VDisplay", "VirtualDisplayController: creating display " + spec
                 + " flags=0x" + Integer.toHexString(VirtualDisplayConfig.defaultFlags()));
 
         this.spec = spec;
@@ -88,7 +85,7 @@ public final class VirtualDisplayController {
                     "DisplayManager.createVirtualDisplay returned null — "
                             + "check that VIRTUAL_DISPLAY_FLAG_TRUSTED is permitted on this device.");
         }
-        Log.d(TAG, "VirtualDisplayController: display created id=" + getDisplayId());
+        AutoXLog.d("VDisplay", "VirtualDisplayController: display created id=" + getDisplayId());
     }
 
     /**
@@ -142,7 +139,7 @@ public final class VirtualDisplayController {
         if (released) {
             throw new IllegalStateException("VirtualDisplayController has been released");
         }
-        Log.d(TAG, "VirtualDisplayController: resizing display id=" + getDisplayId()
+        AutoXLog.d("VDisplay", "VirtualDisplayController: resizing display id=" + getDisplayId()
                 + " to " + newSpec);
         virtualDisplay.resize(newSpec.getWidth(), newSpec.getHeight(), newSpec.getDensityDpi());
         spec = newSpec;
@@ -158,7 +155,7 @@ public final class VirtualDisplayController {
         if (released) {
             return;
         }
-        Log.d(TAG, "VirtualDisplayController: releasing display id=" + getDisplayId());
+        AutoXLog.d("VDisplay", "VirtualDisplayController: releasing display id=" + getDisplayId());
         released = true;
         virtualDisplay.release();
     }

@@ -8,7 +8,6 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import android.os.PowerManager;
-import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -54,8 +53,6 @@ import com.xiddoc.androidautox.R;
  */
 public final class AutoXForegroundService extends Service {
 
-    private static final String TAG = "AndroidAutoX";
-
     /** Notification channel id for the AutoX foreground service notification. */
     private static final String CHANNEL_ID = "autox_foreground_channel";
 
@@ -87,7 +84,7 @@ public final class AutoXForegroundService extends Service {
         // 3-arg startForeground is mandatory on targetSdk 34 when a FGS type is declared.
         startForeground(NOTIFICATION_ID, buildNotification(),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-        Log.d(TAG, "AutoXForegroundService: started, wake lock acquired");
+        AutoXLog.d("FgService", "AutoXForegroundService: started, wake lock acquired");
     }
 
     @Override
@@ -97,7 +94,7 @@ public final class AutoXForegroundService extends Service {
         // system restarted us after a kill with no surface to project — re-acquiring the
         // 4-hour wake lock here would leak it. Stop immediately in that case.
         if (intent == null) {
-            Log.d(TAG, "AutoXForegroundService: null-intent restart (no surface) — self-stopping");
+            AutoXLog.d("FgService", "AutoXForegroundService: null-intent restart (no surface) — self-stopping");
             stopSelf(startId);
             return START_NOT_STICKY;
         }
@@ -118,7 +115,7 @@ public final class AutoXForegroundService extends Service {
     public void onDestroy() {
         super.onDestroy();
         releaseWakeLock();
-        Log.d(TAG, "AutoXForegroundService: destroyed, wake lock released");
+        AutoXLog.d("FgService", "AutoXForegroundService: destroyed, wake lock released");
     }
 
     // ------------------------------------------------------------------
@@ -129,7 +126,7 @@ public final class AutoXForegroundService extends Service {
     private void acquireWakeLock() {
         PowerManager pm = getSystemService(PowerManager.class);
         if (pm == null) {
-            Log.w(TAG, "AutoXForegroundService: PowerManager unavailable — wake lock skipped");
+            AutoXLog.w("FgService", "AutoXForegroundService: PowerManager unavailable — wake lock skipped");
             return;
         }
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG);
