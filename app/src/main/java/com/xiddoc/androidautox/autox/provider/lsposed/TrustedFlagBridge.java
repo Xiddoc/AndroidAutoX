@@ -43,6 +43,8 @@ final class TrustedFlagBridge {
         // nothing (fail closed — no system-wide trusted-display escalation).
         String hookedName = firstString(args);
         if (!HookGatePolicy.shouldActForDisplayName(ipcEnabled, hookedName, expectedDisplayName)) {
+            XposedDebug.v("TrustedBridge", "no-act; ipcEnabled=" + ipcEnabled
+                    + " hookedName=" + hookedName + " expected=" + expectedDisplayName);
             return;
         }
         for (int i = 0; i < args.length; i++) {
@@ -50,10 +52,17 @@ final class TrustedFlagBridge {
                 int flags = (Integer) args[i];
                 if (!TrustedFlagPolicy.isTrusted(flags)) {
                     args[i] = TrustedFlagPolicy.withTrusted(flags);
+                    XposedDebug.i("TrustedBridge", "OR'd FLAG_TRUSTED into flags arg[" + i
+                            + "]: 0x" + Integer.toHexString(flags) + " -> 0x"
+                            + Integer.toHexString((Integer) args[i]));
+                } else {
+                    XposedDebug.v("TrustedBridge", "flags arg[" + i
+                            + "] already trusted (0x" + Integer.toHexString(flags) + ")");
                 }
                 return;
             }
         }
+        XposedDebug.v("TrustedBridge", "gate passed but no Integer flags arg found in frame");
     }
 
     /** Returns the first {@link String} argument, or {@code null} if none. */

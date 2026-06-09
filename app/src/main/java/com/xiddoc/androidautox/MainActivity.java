@@ -442,7 +442,12 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                 TextView tv = findViewById(R.id.logs);
-                ClipData clip = ClipData.newPlainText("logs", tv.getText());
+                // Append the AutoX diagnostic ring buffer so a single copy carries both the
+                // on-screen tweak logs and the full AutoX projection trace (same process, so the
+                // static buffer is populated by AutoXScreen). Empty when AutoX was never run.
+                CharSequence onScreen = tv.getText();
+                String autoxDump = com.xiddoc.androidautox.autox.AutoXLog.dump();
+                ClipData clip = ClipData.newPlainText("logs", onScreen + "\n\n" + autoxDump);
                 clipboard.setPrimaryClip(clip);
                 Toast.makeText(getApplicationContext(), getString(R.string.log_copied), Toast.LENGTH_LONG).show();
             }

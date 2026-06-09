@@ -3,10 +3,10 @@ package com.xiddoc.androidautox.autox.provider.lsposed;
 import android.hardware.input.InputManager;
 import android.os.Build;
 import android.os.SystemClock;
-import android.util.Log;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 
+import com.xiddoc.androidautox.autox.AutoXLog;
 import com.xiddoc.androidautox.autox.GestureSpec;
 import com.xiddoc.androidautox.autox.provider.InputProvider;
 
@@ -40,8 +40,6 @@ import java.lang.reflect.Method;
  * coverage gate. Tests provide a stub {@link InputProvider}.
  */
 public final class LsposedInputInjector implements InputProvider {
-
-    private static final String TAG = "AndroidAutoX";
 
     /** Last observed result of a real injection; drives {@link #isInjectionHonored()}. */
     private volatile boolean lastInjectionAccepted;
@@ -96,7 +94,7 @@ public final class LsposedInputInjector implements InputProvider {
                 resolved.setAccessible(true);
             }
         } catch (Throwable t) {
-            Log.w(TAG, "LsposedInputInjector: injectInputEvent could not be resolved on "
+            AutoXLog.w("Inject", "LsposedInputInjector: injectInputEvent could not be resolved on "
                     + "this platform (SDK " + Build.VERSION.SDK_INT + "); gesture injection "
                     + "will be a no-op.", t);
             target = null;
@@ -106,9 +104,13 @@ public final class LsposedInputInjector implements InputProvider {
         if (resolved != null && target != null) {
             this.injectTarget = target;
             this.injectInputEvent = resolved;
+            AutoXLog.i("Inject", "injectInputEvent resolved on SDK " + Build.VERSION.SDK_INT
+                    + " via " + target.getClass().getName());
         } else {
             this.injectTarget = null;
             this.injectInputEvent = null;
+            AutoXLog.w("Inject", "injectInputEvent UNRESOLVED on SDK " + Build.VERSION.SDK_INT
+                    + " — every gesture will be a no-op (isInjectionHonored=false)");
         }
     }
 
@@ -123,19 +125,24 @@ public final class LsposedInputInjector implements InputProvider {
     @Override
     public boolean inject(GestureSpec spec) {
         if (injectInputEvent == null) {
-            Log.w(TAG, "inject: injectInputEvent unavailable; dropping gesture " + spec);
+            AutoXLog.w("Inject", "inject: injectInputEvent unavailable; dropping gesture " + spec);
             return false;
         }
         try {
             boolean accepted = dispatchGesture(spec);
             lastInjectionAccepted = accepted;
+            // The accepted flag is the single most diagnostic bit for the injection path: false
+            // here on a real device means injectInputEvent ran but system_server dropped the event
+            // (the LSPosed per-display ownership relax did not take effect for this displayId).
+            AutoXLog.d("Inject", "dispatched " + spec.getKind() + " on display "
+                    + spec.getDisplayId() + " -> accepted=" + accepted);
             return accepted;
         } catch (SecurityException e) {
-            Log.w(TAG, "inject: INJECT_EVENTS permission denied; dropping gesture " + spec, e);
+            AutoXLog.w("Inject", "inject: INJECT_EVENTS permission denied; dropping gesture " + spec, e);
             lastInjectionAccepted = false;
             return false;
         } catch (Exception e) {
-            Log.w(TAG, "inject: unexpected error dispatching gesture " + spec, e);
+            AutoXLog.w("Inject", "inject: unexpected error dispatching gesture " + spec, e);
             lastInjectionAccepted = false;
             return false;
         }

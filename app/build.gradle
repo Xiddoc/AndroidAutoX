@@ -316,6 +316,10 @@ def jacocoExclusions = [
         '**/provider/lsposed/AutoXXposedModule*.*',
         '**/provider/lsposed/TrustedFlagBridge*.*',
         '**/provider/lsposed/InputInjectionBridge*.*',
+        // Debug-logging facade for the system_server hooks: wraps XposedBridge.log (compileOnly
+        // Xposed API, absent from the unit-test runtime), so it is irreducible glue like the
+        // bridges it serves. NOTE: the app-side AutoXLog is pure and stays IN scope (100%).
+        '**/provider/lsposed/XposedDebug*.*',
         // App-side half of the LSPosed-only AutoX injection path: reflection-based
         // InputManager#injectInputEvent (needs a real InputManager + the system_server hook),
         // untestable off-device. The only AutoX injection provider (no root-reflection fallback).

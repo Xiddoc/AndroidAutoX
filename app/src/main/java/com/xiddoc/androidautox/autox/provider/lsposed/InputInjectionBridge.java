@@ -6,7 +6,6 @@ import java.lang.reflect.Field;
 import java.util.concurrent.ConcurrentHashMap;
 
 import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 
 /**
  * EXCLUDED GLUE: relaxes the per-display permission check for the in-flight
@@ -120,15 +119,22 @@ final class InputInjectionBridge {
 
         int hookedDisplayId = displayIdFromFrame(args, target);
         if (!HookGatePolicy.shouldActForDisplayId(ipcEnabled, hookedDisplayId, autoxDisplayId)) {
+            XposedDebug.v("InjectBridge", "no-act; ipcEnabled=" + ipcEnabled
+                    + " hookedDisplayId=" + hookedDisplayId + " autoxDisplayId=" + autoxDisplayId
+                    + " modeArgPinned=" + target.hasModeArgIndex());
             return; // not AutoX's display (or disabled) — never a system-wide relaxation
         }
 
         try {
+            // device-verify trace: surface whether the (unverified) mode relax is even attempted,
+            // and confirm the display-id stamp ran, so a real-device failure is pinpointable.
+            XposedDebug.i("InjectBridge", "relaxing frame for AutoX displayId=" + autoxDisplayId
+                    + " (modeArgPinned=" + target.hasModeArgIndex() + ")");
             relaxInjectionMode(args, target);
             stampDisplayId(args, autoxDisplayId);
         } catch (Throwable t) {
             // FAIL CLOSED: a reflection/field error must never throw out of system_server.
-            XposedBridge.log(t);
+            XposedDebug.e("InjectBridge", "relax/stamp threw (fail-closed)", t);
         }
     }
 
